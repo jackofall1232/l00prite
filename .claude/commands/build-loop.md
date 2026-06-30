@@ -84,9 +84,8 @@ first.
 ## Step 4 — Generate the skeleton folder structure
 
 Copy the folder structure from `templates/skeleton/<tier>/` (where `<tier>` is whatever you
-picked in Step 2) into the target repo. Adapt file names/extensions to the user's actual
-language/stack where the skeleton template uses a generic placeholder (e.g. rename a stub
-entry file to match their chosen language). Do not invent extra structure beyond what the
+picked in Step 2) into the target repo. Adapt file names and extensions to the user's actual
+language/stack (e.g., replace the `.stub` extension with the appropriate language extension like `.js`, `.py`, `.go`, or `.md` for documentation, and rename placeholder files to match their chosen stack). Do not invent extra structure beyond what the
 tier skeleton provides — the point is a minimal starting scaffold, not a fully fleshed-out
 app.
 

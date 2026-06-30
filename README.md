@@ -65,7 +65,7 @@ cd l00prite
 claude
 ```
 
-Either way, `/build-loop` becomes available as a slash command in that Claude Code session. The command itself reads from `templates/CLAUDE.md.template` and `templates/skeleton/` in this repo to do its work, so if you copy just the command file (Option A), copy the `templates/` directory alongside it.
+Either way, `/build-loop` becomes available as a slash command in that Claude Code session. The command itself reads from `templates/CLAUDE.md.template` and `templates/skeleton/` in this repo to do its work, so if you copy just the command file (Option A), copy the `templates/` directory to the root of your project.
 
 ## Usage example
 

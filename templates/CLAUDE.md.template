@@ -55,14 +55,11 @@
 
 ## 7. Run Ledger
 
-{{run_ledger_table}}
-
 | Session | Date | Built | Tested | Status |
 |---------|------|-------|--------|--------|
-| {{session_id}} | {{date}} | {{what_was_built}} | {{what_was_tested}} | {{status}} |
 
 <!-- This table is a living log. Each build session should append a row, not overwrite
-     prior rows. Start with a single placeholder/header row as shown above. -->
+     prior rows. -->
 
 ## 8. Completion Criteria
 
