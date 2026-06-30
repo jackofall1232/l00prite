@@ -75,7 +75,11 @@ in Step 2. The output must:
   exact list and fix anything you find. Do **not** flag unrelated `{{...}}` syntax that
   belongs to the target project's own domain (e.g. a project that itself uses
   double-curly-brace templating, like a `{{minutes}}` label placeholder in its own docs or
-  code) — only this template's own tokens above need to be gone.
+  code) — only this template's own tokens above need to be gone. The same applies to every
+  `<!-- ... -->` guidance comment embedded in the template (the per-section "what to fill in
+  here" notes, and the template's own leading meta-comment block) — strip all of them; the
+  one exception is the Run Ledger's "living log" comment, which the template explicitly
+  says to keep.
 - Be specific to *this* project, not generic boilerplate. Reference actual languages,
   frameworks, file names, and constraints the user gave you.
 - In the "Agent Operating Loop" section, define a generator role, an evaluator role, and a
@@ -86,26 +90,47 @@ in Step 2. The output must:
   Tested | Status) — this is a living log the *target* project's build sessions will fill
   in, not something you pre-fill.
 
-Before writing, check whether a `CLAUDE.md` already exists at that path in the target repo.
-If it does, do not overwrite it silently — tell the user one already exists there and ask
-whether to overwrite it, save the generated one alongside it (e.g. `CLAUDE.md.generated`)
-for them to merge by hand, or abort. Only write once they've chosen.
+If the target repo path doesn't exist yet and the user said "new repo", create the
+directory first. Then, before writing, check whether a `CLAUDE.md` already exists at that
+path in the target repo. If it does, do not overwrite it silently — tell the user one
+already exists there and ask whether to overwrite it, save the generated one alongside it
+(e.g. `CLAUDE.md.generated`) for them to merge by hand, or abort. Only write once they've
+chosen.
 
-Write the result to the target repo (per the user's Step 1 answer) as `CLAUDE.md`. If the
-target repo path doesn't exist yet and the user said "new repo", create the directory
-first.
+Write the result to the target repo (per the user's Step 1 answer) as `CLAUDE.md`. Discard
+`templates/CLAUDE.md.template`'s own leading HTML comment block (the meta-instructions
+about `{{placeholder}}` rules at the very top of the template file) before writing — it
+documents the template for l00prite's own maintainers and must never appear in the
+generated target `CLAUDE.md`.
 
 ## Step 4 — Generate the skeleton folder structure
 
 Copy the folder structure from `templates/skeleton/<tier>/` (where `<tier>` is whatever you
-picked in Step 2) into the target repo. Adapt file names and extensions to the user's actual
-language/stack (e.g., replace the `.stub` extension with the appropriate language extension like `.js`, `.py`, `.go`, or `.md` for documentation, and rename placeholder files to match their chosen stack). If the target is an existing repo (not a fresh "new repo"), check each
-skeleton file against the target path first — skip any file that already exists there
-instead of overwriting it (this matters most for common filenames the skeleton ships, like
-`README.md`, `.gitignore`, and `.github/workflows/ci.yml`), and report which paths were
-skipped so the user can merge them by hand. Do not invent extra structure beyond what the
-tier skeleton provides — the point is a minimal starting scaffold, not a fully fleshed-out
-app.
+picked in Step 2) into the target repo, with these rules:
+
+- **Skip `TIER.md`.** Every tier folder ships a `TIER.md` that documents, for l00prite's own
+  maintainers, when `/build-loop` should pick that tier. It is internal authoring
+  documentation, not part of the scaffold — never copy it into the target repo.
+- **Adapt file names and extensions to the user's actual language/stack.** Replace the
+  `.stub` extension with the appropriate language extension (`.js`, `.py`, `.go`, `.md` for
+  docs, etc.). For test files, don't just swap the extension — match the target language's
+  own test-naming convention: `*.test.ts`/`*.test.js` for JS/TS, `test_*.py` or `*_test.py`
+  for Python (never `*.test.py` — pytest's default discovery won't collect it), `*_test.go`
+  for Go, `*_spec.rb` for Ruby, and so on. If you're unsure of the convention for the chosen
+  stack, use whatever that ecosystem's standard test runner discovers by default.
+- **Keep every copied file as a minimal stub, with no exceptions for docs or config.**
+  Replace each `.stub` file's content with an equally minimal placeholder appropriate to its
+  new extension (e.g. a single comment naming what belongs there) — do not write real
+  implementation code, real configuration values, or fleshed-out narrative documentation
+  into `src/`, `tests/`, `docs/`, or `config/` files. Documentation and config stubs are easy
+  to over-fill because they read like prose — treat them exactly like the code stubs. Do not
+  invent extra structure beyond what the tier skeleton provides — the point is a minimal
+  starting scaffold, not a fully fleshed-out app.
+- **If the target is an existing repo** (not a fresh "new repo"), check each skeleton file
+  against the target path first — skip any file that already exists there instead of
+  overwriting it (this matters most for common filenames the skeleton ships, like
+  `README.md`, `.gitignore`, and `.github/workflows/ci.yml`), and report which paths were
+  skipped so the user can merge them by hand.
 
 ## Step 5 — Give a rough, qualitative cost estimate
 
