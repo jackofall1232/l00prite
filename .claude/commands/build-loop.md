@@ -64,9 +64,18 @@ in Step 2. The output must:
 - Preserve all 8 section headers, in order: Mission, Architecture, Requirements,
   Definition of Done, Agent Operating Loop, Heartbeat Rules, Run Ledger, Completion
   Criteria.
-- Contain **zero** leftover `{{placeholder}}` tokens or bracketed guidance comments — every
-  one must be replaced with real, specific content. Before showing the result to the user,
-  grep your own output for `{{` and `}}` and fix anything you find.
+- Contain **zero** leftover instances of this template's own placeholder tokens or bracketed
+  guidance comments: `{{mission_statement}}`, `{{architecture_overview}}`,
+  `{{requirements_list}}`, `{{requirement_1}}`, `{{requirement_2}}`,
+  `{{definition_of_done_checklist}}`, `{{done_condition_1}}`, `{{done_condition_2}}`,
+  `{{generator_role}}`, `{{evaluator_role}}`, `{{loop_description}}`, `{{max_iterations}}`,
+  `{{human_review_gates}}`, `{{branch_policy}}`, `{{completion_criteria_list}}`,
+  `{{completion_criterion_1}}`, `{{completion_criterion_2}}` — every one must be replaced
+  with real, specific content. Before showing the result to the user, check it against this
+  exact list and fix anything you find. Do **not** flag unrelated `{{...}}` syntax that
+  belongs to the target project's own domain (e.g. a project that itself uses
+  double-curly-brace templating, like a `{{minutes}}` label placeholder in its own docs or
+  code) — only this template's own tokens above need to be gone.
 - Be specific to *this* project, not generic boilerplate. Reference actual languages,
   frameworks, file names, and constraints the user gave you.
 - In the "Agent Operating Loop" section, define a generator role, an evaluator role, and a
