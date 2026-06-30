@@ -77,6 +77,11 @@ in Step 2. The output must:
   Tested | Status) — this is a living log the *target* project's build sessions will fill
   in, not something you pre-fill.
 
+Before writing, check whether a `CLAUDE.md` already exists at that path in the target repo.
+If it does, do not overwrite it silently — tell the user one already exists there and ask
+whether to overwrite it, save the generated one alongside it (e.g. `CLAUDE.md.generated`)
+for them to merge by hand, or abort. Only write once they've chosen.
+
 Write the result to the target repo (per the user's Step 1 answer) as `CLAUDE.md`. If the
 target repo path doesn't exist yet and the user said "new repo", create the directory
 first.
@@ -85,7 +90,11 @@ first.
 
 Copy the folder structure from `templates/skeleton/<tier>/` (where `<tier>` is whatever you
 picked in Step 2) into the target repo. Adapt file names and extensions to the user's actual
-language/stack (e.g., replace the `.stub` extension with the appropriate language extension like `.js`, `.py`, `.go`, or `.md` for documentation, and rename placeholder files to match their chosen stack). Do not invent extra structure beyond what the
+language/stack (e.g., replace the `.stub` extension with the appropriate language extension like `.js`, `.py`, `.go`, or `.md` for documentation, and rename placeholder files to match their chosen stack). If the target is an existing repo (not a fresh "new repo"), check each
+skeleton file against the target path first — skip any file that already exists there
+instead of overwriting it (this matters most for common filenames the skeleton ships, like
+`README.md`, `.gitignore`, and `.github/workflows/ci.yml`), and report which paths were
+skipped so the user can merge them by hand. Do not invent extra structure beyond what the
 tier skeleton provides — the point is a minimal starting scaffold, not a fully fleshed-out
 app.
 
