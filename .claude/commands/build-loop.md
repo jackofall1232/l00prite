@@ -114,10 +114,12 @@ picked in Step 2) into the target repo, with these rules:
 - **Adapt file names and extensions to the user's actual language/stack.** Replace the
   `.stub` extension with the appropriate language extension (`.js`, `.py`, `.go`, `.md` for
   docs, etc.). For test files, don't just swap the extension — match the target language's
-  own test-naming convention: `*.test.ts`/`*.test.js` for JS/TS, `test_*.py` or `*_test.py`
-  for Python (never `*.test.py` — pytest's default discovery won't collect it), `*_test.go`
-  for Go, `*_spec.rb` for Ruby, and so on. If you're unsure of the convention for the chosen
-  stack, use whatever that ecosystem's standard test runner discovers by default.
+  own test-naming convention: `*.test.ts`/`*.test.js` for JS/TS, `test_*.py` for Python
+  (never `*.test.py` — pytest's default discovery won't collect it), `*_test.go` for Go,
+  `*_spec.rb` for Ruby, and so on. Pick one convention per ecosystem and apply it
+  consistently across every test file in the generated skeleton — don't mix patterns. If
+  you're unsure of the convention for the chosen stack, use whatever that ecosystem's
+  standard test runner discovers by default.
 - **Keep every copied file as a minimal stub, with no exceptions for docs or config.**
   Replace each `.stub` file's content with an equally minimal placeholder appropriate to its
   new extension (e.g. a single comment naming what belongs there) — do not write real
