@@ -7,6 +7,9 @@
            loop memory for agents
 ```
 
+> l00prite gives AI coding agents a shared memory layer inside your repo.
+> Claude can start. Codex can continue. A future agent can verify, respond to review comments, and update the ledger before stopping.
+
 # l00prite
 
 **Persistent loop memory for AI coding agents.**
