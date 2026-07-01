@@ -40,6 +40,8 @@ Codex prompts live in `.codex/prompts/` and are plain Markdown for copy/paste us
 - `.codex/prompts/build-loop.md` — scaffold a target project and stop.
 - `.codex/prompts/resume-loop.md` — resume the next smallest implementation step from `.l00prite/`.
 - `.codex/prompts/heartbeat.md` — decide whether a loop should continue, pause, or stop.
+- `.codex/prompts/event-loop.md` — process one pending event through classify, plan, execute, verify, persist, respond.
+- `.codex/prompts/respond-to-review.md` — resolve one PR review event and draft a reviewer response.
 - `.codex/prompts/handoff-summary.md` — prepare cross-agent handoff notes.
 
 To resume a generated project with Codex, open the target repo and paste `.codex/prompts/resume-loop.md` into the Codex session.
@@ -59,6 +61,13 @@ Generated projects should contain:
   todos.md
   state.json
   sessions/README.md
+  events/README.md
+  events/example-event.json
+  events/pending/README.md
+  events/processing/README.md
+  events/completed/README.md
+  reviews/README.md
+  reviews/github/README.md
 ```
 
 This is the shared source of truth for all agents.
@@ -86,6 +95,38 @@ This is the shared source of truth for all agents.
 ### Failures and constraints
 
 `.l00prite/failures.md` records approaches that should not be retried unless conditions change. `.l00prite/constraints.md` records hard rules, user preferences, security boundaries, and architecture constraints.
+
+## Event and review workflow
+
+l00prite treats project events as first-class protocol objects. An event is any signal that may need to interrupt normal roadmap work, including pull request review comments, failed CI, new issues, security alerts, merge conflicts, human TODOs, agent recommendations, and dependency update warnings.
+
+Generated projects can store events under `.l00prite/events/`:
+
+```text
+.l00prite/events/
+  README.md
+  example-event.json
+  pending/
+  processing/
+  completed/
+.l00prite/reviews/
+  README.md
+  github/README.md
+```
+
+A PR review comment is an event. The expected lifecycle is:
+
+```text
+Event → Classify → Plan → Execute → Verify → Persist → Respond
+```
+
+Agents should read pending events before normal roadmap work. For review events, the agent should decide whether the reviewer comment is valid, already fixed, unclear, unsafe, or not actionable. Valid comments should be resolved with the smallest safe fix, verified with relevant checks, persisted in `.l00prite/` memory, and then answered with a concise response.
+
+By default, process only one event per loop. This keeps the fix, verification, memory updates, and reviewer response auditable. It also prevents a review-response loop from drifting into unrelated refactors or broad autonomous behavior.
+
+Verification is required before responding. If tests fail or cannot run, record that honestly in the ledger and event notes, keep or mark the event as blocked/deferred, and do not claim completion.
+
+l00prite does not auto-push, merge, deploy, or behave as a full GitHub bot unless a human explicitly adds that workflow. Event prompts may draft responses, but posting, pushing, or merging requires explicit permission.
 
 ## Resuming with another agent
 
@@ -117,7 +158,7 @@ Run the lightweight validator after protocol changes:
 node scripts/validate-l00prite.js
 ```
 
-It checks required files, Codex prompts, target-project Codex templates, `.l00prite` templates, README coverage, non-execution language, ledger fields, example output, and JSON validity.
+It checks required files, Codex prompts, event templates, target-project Codex templates, `.l00prite` templates, README coverage, non-execution language, event-aware ledger and state fields, example output, and JSON validity.
 
 ## Repo layout
 

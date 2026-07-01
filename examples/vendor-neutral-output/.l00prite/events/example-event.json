@@ -1,0 +1,18 @@
+{
+  "id": "event-0001",
+  "type": "pull_request_review",
+  "source": "github",
+  "status": "pending",
+  "priority": "high",
+  "created_at": "",
+  "related_pr": "",
+  "related_issue": "",
+  "reviewer": "",
+  "summary": "",
+  "raw_reference": "",
+  "required_action": "",
+  "verification_required": true,
+  "response_required": true,
+  "do_not_retry": [],
+  "notes": []
+}
