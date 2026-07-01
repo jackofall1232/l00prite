@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "max_iterations": 20,
+  "current_iteration": 8,
+  "stop_conditions": [
+    "definition_of_done_met",
+    "blocked",
+    "human_review_required",
+    "max_iterations_reached"
+  ],
+  "human_review_gates": [
+    "before executing destructive operations",
+    "before changing .claude/commands/build-loop.md",
+    "before changing scripts/validate-l00prite.js",
+    "before declaring this release's Definition of Done met and merging to main"
+  ],
+  "last_run_time": "2026-07-01T00:00:00Z",
+  "completion_status": "in_progress",
+  "should_continue": false,
+  "pause_reason": "pre-release polish pass complete; awaiting maintainer review and sign-off before merge to main"
+}

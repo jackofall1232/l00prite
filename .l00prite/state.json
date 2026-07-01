@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "project_name": "l00prite",
+  "current_goal": "prepare l00prite for first public release",
+  "current_phase": "released",
+  "active_agent": null,
+  "last_agent": "claude",
+  "last_updated": "2026-07-01T00:00:00Z",
+  "status": "released_v1",
+  "blocked": false,
+  "blocker_reason": null,
+  "active_event_id": null,
+  "last_event_processed": null,
+  "pending_event_count": 0,
+  "review_response_required": false,
+  "ci_status": "unknown",
+  "next_recommended_action": "build execution mode per CLAUDE.md design"
+}
