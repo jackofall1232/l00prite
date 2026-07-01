@@ -8,5 +8,10 @@
   "status": "not_started",
   "blocked": false,
   "blocker_reason": null,
+  "active_event_id": null,
+  "last_event_processed": null,
+  "pending_event_count": 0,
+  "review_response_required": false,
+  "ci_status": "unknown",
   "next_recommended_action": "review the generated blueprint and choose the first implementation step"
 }

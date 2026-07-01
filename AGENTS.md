@@ -20,3 +20,15 @@ l00prite is a vendor-neutral persistent loop memory protocol for AI coding agent
 - Update relevant docs, examples, templates, and validation checks when changing protocol behavior.
 - Avoid false precision about token or dollar costs.
 - Prefer the smaller complexity tier when project scope is borderline.
+
+## Open PR Review Guidance
+
+When working on an open pull request:
+
+- Read pending review events before normal roadmap work.
+- Address valid reviewer comments before unrelated tasks.
+- Verify fixes with relevant checks before responding.
+- Update `.l00prite` memory files, including ledger, state, todos, failures, and event records.
+- Draft or post a response only when allowed by the user or workflow.
+- Do not dismiss reviewer comments without explanation.
+- Do not make unrelated changes while resolving a review.

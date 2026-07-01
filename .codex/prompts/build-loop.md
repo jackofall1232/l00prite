@@ -15,7 +15,7 @@ Choose `small`, `medium`, or `large` from `templates/skeleton/`. If borderline, 
 Create or update agent guidance files appropriate to the target repo:
 
 - `CLAUDE.md` for Claude users, based on `templates/CLAUDE.md.template`.
-- `.codex/prompts/resume-loop.md`, `.codex/prompts/heartbeat.md`, and `.codex/prompts/handoff-summary.md` for Codex/CLI users.
+- `.codex/prompts/resume-loop.md`, `.codex/prompts/heartbeat.md`, `.codex/prompts/event-loop.md`, `.codex/prompts/respond-to-review.md`, and `.codex/prompts/handoff-summary.md` for Codex/CLI users.
 - Preserve vendor-neutral language where possible and point all agents to `.l00prite/` as shared source of truth.
 
 Do not silently overwrite existing files. Ask whether to overwrite, write `.generated` copies, or abort.
