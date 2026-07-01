@@ -1,5 +1,23 @@
 # HANDOFF
 
+## Latest update: README repositioning and visual identity
+
+This update does not change protocol behavior. It rewrites `README.md` to match how the protocol actually works today (vendor-neutral memory, heartbeat, resume loops, Codex, and the event engine), and adds a minimal visual identity.
+
+### What changed
+
+- **README repositioned**: restructured around the requested section set (What is l00prite? / Why it exists / What it does / What it does NOT do / Core idea / Repository layout / The `.l00prite` protocol / Claude usage / Codex usage / Event and PR review workflow / Safety boundary / Install-setup / Validation / Current maturity / Roadmap / Contributing / License). Content is drawn from the existing protocol files (`AGENTS.md`, prompts, templates, validator) rather than invented — no new capabilities are claimed that the repo doesn't already have.
+- **SVG logo added**: `assets/l00prite-infinity.svg` — a simple infinity-loop path plus the wordmark, text/paths only, no external or remote assets, sized to render cleanly in a GitHub-rendered README at both default and dark themes (mid-tone purple/blue chosen for contrast on both).
+- **ASCII art added**: a small ASCII banner near the top of `README.md`, inside a fenced code block so it renders literally in Markdown instead of being interpreted.
+- **Install/setup wording**: reframed as explicitly manual — clone, copy `.claude/commands/build-loop.md` or use `.codex/prompts/` directly, copy `templates/` by hand if scaffolding without a prompt. No install script or package exists, and the README says so instead of implying one does.
+- **Canonical URL**: left as an explicit `TODO` rather than guessing an org/repo URL, since none was confirmed as canonical at the time of writing.
+
+### Remaining branding/documentation gaps
+
+- No canonical repository URL is wired into the README (badges, clone URL, issue links) — needs a maintainer decision.
+- The SVG logo is a single static asset; no light/dark `<picture>` variant is provided (GitHub's `img`-embedded SVG doesn't inherit page theme via `currentColor`, so a true theme-aware logo would need two separate SVG files swapped via `<picture>` + `prefers-color-scheme`, which was judged out of scope for this pass).
+- No favicon/social-preview image exists yet for the repo itself (separate from the README logo).
+
 ## Latest update: event and review response protocol
 
 This update adds protocol-level support for event-driven work without turning l00prite into an autonomous GitHub bot.
