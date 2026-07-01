@@ -30,17 +30,21 @@ they change rarely and reading them is always safe.
 
 1. **Check before writing.** Before mutating any protected path, an agent must read
    `lock.json`.
-2. **Acquire if unlocked.** If `status` is `unlocked` or `released`, the agent may acquire
-   the lock: set `status: "active"`, a new unique `lock_id`, `owner_agent`/`owner_session`
-   to itself, `acquired_at` to now, `expires_at` to `acquired_at` + `ttl_seconds`, and
-   `purpose` to what it's about to do.
-3. **Respect an active lock.** If `status` is `active` and `expires_at` is in the future,
-   and you are not the owner, do not write to any protected path. Treat the lock as a
-   blocker and stop or wait instead of proceeding.
-4. **Stale-lock recovery.** If `status` is `active` but `expires_at` has passed, the lock is
-   stale — its owner likely crashed or was interrupted. An agent may reclaim it (acquire as
-   in rule 2), but **must** record a `ledger.md` entry noting the reclaimed `lock_id`, its
-   prior owner, and why it was judged stale (the expired timestamp).
+2. **Acquire if unlocked, released, or expired.** If `status` is `unlocked`, `released`, or
+   `expired`, the agent may acquire the lock: set `status: "active"`, a new unique
+   `lock_id`, `owner_agent`/`owner_session` to itself, `acquired_at` to now, `expires_at` to
+   `acquired_at` + `ttl_seconds`, and `purpose` to what it's about to do. If the prior
+   `status` was `expired`, record the reclamation in `ledger.md` as in rule 4.
+3. **Respect an active lock you don't own.** If `status` is `active`, `expires_at` is in
+   the future, and `owner_agent`/`owner_session` do not match you, do not write to any
+   protected path. Treat the lock as a blocker and stop or wait instead of proceeding. If
+   `status` is `active` and you already own it (matching `owner_agent`/`owner_session`),
+   continue — you do not need to re-acquire before each write within the same run.
+4. **Stale-lock recovery.** If `status` is `active` but `expires_at` has passed, or `status`
+   is explicitly `expired`, the lock is stale — its owner likely crashed or was interrupted.
+   An agent may reclaim it (acquire as in rule 2), but **must** record a `ledger.md` entry
+   noting the reclaimed `lock_id`, its prior owner, and why it was judged stale (the expired
+   timestamp, or the explicit `expired` status).
 5. **Release before stopping.** Before ending a run, the agent holding the lock must set
    `status` back to `released` and clear `owner_agent`/`owner_session`/`purpose`.
 6. **TTL prevents deadlock.** `ttl_seconds` guarantees a crashed or abandoned lock becomes

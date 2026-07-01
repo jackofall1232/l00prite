@@ -21,14 +21,17 @@ Before changing files, read:
 - Read `.l00prite/lock.json` before mutating any protected path (`ledger.md`, `memory.md`,
   `state.json`, `heartbeat.json`, `failures.md`, `todos.md`, `events/`, `reviews/`,
   `sessions/`).
-- If `status` is `unlocked` or `released`, acquire the lock: set `status: "active"`, a new
-  `lock_id`, `owner_agent`, `owner_session`, `acquired_at`, `expires_at` (`acquired_at` +
-  `ttl_seconds`), and `purpose`.
-- If `status` is `active` and not expired, do **not** write. Stop and report the lock as a
-  blocker instead of proceeding.
-- If `status` is `active` but `expires_at` has passed, treat it as stale: you may reclaim it
-  (acquire as above), but record a `ledger.md` entry noting the reclaimed `lock_id` and why
-  it was judged stale.
+- If `status` is `unlocked`, `released`, or `expired`, acquire the lock: set
+  `status: "active"`, a new `lock_id`, `owner_agent`, `owner_session`, `acquired_at`,
+  `expires_at` (`acquired_at` + `ttl_seconds`), and `purpose`.
+- If `status` is `active`, not expired, and owned by a different agent or session, do
+  **not** write. Stop and report the lock as a blocker instead of proceeding.
+- If `status` is `active`, not expired, and already owned by you (matching
+  `owner_agent`/`owner_session`), continue writing — you do not need to re-acquire before
+  each write within the same run.
+- If `status` is `active` but `expires_at` has passed, or `status` is explicitly `expired`,
+  treat it as stale: you may reclaim it (acquire as above), but record a `ledger.md` entry
+  noting the reclaimed `lock_id` and why it was judged stale.
 - Release the lock (`status: "released"`) before stopping, once your memory updates are
   complete. See `.l00prite/LOCKING.md` for the full rules.
 
