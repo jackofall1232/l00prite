@@ -229,6 +229,9 @@ It checks: required files exist (Claude/Codex prompts, templates, examples), the
 
 ## Roadmap
 
+- **Execution mode** (next planned milestone) — an opt-in `--execute` flag with pre-flight
+  confirmation and hard stop conditions, so a user can explicitly move from scaffold to
+  implementation without changing the safe, scaffold-only default.
 - Stronger, more semantic validation (beyond file existence and keyword checks).
 - GitHub event ingestion (turning real PR comments into `.l00prite/events/` entries automatically).
 - CI failure capture as events.
