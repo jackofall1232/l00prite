@@ -117,7 +117,7 @@ Run the lightweight validator after protocol changes:
 node scripts/validate-l00prite.js
 ```
 
-It checks required files, Codex prompts, `.l00prite` templates, README coverage, non-execution language, ledger fields, and JSON validity.
+It checks required files, Codex prompts, target-project Codex templates, `.l00prite` templates, README coverage, non-execution language, ledger fields, example output, and JSON validity.
 
 ## Repo layout
 
@@ -126,6 +126,7 @@ It checks required files, Codex prompts, `.l00prite` templates, README coverage,
 .codex/prompts/                  Codex/CLI prompt equivalents
 templates/CLAUDE.md.template     Generated target CLAUDE.md template
 templates/l00prite/              Shared memory folder templates
+templates/codex/prompts/         Target-project Codex prompt templates
 templates/skeleton/              Small/medium/large skeletons
 examples/example-output/         Legacy Claude-focused example
 examples/vendor-neutral-output/  Vendor-neutral example output

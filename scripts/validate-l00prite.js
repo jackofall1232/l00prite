@@ -29,6 +29,9 @@ const required = [
   '.codex/prompts/resume-loop.md',
   '.codex/prompts/heartbeat.md',
   '.codex/prompts/handoff-summary.md',
+  'templates/codex/prompts/resume-loop.md',
+  'templates/codex/prompts/heartbeat.md',
+  'templates/codex/prompts/handoff-summary.md',
   'templates/CLAUDE.md.template',
   'README.md',
   'AGENTS.md',
@@ -47,7 +50,10 @@ const memoryFiles = [
   'templates/l00prite/sessions/README.md'
 ];
 
-for (const rel of required.concat(memoryFiles)) {
+const exampleMemoryFiles = memoryFiles.map((rel) => rel.replace('templates/l00prite/', 'examples/vendor-neutral-output/.l00prite/'));
+exampleMemoryFiles.push('examples/vendor-neutral-output/CLAUDE.md', 'examples/vendor-neutral-output/README.md');
+
+for (const rel of required.concat(memoryFiles, exampleMemoryFiles)) {
   check(exists(rel), `${rel} exists`);
 }
 
@@ -62,6 +68,7 @@ if (exists('.claude/commands/build-loop.md')) {
   const buildLoop = read('.claude/commands/build-loop.md').toLowerCase();
   check(buildLoop.includes('does not execute'), 'build-loop says it does not execute generated projects');
   check(buildLoop.includes('.l00prite'), 'build-loop generates .l00prite memory');
+  check(buildLoop.includes('templates/codex/prompts'), 'build-loop uses target-project Codex prompt templates');
 }
 
 if (exists('templates/l00prite/ledger.md')) {

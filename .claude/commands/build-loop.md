@@ -107,7 +107,7 @@ generated target `CLAUDE.md`.
 
 Create a `.l00prite/` folder in the target repo from `templates/l00prite/`. Fill obvious project-specific values in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep the files human-readable and vendor-neutral. Do not silently overwrite existing `.l00prite/` files; ask whether to overwrite, write `.generated` copies, or abort.
 
-Also create `.codex/prompts/` in the target repo with copy/paste-friendly prompts for `resume-loop.md`, `heartbeat.md`, and `handoff-summary.md`. These prompts must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth. Do not assume Claude slash-command behavior.
+Also create `.codex/prompts/` in the target repo from `templates/codex/prompts/`, including `resume-loop.md`, `heartbeat.md`, and `handoff-summary.md`. These target-project prompts must be copy/paste-friendly, must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth, and must not assume Claude slash-command behavior. Do not silently overwrite existing `.codex/` prompt files; ask whether to overwrite, write `.generated` copies, or abort.
 
 ## Step 5 — Generate the skeleton folder structure
 

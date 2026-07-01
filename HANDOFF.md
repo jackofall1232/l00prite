@@ -29,6 +29,9 @@
 - `templates/l00prite/state.json`
 - `templates/l00prite/sessions/README.md`
 - `scripts/validate-l00prite.js`
+- `templates/codex/prompts/resume-loop.md`
+- `templates/codex/prompts/heartbeat.md`
+- `templates/codex/prompts/handoff-summary.md`
 - `examples/vendor-neutral-output/CLAUDE.md`
 - `examples/vendor-neutral-output/README.md`
 - `examples/vendor-neutral-output/.l00prite/*`
@@ -48,13 +51,13 @@ l00prite now has three protocol layers:
 
 ## Remaining gaps
 
-- The Claude build-loop prompt describes generating `.codex/prompts/`, but there are no separate target-project templates for those prompts yet; it should copy/adapt the repo prompts directly for now.
+- The target-project Codex prompt templates currently mirror the repo-level Codex prompts; future changes may split maintainer and generated prompt wording further if needed.
 - The validator is intentionally lightweight and does not parse every prompt for semantic consistency.
 - Existing legacy example output remains Claude-focused; the new vendor-neutral example is separate.
 
 ## Recommended next steps
 
-- Add explicit target-project Codex prompt templates if the repo needs generated prompts to differ from maintainer prompts.
+- Refine target-project Codex prompt templates if generated prompt wording needs to diverge from repo-level prompt wording.
 - Expand examples with a fully filled sample `.l00prite/` for a realistic project.
 - Consider validating that generated prompts mention all required `.l00prite/` files.
 - Keep build-loop scaffold-only; do not turn it into an executor without a separate explicit design.
