@@ -123,9 +123,12 @@ picked in Step 2) into the target repo, with these rules:
   new extension (e.g. a single comment naming what belongs there) — do not write real
   implementation code, real configuration values, or fleshed-out narrative documentation
   into `src/`, `tests/`, `docs/`, or `config/` files. Documentation and config stubs are easy
-  to over-fill because they read like prose — treat them exactly like the code stubs. Do not
-  invent extra structure beyond what the tier skeleton provides — the point is a minimal
-  starting scaffold, not a fully fleshed-out app.
+  to over-fill because they read like prose — treat them exactly like the code stubs. For
+  formats that don't support comments (JSON files like `package.json` or `tsconfig.json`,
+  for example), a comment placeholder would produce invalid syntax — use a minimal valid
+  empty structure instead (e.g. `{}`), not a comment. Do not invent extra structure beyond
+  what the tier skeleton provides — the point is a minimal starting scaffold, not a fully
+  fleshed-out app.
 - **If the target is an existing repo** (not a fresh "new repo"), check each skeleton file
   against the target path first — skip any file that already exists there instead of
   overwriting it (this matters most for common filenames the skeleton ships, like
