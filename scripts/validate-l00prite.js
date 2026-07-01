@@ -31,6 +31,8 @@ const required = [
   '.codex/prompts/event-loop.md',
   '.codex/prompts/respond-to-review.md',
   '.codex/prompts/handoff-summary.md',
+  '.claude/prompts/event-loop.md',
+  '.claude/prompts/respond-to-review.md',
   'templates/codex/prompts/resume-loop.md',
   'templates/codex/prompts/heartbeat.md',
   'templates/codex/prompts/event-loop.md',
@@ -80,6 +82,26 @@ if (exists('.claude/commands/build-loop.md')) {
   check(buildLoop.includes('does not execute'), 'build-loop says it does not execute generated projects');
   check(buildLoop.includes('.l00prite'), 'build-loop generates .l00prite memory');
   check(buildLoop.includes('templates/codex/prompts'), 'build-loop uses target-project Codex prompt templates');
+}
+
+
+for (const rel of ['.codex/prompts/event-loop.md', 'templates/codex/prompts/event-loop.md', '.claude/prompts/event-loop.md']) {
+  if (exists(rel)) {
+    const prompt = read(rel).toLowerCase();
+    for (const term of ['classify', 'plan', 'execute', 'verify', 'persist', 'respond']) {
+      check(prompt.includes(term), `${rel} includes ${term}`);
+    }
+    check(prompt.includes('one event per loop'), `${rel} limits default processing to one event`);
+  }
+}
+
+for (const rel of ['.codex/prompts/respond-to-review.md', 'templates/codex/prompts/respond-to-review.md', '.claude/prompts/respond-to-review.md']) {
+  if (exists(rel)) {
+    const prompt = read(rel).toLowerCase();
+    check(prompt.includes('do not blindly agree'), `${rel} forbids blindly agreeing with reviewers`);
+    check(prompt.includes('do not push or merge'), `${rel} forbids push or merge without instruction`);
+    check(prompt.includes('verification'), `${rel} requires verification before completion`);
+  }
 }
 
 if (exists('templates/l00prite/ledger.md')) {

@@ -107,7 +107,7 @@ generated target `CLAUDE.md`.
 
 Create a `.l00prite/` folder in the target repo from `templates/l00prite/`. Fill obvious project-specific values in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep the files human-readable and vendor-neutral. Do not silently overwrite existing `.l00prite/` files; ask whether to overwrite, write `.generated` copies, or abort.
 
-Also create `.codex/prompts/` in the target repo from `templates/codex/prompts/`, including `resume-loop.md`, `heartbeat.md`, and `handoff-summary.md`. These target-project prompts must be copy/paste-friendly, must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth, and must not assume Claude slash-command behavior. Do not silently overwrite existing `.codex/` prompt files; ask whether to overwrite, write `.generated` copies, or abort.
+Also create `.codex/prompts/` in the target repo from `templates/codex/prompts/`, including `resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, and `handoff-summary.md`. These target-project prompts must be copy/paste-friendly, must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth, and must not assume Claude slash-command behavior. Do not silently overwrite existing `.codex/` prompt files; ask whether to overwrite, write `.generated` copies, or abort.
 
 ## Step 5 — Generate the skeleton folder structure
 
@@ -176,7 +176,7 @@ End the command here. Tell the user, explicitly and in plain language:
   left unattended.
 - To actually build this project with Claude, **open a fresh, separate Claude Code session** in the
   target repo and let it pick up the new `CLAUDE.md` from there.
-- To resume with Codex or another CLI agent, open the target repo and use `.codex/prompts/resume-loop.md`.
+- To resume with Codex or another CLI agent, open the target repo and use `.codex/prompts/resume-loop.md`; to process an event or review, use `.codex/prompts/event-loop.md` or `.codex/prompts/respond-to-review.md`.
 - All agents should treat `.l00prite/` as the shared source of truth and update it before stopping.
   Do not continue building inside this l00prite session — l00prite's job ends at scaffolding.
 

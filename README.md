@@ -78,7 +78,7 @@ This is the shared source of truth for all agents.
 
 ### Ledger
 
-`.l00prite/ledger.md` is the rich run history. Each run should record goal, completed work, changed files, tests run, failures, decisions, confidence, next action, and do-not-retry notes.
+`.l00prite/ledger.md` is the rich run history. Each run should record goal, triggering event, reviewer/comment reference, decision, completed work, fix implemented, changed files, tests run, response status, event status, failures, decisions, confidence, next action, and do-not-retry notes.
 
 ### Memory model
 
@@ -90,7 +90,7 @@ This is the shared source of truth for all agents.
 
 ### State and TODOs
 
-`.l00prite/state.json` stores the current machine-readable project state. `.l00prite/todos.md` stores prioritized next actions for the next agent.
+`.l00prite/state.json` stores the current machine-readable project state, including active event id, last processed event, pending event count, review response requirement, and CI status. `.l00prite/todos.md` stores prioritized next actions for the next agent.
 
 ### Failures and constraints
 
