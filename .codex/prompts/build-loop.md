@@ -16,13 +16,20 @@ Create or update agent guidance files appropriate to the target repo:
 
 - `CLAUDE.md` for Claude users, based on `templates/CLAUDE.md.template`.
 - `.codex/prompts/resume-loop.md`, `.codex/prompts/heartbeat.md`, `.codex/prompts/event-loop.md`, `.codex/prompts/respond-to-review.md`, and `.codex/prompts/handoff-summary.md` for Codex/CLI users.
+- `.claude/prompts/resume-loop.md`, `.claude/prompts/heartbeat.md`, `.claude/prompts/event-loop.md`, `.claude/prompts/respond-to-review.md`, and `.claude/prompts/handoff-summary.md` (from `templates/claude/prompts/`) so Claude sessions get the same lock-aware, event-aware loop behavior as Codex — `CLAUDE.md` alone does not encode lock/lease or event-lifecycle rules.
 - Preserve vendor-neutral language where possible and point all agents to `.l00prite/` as shared source of truth.
 
 Do not silently overwrite existing files. Ask whether to overwrite, write `.generated` copies, or abort.
 
 ## 4. Generate `.l00prite/`
 
-Copy `templates/l00prite/` into the target repo and fill obvious project-specific fields in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep files human-readable and agent-readable.
+If a `.l00prite/lock.json` already exists at the target path, read it first. If its
+`status` is `active` and `expires_at` is in the future, another agent may currently be
+working in that project — stop and report the held lock (owner, purpose, expiry) instead
+of scaffolding over it. Only continue if `lock.json` is missing, `unlocked`, `released`, or
+`expired`.
+
+Copy `templates/l00prite/` into the target repo and fill obvious project-specific fields in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep files human-readable and agent-readable. Leave `lock.json` in its shipped `"unlocked"` state — it is not project-specific and must not be pre-filled or set to `"active"`.
 
 ## 5. Scaffold the selected skeleton
 
@@ -34,6 +41,6 @@ Stop after scaffold and handoff. Refuse to run build, test, install, migration, 
 
 Tell the user how to resume:
 
-- Claude: open the target repo and use `CLAUDE.md`.
+- Claude: open the target repo and use `CLAUDE.md`, or paste `.claude/prompts/resume-loop.md` for lock-aware, event-aware loop behavior.
 - Codex: open the target repo and paste `.codex/prompts/resume-loop.md`.
 - All agents: use `.l00prite/` as the shared source of truth and update it before stopping.

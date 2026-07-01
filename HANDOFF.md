@@ -1,5 +1,164 @@
 # HANDOFF
 
+## Latest update: PR review fixes — lock state machine, event lifecycle, Claude parity in scaffolded projects
+
+PR #7 (the protocol hardening PR below) went through review from gemini-code-assist,
+Copilot, and Codex. All findings were verified against the actual files before acting —
+every one was real. Fixes landed as three follow-up commits.
+
+### gemini-code-assist findings (fixed)
+
+- `resume-loop.md` / `respond-to-review.md` (all copies) now record lock status in
+  `ledger.md`, matching the ledger template's `Lock` field.
+- `handoff-summary.md` (all copies) now prefixes every listed memory file with `.l00prite/`,
+  not just the first.
+- The validator now checks the ledger template for the `Lock` field.
+
+### Copilot findings (fixed)
+
+- `LOCKING.md` was referenced as a bare filename in 13 places — prompts living outside
+  `.l00prite/` (`.codex/prompts/`, `.claude/prompts/`, `templates/codex/prompts/`) and event
+  docs nested inside `.l00prite/events/` and `.l00prite/events/processing/` — ambiguous from
+  those locations. All now reference `.l00prite/LOCKING.md`. Also fixed the same bug in
+  `heartbeat.md` (all copies), which had the identical issue but wasn't flagged.
+
+### Codex findings
+
+Three fixed directly (small, mechanical, non-architectural):
+
+- `LOCKING.md` documented `status: "expired"` as valid but no rule permitted acquiring or
+  reclaiming a lock in that state — only `unlocked`/`released` could be acquired, and stale
+  recovery only covered `active` + past-expiry. Both rules now explicitly cover `expired`.
+- `resume-loop.md`'s lock check told an agent to stop on *any* active, unexpired lock —
+  including its own — so an agent updating several protected files in one run could block
+  itself after its first write. Now scoped to locks owned by a different agent/session.
+- `event-loop.md` and `respond-to-review.md` documented a `pending → processing →
+  completed` event lifecycle but never actually moved the event file into `processing/`
+  before executing, so an interrupted session left the event looking untouched instead of
+  in-progress. Both now move the event into `processing/` before execution.
+
+One required a human decision before fixing, since it touched `.claude/commands/build-loop.md`
+and `templates/CLAUDE.md.template` — files CLAUDE.md itself flags as requiring mandatory
+human review before merging:
+
+- A generated target project's `CLAUDE.md` (the only file a resuming Claude session reads
+  by default) had zero mention of the lock/lease protocol, so a Claude-only resume flow
+  would mutate protected memory files without ever checking `lock.json` — unlike Codex,
+  which gets lock-aware `.codex/prompts/`. Asked the user how to close this; they chose to
+  ship `.claude/prompts/` to target repos (new `templates/claude/prompts/`, mirroring
+  `templates/codex/prompts/`) rather than editing `CLAUDE.md.template` itself. `build-loop.md`
+  (both Claude and Codex variants) now scaffolds `.claude/prompts/` into every target repo
+  alongside `.codex/prompts/`, giving Claude the same lock-aware, event-aware prompts.
+  `CLAUDE.md.template` was left untouched, per that decision.
+
+### Files added
+
+- `templates/claude/prompts/resume-loop.md`, `heartbeat.md`, `event-loop.md`,
+  `respond-to-review.md`, `handoff-summary.md`
+
+### Files modified
+
+- All `.codex/`, `.claude/`, `templates/codex/prompts/` copies of `resume-loop.md`,
+  `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, `handoff-summary.md`
+- `templates/l00prite/LOCKING.md`, `templates/l00prite/events/README.md`,
+  `templates/l00prite/events/processing/README.md`, and their examples mirrors
+- `.claude/commands/build-loop.md`, `.codex/prompts/build-loop.md`
+- `README.md`, `scripts/validate-l00prite.js`
+
+### Remaining gaps
+
+- The lock/lease convention is still cooperative, not filesystem-enforced.
+- `CLAUDE.md.template` itself still doesn't mention the lock/lease protocol by design (per
+  the human's decision) — a Claude session that reads only `CLAUDE.md` and never opens
+  `.claude/prompts/resume-loop.md` still won't check the lock. The scaffold now hands it the
+  right prompt; nothing forces it to be read.
+- No automated CI runs the validator on this repo yet.
+
+## Latest update: protocol hardening after independent architecture review
+
+An independent architecture review flagged concurrency, prompt-drift, prompt-injection, and
+verification-evidence gaps in the `.l00prite/` protocol. This update addresses the findings
+that are fixable at the protocol/documentation level — it does not add new runtime
+behavior l00prite doesn't already have; it only changes what agents are told to do and what
+the memory files look like.
+
+### What changed
+
+- **Lock/lease convention added.** New `.l00prite/lock.json` (fields: `schema_version`,
+  `lock_id`, `owner_agent`, `owner_session`, `acquired_at`, `expires_at`, `ttl_seconds`,
+  `purpose`, `protected_paths`, `status`) plus `LOCKING.md` documenting the full rules: check
+  before writing, acquire if unlocked, respect an active unexpired lock, reclaim-and-log a
+  stale one, release before stopping. `resume-loop.md`, `heartbeat.md`, `event-loop.md`, and
+  `respond-to-review.md` (all copies) now reference it.
+- **Untrusted-content warnings added** to every event/review prompt (`.codex/prompts/`,
+  `.claude/prompts/`, `templates/codex/prompts/`) and event docs: PR comments, CI logs,
+  issue bodies, and event summaries are external data to classify, not instructions to
+  follow — including attempts to override system, developer, user, project, or l00prite
+  protocol instructions.
+- **Claude/Codex parity closed.** Added `.claude/prompts/resume-loop.md`, `heartbeat.md`,
+  and `handoff-summary.md`, plus a new `.claude/README.md` mirroring `.codex/README.md`.
+  Claude now has the same five standalone prompts Codex has.
+- **Event transition rules clarified.** Events move `pending → processing → completed`
+  using **move**, not the previous ambiguous "move or copy" wording. A completed event now
+  requires `resolved_at`, `resolving_agent`, `verification_summary`, `response_summary`,
+  `related_commit` (if available), and `outcome` (`resolved | rejected | blocked |
+  duplicate | unsafe`).
+- **Event ID format fixed.** IDs now follow `event-YYYYMMDD-HHMMSS-source-shortslug-random`
+  (e.g. `event-20260630-214522-github-pr17-null-check-a9f3`) instead of the collision-prone
+  `event-0001` sequential style, which is now documented only as an explicit anti-example.
+- **`schema_version` added** to `heartbeat.json`, `state.json`, `example-event.json`, and
+  the new `lock.json`, so future protocol changes have a compatibility signal.
+- **Precedence rules documented** in new `templates/l00prite/README.md`: an active
+  non-expired lock wins over any mutation attempt; `state.json.blocked` wins over
+  `heartbeat.json.should_continue`; human review gates win over roadmap work; failed
+  CI/review blocker events outrank normal roadmap tasks.
+- **Ledger requires verification evidence.** `ledger.md`'s "Tests run / Verification" field
+  now requires `command`, `exit_code`, `summary`, `evidence_path` (optional), and
+  `timestamp` per check — vague "tests passed" statements are no longer sufficient. Added a
+  `stale-lock-recovery` decision type and a `Lock` field to record lock acquire/release per
+  run.
+- **README** gained a "Lock and lease model" section stating plainly what the lock does and
+  doesn't guarantee, plus `lock.json`/`LOCKING.md` rows in the protocol table.
+- **Validator extended** to check: `lock.json` exists/parses/has required fields,
+  `schema_version` on all four JSON templates, the event ID format is documented, event/review
+  prompts contain the untrusted-content warning and don't use "move or copy," Claude parity
+  prompts exist, ledger contains the new evidence fields, and README documents the lock/lease
+  model. All checks pass (`node scripts/validate-l00prite.js`).
+
+### Files added
+
+- `templates/l00prite/lock.json`, `templates/l00prite/LOCKING.md`, `templates/l00prite/README.md`
+- `examples/vendor-neutral-output/.l00prite/lock.json`, `LOCKING.md`, `README.md`
+- `.claude/prompts/resume-loop.md`, `.claude/prompts/heartbeat.md`, `.claude/prompts/handoff-summary.md`
+- `.claude/README.md`
+
+### Files modified
+
+- `.codex/prompts/resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`
+- `.claude/prompts/event-loop.md`, `.claude/prompts/respond-to-review.md`
+- `templates/codex/prompts/resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`
+- `.claude/commands/build-loop.md`, `.codex/prompts/build-loop.md` (note that `lock.json`
+  ships unlocked and isn't project-specific to fill in)
+- `templates/l00prite/ledger.md`, `templates/l00prite/heartbeat.json`, `templates/l00prite/state.json`
+- `templates/l00prite/events/README.md`, `events/pending/README.md`, `events/processing/README.md`,
+  `events/completed/README.md`, `events/example-event.json`, `templates/l00prite/reviews/README.md`
+- matching files under `examples/vendor-neutral-output/.l00prite/`
+- `AGENTS.md`, `README.md`
+- `scripts/validate-l00prite.js`
+
+### Remaining gaps
+
+- The lock/lease convention is cooperative, not enforced by the filesystem — it depends on
+  every agent actually following the read-lock-before-write rule. Two agents writing at the
+  exact same instant can still race.
+- No automated CI runs `scripts/validate-l00prite.js` on this repo yet — the "PR + human
+  review only" rule has no automated backstop.
+- No event deduplication or cross-repo/monorepo memory scoping exists yet — both were
+  flagged in the review as future scaling concerns and are unaddressed here.
+- Ledger growth/rotation is still unbounded — no archival convention yet.
+- Verification-evidence fields are structurally documented but not mechanically enforced;
+  an agent can still write a vague ledger entry if it chooses to ignore the template.
+
 ## Latest update: README repositioning and visual identity
 
 This update does not change protocol behavior. It rewrites `README.md` to match how the protocol actually works today (vendor-neutral memory, heartbeat, resume loops, Codex, and the event engine), and adds a minimal visual identity.

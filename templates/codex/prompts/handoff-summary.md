@@ -2,7 +2,7 @@
 
 Prepare a cross-agent handoff for a l00prite-managed project.
 
-Read `.l00prite/blueprint.md`, `ledger.md`, `memory.md`, `constraints.md`, `failures.md`, `todos.md`, `state.json`, and `heartbeat.json`.
+Read `.l00prite/blueprint.md`, `.l00prite/ledger.md`, `.l00prite/memory.md`, `.l00prite/constraints.md`, `.l00prite/failures.md`, `.l00prite/todos.md`, `.l00prite/state.json`, and `.l00prite/heartbeat.json`.
 
 Write or update `HANDOFF.md` with:
 
