@@ -1,121 +1,179 @@
 # l00prite
 
-A Claude Code slash command (`/build-loop`) that turns a project idea into a `CLAUDE.md` blueprint and a skeleton repo — then stops. It does not execute anything.
+l00prite is a **vendor-neutral persistent loop memory protocol for AI coding agents**. It helps scaffold a project blueprint, agent prompts, skeleton files, and a shared `.l00prite/` memory folder so Claude, Codex, GPT, Gemini, and future CLI agents can resume work across sessions without losing project intelligence.
 
-## What this is
+It started as a Claude Code `/build-loop` scaffold generator. It is now an operating layer for safe, resumable agent loops.
 
-`l00prite` is a single Claude Code slash command, distributed as plain files in this repo. There is no backend, no hosted service, no stored credentials, and no telemetry. Everything runs locally, inside your own Claude Code session, using your own Anthropic API access.
+## What l00prite is
 
-When you run `/build-loop`:
+- A scaffold-first protocol for creating project blueprints and shared memory.
+- A set of Claude and Codex prompts for build, resume, heartbeat, and handoff flows.
+- A `.l00prite/` folder model that stores durable project context across agents.
+- A safe handoff system: one agent can scaffold, another can resume, and all agents read the same memory.
 
-1. You give it a project idea — a prompt describing something you want to build.
-2. It asks clarifying questions before generating anything: project type, scope, languages/stack, target repo, constraints.
-3. It generates a complete `CLAUDE.md` for your target project, following the 8-section "Loop Engineering" protocol (the same protocol this repo's own `CLAUDE.md` is written in — see below).
-4. It generates a skeleton folder structure for the target project, matching one of three complexity tiers: small, medium, or large.
-5. It gives you a rough complexity-tier cost estimate — something like "small tier: expect a handful of agentic loop iterations." This is deliberately not a precise token or dollar figure. Predicting the exact cost of an agentic loop before it runs is not reliable, and this tool will not pretend otherwise.
-6. It stops.
+## What l00prite is not
 
-## What this does NOT do
+- It is not an autonomous executor.
+- It does not build generated projects during build-loop scaffolding.
+- It does not install dependencies, run migrations, deploy, or execute implementation commands for generated projects.
+- It does not depend on one AI vendor or one CLI.
+- It does not promise exact token or dollar costs.
 
-This is the important part, stated plainly:
+## Core safety boundary
 
-- `/build-loop` does not execute the `CLAUDE.md` it generates.
-- It does not run an autonomous or agentic build loop.
-- It does not touch your target repo beyond writing the `CLAUDE.md` and the skeleton files.
-- It never calls out to a backend — there isn't one.
+`build-loop` scaffolds and then stops. It must not execute the generated project. Review generated files before starting a separate implementation session, and set appropriate spend/tool limits in your agent provider before running long loops.
 
-Actually building the project — running an agentic loop against the generated `CLAUDE.md` — happens later, in your own separate Claude Code session, under that session's normal tool-approval flow. That handoff is deliberate. `/build-loop` produces a blueprint; it does not act on it. What you do with the blueprint, and what permissions you grant the session that runs it, is entirely on you.
+## Claude usage
 
-## Read this before you run a generated blueprint
+Copy `.claude/commands/build-loop.md` into a Claude Code project, or run Claude Code from this repo. Then use:
 
-Once you take a generated `CLAUDE.md` into your own Claude Code session and start an agentic build loop against it, that loop can run for many iterations and consume real API spend. If you've loosened your tool-approval settings, it can do this largely unsupervised.
-
-Before running any generated blueprint:
-
-- Set a spend limit in the [Anthropic Console](https://console.anthropic.com). Do this first, not after you notice the bill.
-- Actually read the generated `CLAUDE.md`. Don't run it blind. It's a few hundred lines describing what an agent is about to be told to do — read it the way you'd read a pull request before merging it.
-
-`l00prite` itself never executes anything, so it cannot be the thing that runs up a bill. The risk lives entirely downstream, in what you do after `l00prite` hands you the blueprint.
-
-## Why "l00prite"
-
-The name is a leetspeak / stylized string, not a descriptive phrase you'd stumble on by googling "claude code build loop generator" or similar. That's intentional. It's a soft filter, not a secret: if you found this repo, you likely already followed a link from someone who knows what an agentic build loop is and what it costs when it goes unsupervised. The name isn't hiding anything — everything here is public and documented — it's just not optimized to be found by someone who doesn't yet have that context.
-
-## Install / setup
-
-`/build-loop` is a slash command file, not a package. Two ways to get it into your own Claude Code session:
-
-**Option A — copy the command file into your project**
-
-Copy `.claude/commands/build-loop.md` from this repo into your own project's `.claude/commands/` directory:
-
-```
-mkdir -p .claude/commands
-curl -o .claude/commands/build-loop.md \
-  https://raw.githubusercontent.com/<org>/l00prite/main/.claude/commands/build-loop.md
-```
-
-(Adjust the URL to wherever this repo actually lives.)
-
-**Option B — clone the repo and point Claude Code at it**
-
-```
-git clone https://github.com/<org>/l00prite.git
-cd l00prite
-claude
-```
-
-Either way, `/build-loop` becomes available as a slash command in that Claude Code session. The command itself reads from `templates/CLAUDE.md.template` and `templates/skeleton/` in this repo to do its work, so if you copy just the command file (Option A), copy the `templates/` directory to the root of your project.
-
-## Usage example
-
-```
+```text
 /build-loop a CLI tool that scrapes RSS feeds and emails a daily digest
 ```
 
-`/build-loop` will ask you things like:
+The command asks clarifying questions, picks a tier, writes `CLAUDE.md`, creates `.l00prite/`, scaffolds a skeleton, and stops. To implement later, open a fresh Claude Code session in the target repo and let it read `CLAUDE.md` and `.l00prite/`.
 
-- What kind of project is this — CLI tool, web app, library, service?
-- Roughly how big a scope are we talking — small, medium, or large?
-- What languages or stack do you want?
-- What's the target repo (new repo, or an existing one)?
-- Any constraints — deployment target, dependencies to avoid, deadlines, etc.?
+## Codex usage
 
-Once you answer, it writes a `CLAUDE.md` and a matching skeleton into your target repo, gives you a rough complexity-tier estimate, and stops here. Open a fresh Claude Code session against your new `CLAUDE.md` to actually build it.
+Codex prompts live in `.codex/prompts/` and are plain Markdown for copy/paste use:
+
+- `.codex/prompts/build-loop.md` — scaffold a target project and stop.
+- `.codex/prompts/resume-loop.md` — resume the next smallest implementation step from `.l00prite/`.
+- `.codex/prompts/heartbeat.md` — decide whether a loop should continue, pause, or stop.
+- `.codex/prompts/event-loop.md` — process one pending event through classify, plan, execute, verify, persist, respond.
+- `.codex/prompts/respond-to-review.md` — resolve one PR review event and draft a reviewer response.
+- `.codex/prompts/handoff-summary.md` — prepare cross-agent handoff notes.
+
+To resume a generated project with Codex, open the target repo and paste `.codex/prompts/resume-loop.md` into the Codex session.
+
+## The `.l00prite/` folder
+
+Generated projects should contain:
+
+```text
+.l00prite/
+  blueprint.md
+  ledger.md
+  memory.md
+  heartbeat.json
+  constraints.md
+  failures.md
+  todos.md
+  state.json
+  sessions/README.md
+  events/README.md
+  events/example-event.json
+  events/pending/README.md
+  events/processing/README.md
+  events/completed/README.md
+  reviews/README.md
+  reviews/github/README.md
+```
+
+This is the shared source of truth for all agents.
+
+### Blueprint
+
+`.l00prite/blueprint.md` stores mission, architecture, requirements, and definition of done.
+
+### Ledger
+
+`.l00prite/ledger.md` is the rich run history. Each run should record goal, triggering event, reviewer/comment reference, decision, completed work, fix implemented, changed files, tests run, response status, event status, failures, decisions, confidence, next action, and do-not-retry notes.
+
+### Memory model
+
+`.l00prite/memory.md` stores durable decisions and facts only. Temporary notes, speculative ideas, and stale debugging output belong in session logs or nowhere.
+
+### Heartbeat
+
+`.l00prite/heartbeat.json` is machine-readable loop control. It tracks max iterations, current iteration, stop conditions, human review gates, last run time, completion status, and whether the next loop should continue.
+
+### State and TODOs
+
+`.l00prite/state.json` stores the current machine-readable project state, including active event id, last processed event, pending event count, review response requirement, and CI status. `.l00prite/todos.md` stores prioritized next actions for the next agent.
+
+### Failures and constraints
+
+`.l00prite/failures.md` records approaches that should not be retried unless conditions change. `.l00prite/constraints.md` records hard rules, user preferences, security boundaries, and architecture constraints.
+
+## Event and review workflow
+
+l00prite treats project events as first-class protocol objects. An event is any signal that may need to interrupt normal roadmap work, including pull request review comments, failed CI, new issues, security alerts, merge conflicts, human TODOs, agent recommendations, and dependency update warnings.
+
+Generated projects can store events under `.l00prite/events/`:
+
+```text
+.l00prite/events/
+  README.md
+  example-event.json
+  pending/
+  processing/
+  completed/
+.l00prite/reviews/
+  README.md
+  github/README.md
+```
+
+A PR review comment is an event. The expected lifecycle is:
+
+```text
+Event → Classify → Plan → Execute → Verify → Persist → Respond
+```
+
+Agents should read pending events before normal roadmap work. For review events, the agent should decide whether the reviewer comment is valid, already fixed, unclear, unsafe, or not actionable. Valid comments should be resolved with the smallest safe fix, verified with relevant checks, persisted in `.l00prite/` memory, and then answered with a concise response.
+
+By default, process only one event per loop. This keeps the fix, verification, memory updates, and reviewer response auditable. It also prevents a review-response loop from drifting into unrelated refactors or broad autonomous behavior.
+
+Verification is required before responding. If tests fail or cannot run, record that honestly in the ledger and event notes, keep or mark the event as blocked/deferred, and do not claim completion.
+
+l00prite does not auto-push, merge, deploy, or behave as a full GitHub bot unless a human explicitly adds that workflow. Event prompts may draft responses, but posting, pushing, or merging requires explicit permission.
+
+## Resuming with another agent
+
+1. Open the generated target repo.
+2. Start the new agent session.
+3. Tell the agent to read `.l00prite/blueprint.md`, `ledger.md`, `memory.md`, `constraints.md`, `failures.md`, `todos.md`, `state.json`, and `heartbeat.json`.
+4. Have the agent state its understanding and what it will not retry.
+5. Have it execute only the next smallest useful step.
+6. Require verification.
+7. Require updates to ledger, state, todos, failures if needed, and heartbeat before stopping.
+
+Claude can hand off to Codex by updating `.l00prite/` and `HANDOFF.md`; Codex can hand back to Claude the same way. Neither agent needs vendor-specific hidden state to continue.
 
 ## Complexity tiers
 
-Generated projects fall into one of three tiers, each with a corresponding base skeleton under `templates/skeleton/`:
+Generated projects use one of three skeleton tiers:
 
-- **small** — `templates/skeleton/small/`
-- **medium** — `templates/skeleton/medium/`
-- **large** — `templates/skeleton/large/`
+- `templates/skeleton/small/` — narrow scripts, plugins, small CLIs, or focused libraries.
+- `templates/skeleton/medium/` — apps/services with several moving parts.
+- `templates/skeleton/large/` — multi-module systems with stronger architecture and integration needs.
 
-The tier affects the skeleton's folder structure and the rough iteration-count language used in the cost estimate. It is not a precise prediction of how long a build loop will actually take — see the spend-limit warning above.
+If scope is borderline, prefer the smaller tier.
 
-## The Loop Engineering protocol
+## Validation
 
-Every `CLAUDE.md` this tool generates — and this repo's own `CLAUDE.md` — follows the same 8 sections, in this order:
+Run the lightweight validator after protocol changes:
 
-1. Mission
-2. Architecture
-3. Requirements
-4. Definition of Done
-5. Agent Operating Loop
-6. Heartbeat Rules
-7. Run Ledger
-8. Completion Criteria
+```bash
+node scripts/validate-l00prite.js
+```
 
-A filled, realistic example of what `/build-loop` produces for a sample project lives in `examples/example-output/`. The raw template with `{{placeholders}}` lives in `templates/CLAUDE.md.template`.
+It checks required files, Codex prompts, event templates, target-project Codex templates, `.l00prite` templates, README coverage, non-execution language, event-aware ledger and state fields, example output, and JSON validity.
 
 ## Repo layout
 
-```
-.claude/commands/build-loop.md   the slash command definition
-templates/CLAUDE.md.template     the 8-section template used to generate a target project's CLAUDE.md
-templates/skeleton/              base folder structures by tier: small/, medium/, large/
-examples/example-output/         a filled example CLAUDE.md showing real /build-loop output
-CLAUDE.md                        l00prite's own blueprint (this repo is built using its own protocol)
+```text
+.claude/commands/build-loop.md   Claude build-loop command
+.codex/prompts/                  Codex/CLI prompt equivalents
+templates/CLAUDE.md.template     Generated target CLAUDE.md template
+templates/l00prite/              Shared memory folder templates
+templates/codex/prompts/         Target-project Codex prompt templates
+templates/skeleton/              Small/medium/large skeletons
+examples/example-output/         Legacy Claude-focused example
+examples/vendor-neutral-output/  Vendor-neutral example output
+scripts/validate-l00prite.js     Lightweight protocol validator
+CLAUDE.md                        l00prite's own project blueprint
+AGENTS.md                        Instructions for AI agents working here
 ```
 
 ## License
