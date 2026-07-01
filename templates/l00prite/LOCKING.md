@@ -12,7 +12,9 @@ instructions, not a real distributed lock — see "What this does not guarantee"
 - `owner_session` — session/run identifier of the lock holder.
 - `acquired_at` — ISO 8601 timestamp the lock was acquired.
 - `expires_at` — ISO 8601 timestamp the lock expires (`acquired_at` + `ttl_seconds`).
-- `ttl_seconds` — how long the lock is valid before it is considered stale.
+- `ttl_seconds` — how long the lock is valid before it is considered stale. Default `1800`
+  (30 minutes); pick a longer value up front for steps expected to run long (e.g. a slow
+  test suite), or refresh before expiry (rule 7) instead of guessing a bigger number.
 - `purpose` — short human-readable reason for the lock (e.g. `resume-loop step 4`,
   `event-loop processing event-...`).
 - `protected_paths` — the memory files/folders this lock guards.
@@ -49,6 +51,10 @@ they change rarely and reading them is always safe.
    `status` back to `released` and clear `owner_agent`/`owner_session`/`purpose`.
 6. **TTL prevents deadlock.** `ttl_seconds` guarantees a crashed or abandoned lock becomes
    reclaimable rather than permanently blocking every other agent.
+7. **Refresh before expiry for long steps.** If a step (e.g. a slow test suite) is likely to
+   run longer than `ttl_seconds`, extend `expires_at` by another `ttl_seconds` from now
+   partway through, before it lapses — don't let a legitimately still-running step look
+   stale and get reclaimed out from under you.
 
 ## What this does not guarantee
 

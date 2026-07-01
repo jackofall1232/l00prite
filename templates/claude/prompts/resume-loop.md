@@ -32,6 +32,8 @@ Before changing files, read:
 - If `status` is `active` but `expires_at` has passed, or `status` is explicitly `expired`,
   treat it as stale: you may reclaim it (acquire as above), but record a `ledger.md` entry
   noting the reclaimed `lock_id` and why it was judged stale.
+- If a step is likely to run longer than `ttl_seconds` (e.g. a slow test suite), refresh
+  `expires_at` partway through rather than letting a still-running step look stale.
 - Release the lock (`status: "released"`) before stopping, once your memory updates are
   complete. See `.l00prite/LOCKING.md` for the full rules.
 

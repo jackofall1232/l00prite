@@ -183,6 +183,6 @@ End the command here. Tell the user, explicitly and in plain language:
   Do not continue building inside this l00prite session — l00prite's job ends at scaffolding.
 
 Do not, under any circumstances in this command, make further tool calls against the
-target repo beyond writing the `CLAUDE.md`, `.l00prite/`, `.codex/prompts/`, and skeleton files described above. Do not start
+target repo beyond writing the `CLAUDE.md`, `.l00prite/`, `.codex/prompts/`, `.claude/prompts/`, and skeleton files described above. Do not start
 implementing requirements, do not run build/test commands in the target repo, and do not
 open a build loop yourself.
