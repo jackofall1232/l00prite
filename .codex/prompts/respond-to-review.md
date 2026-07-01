@@ -33,7 +33,7 @@ stopping. See `LOCKING.md` for the full rules.
 4. If valid, plan and implement the smallest safe fix that resolves the review item.
 5. If already fixed, unclear, unsafe, or not actionable, explain why and avoid unrelated changes.
 6. Run relevant tests or checks before claiming resolution. Record the command, exit code, and a short summary.
-7. Update `.l00prite/ledger.md` with the triggering event, reviewer/comment reference, decision, fix implemented, tests run (command, exit code, summary, evidence path if available, timestamp), response drafted or sent, and event status.
+7. Update `.l00prite/ledger.md` with the triggering event, reviewer/comment reference, decision, fix implemented, tests run (command, exit code, summary, evidence path if available, timestamp), response drafted or sent, event status, and lock status (lock_id acquired/released or none).
 8. **Move** (not copy) the event to `.l00prite/events/completed/` with `resolved_at`, `resolving_agent`, `verification_summary`, `response_summary`, `related_commit` (if available), and `outcome` (`resolved` | `rejected` | `blocked` | `duplicate` | `unsafe`) after verification, or update state/todos/failures if blocked.
 9. Update `.l00prite/todos.md`, `.l00prite/state.json`, and `.l00prite/failures.md` as needed.
 10. Draft a concise response to the reviewer. Post or push only when explicitly allowed.

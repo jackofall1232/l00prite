@@ -150,7 +150,7 @@ if (exists('templates/l00prite/README.md')) {
 
 if (exists('templates/l00prite/ledger.md')) {
   const ledger = read('templates/l00prite/ledger.md').toLowerCase();
-  for (const field of ['goal', 'triggering event', 'reviewer/comment reference', 'decision', 'fix implemented', 'tests run', 'response drafted/sent', 'event status', 'failures', 'next action', 'command', 'exit_code', 'evidence_path', 'timestamp']) {
+  for (const field of ['goal', 'triggering event', 'reviewer/comment reference', 'decision', 'fix implemented', 'tests run', 'response drafted/sent', 'event status', 'failures', 'next action', 'command', 'exit_code', 'evidence_path', 'timestamp', 'lock:']) {
     check(ledger.includes(field), `ledger template contains ${field}`);
   }
 }

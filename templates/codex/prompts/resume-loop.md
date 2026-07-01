@@ -47,7 +47,7 @@ Before changing files, read:
 4. Pick the next smallest useful step from `.l00prite/todos.md` or `.l00prite/state.json`.
 5. Execute only that step. Do not expand scope without human approval.
 6. Verify the step with the smallest meaningful test/check available.
-7. Update `.l00prite/ledger.md` with goal, completed work, changed files, tests run (command, exit code, summary, evidence path if available, timestamp), failures, decisions, confidence, next action, and do-not-retry notes.
+7. Update `.l00prite/ledger.md` with goal, completed work, changed files, tests run (command, exit code, summary, evidence path if available, timestamp), failures, decisions, confidence, next action, do-not-retry notes, and lock status (lock_id acquired/released or none).
 8. Update `.l00prite/state.json` with current goal, phase, active/last agent, last_updated, status, blocked, blocker_reason, and next_recommended_action.
 9. Update `.l00prite/todos.md` to reflect completed and next work.
 10. Update `.l00prite/failures.md` if anything failed or should not be retried.
