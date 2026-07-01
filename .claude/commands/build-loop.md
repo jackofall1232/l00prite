@@ -1,9 +1,9 @@
 ---
-description: Scaffold a CLAUDE.md + skeleton repo (Loop Engineering protocol) from a project idea. Does NOT execute it.
+description: Scaffold CLAUDE.md, .l00prite memory, Codex prompts, and a skeleton repo from a project idea. Does NOT execute it.
 ---
 
 You are running the `/build-loop` command from the l00prite project. Your job in this
-invocation is to **scaffold a blueprint**, not to build anything. Follow the steps below
+invocation is to **scaffold a blueprint and persistent loop memory**, not to build anything. Follow the steps below
 in order. Do not skip ahead, do not combine steps, and do not execute any part of the
 blueprint you produce.
 
@@ -103,7 +103,13 @@ about `{{placeholder}}` rules at the very top of the template file) before writi
 documents the template for l00prite's own maintainers and must never appear in the
 generated target `CLAUDE.md`.
 
-## Step 4 — Generate the skeleton folder structure
+## Step 4 — Generate the .l00prite memory folder and Codex prompts
+
+Create a `.l00prite/` folder in the target repo from `templates/l00prite/`. Fill obvious project-specific values in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep the files human-readable and vendor-neutral. Do not silently overwrite existing `.l00prite/` files; ask whether to overwrite, write `.generated` copies, or abort.
+
+Also create `.codex/prompts/` in the target repo from `templates/codex/prompts/`, including `resume-loop.md`, `heartbeat.md`, and `handoff-summary.md`. These target-project prompts must be copy/paste-friendly, must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth, and must not assume Claude slash-command behavior. Do not silently overwrite existing `.codex/` prompt files; ask whether to overwrite, write `.generated` copies, or abort.
+
+## Step 5 — Generate the skeleton folder structure
 
 Copy the folder structure from `templates/skeleton/<tier>/` (where `<tier>` is whatever you
 picked in Step 2) into the target repo, with these rules:
@@ -137,7 +143,7 @@ picked in Step 2) into the target repo, with these rules:
   `README.md`, `.gitignore`, and `.github/workflows/ci.yml`), and report which paths were
   skipped so the user can merge them by hand.
 
-## Step 5 — Give a rough, qualitative cost estimate
+## Step 6 — Give a rough, qualitative cost estimate
 
 Tell the user the rough shape of what to expect for the tier you picked, in **qualitative**
 terms only. Use language like:
@@ -157,22 +163,24 @@ codebase grows, and how the user steers it. Do not give a specific token count o
 figure. If the user pushes for a number, repeat that it can't be reliably predicted and
 point them at the qualitative tiers instead.
 
-## Step 6 — Stop. Do not execute anything.
+## Step 7 — Stop. Do not execute anything.
 
 End the command here. Tell the user, explicitly and in plain language:
 
 - This command does **not** execute the generated `CLAUDE.md` and does **not** run any
-  build loop. It only scaffolded files.
+  build loop. It only scaffolded files: `CLAUDE.md`, `.l00prite/`, `.codex/prompts/`, and the selected skeleton.
 - **Review the generated `CLAUDE.md` yourself** before running it — read it the way you'd
   read a PR, not the way you'd skim a changelog.
 - If you haven't already, **set a spend limit in the Anthropic Console** before pointing an
   agentic session at this blueprint. Unsupervised agentic loops can burn real API spend if
   left unattended.
-- To actually build this project, **open a fresh, separate Claude Code session** in the
-  target repo and let it pick up the new `CLAUDE.md` from there. Do not continue building
-  inside this l00prite session — l00prite's job ends at scaffolding.
+- To actually build this project with Claude, **open a fresh, separate Claude Code session** in the
+  target repo and let it pick up the new `CLAUDE.md` from there.
+- To resume with Codex or another CLI agent, open the target repo and use `.codex/prompts/resume-loop.md`.
+- All agents should treat `.l00prite/` as the shared source of truth and update it before stopping.
+  Do not continue building inside this l00prite session — l00prite's job ends at scaffolding.
 
 Do not, under any circumstances in this command, make further tool calls against the
-target repo beyond writing the `CLAUDE.md` and skeleton files described above. Do not start
+target repo beyond writing the `CLAUDE.md`, `.l00prite/`, `.codex/prompts/`, and skeleton files described above. Do not start
 implementing requirements, do not run build/test commands in the target repo, and do not
 open a build loop yourself.

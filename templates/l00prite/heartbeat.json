@@ -1,0 +1,19 @@
+{
+  "max_iterations": 10,
+  "current_iteration": 0,
+  "stop_conditions": [
+    "definition_of_done_met",
+    "blocked",
+    "human_review_required",
+    "max_iterations_reached"
+  ],
+  "human_review_gates": [
+    "before executing destructive operations",
+    "before changing architecture or security boundaries",
+    "before declaring completion"
+  ],
+  "last_run_time": null,
+  "completion_status": "not_started",
+  "should_continue": false,
+  "pause_reason": null
+}
