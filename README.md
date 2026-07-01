@@ -112,6 +112,8 @@ A generated target project gets a `.l00prite/` folder. Every file has one job:
 | `failures.md` | Approaches that already failed and should not be retried unless conditions change. |
 | `todos.md` | Prioritized next actions for whichever agent picks this up next. |
 | `state.json` | Current machine-readable state: active event id, last event processed, pending event count, review-response requirement, CI status. |
+| `lock.json` | Lock/lease state for safe mutation of protected memory files — see `LOCKING.md`. |
+| `LOCKING.md` | Explains the lock/lease protocol in full — fields, rules, and limits. |
 | `events/` | Pending, processing, and completed events (PR comments, CI failures, alerts) as JSON. |
 | `reviews/` | Review-specific records, including GitHub PR review handling. |
 | `sessions/` | Session log conventions for per-run notes that don't belong in `memory.md`. |
@@ -127,6 +129,8 @@ Copy `.claude/commands/build-loop.md` into a Claude Code project, or run Claude 
 ```
 
 `/build-loop` asks clarifying questions (project type, scope, stack, constraints), picks a complexity tier, writes `CLAUDE.md`, scaffolds `.l00prite/`, creates a tiered skeleton, and **stops**. To implement, open a separate Claude Code session in the target repo and let it read `CLAUDE.md` and `.l00prite/` before doing any work. Claude-side resume behavior mirrors the Codex `resume-loop` prompt: read memory, state the plan, execute the next smallest step, verify, then update memory before stopping.
+
+l00prite's own repo also ships standalone Claude prompt mirrors of the full Codex prompt set — `.claude/prompts/resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, and `handoff-summary.md` (see `.claude/README.md`) — for using Claude directly against a l00prite-managed project instead of relying on `CLAUDE.md` prose alone.
 
 ## Codex usage
 
@@ -150,6 +154,34 @@ l00prite treats project interrupts as first-class, trackable events:
 - Verification is required before responding. If tests fail or can't run, that gets recorded honestly — not glossed over.
 - Agents update `ledger.md`, `state.json`, and related memory files before stopping, whether or not the event fully resolved.
 - l00prite does **not** auto-push, merge, or act as a full GitHub bot. Drafting a response is in scope; posting, pushing, or merging requires explicit human permission.
+
+## Lock and lease model
+
+l00prite is safe for sequential handoff by default: one agent, one session at a time,
+reading and writing `.l00prite/` between runs works exactly as documented above with no
+extra steps.
+
+When more than one agent might touch the same project close together in time,
+`.l00prite/lock.json` provides a lightweight lock/lease convention:
+
+- Before mutating any protected memory file (`ledger.md`, `memory.md`, `state.json`,
+  `heartbeat.json`, `failures.md`, `todos.md`, `events/`, `reviews/`, `sessions/`), an agent
+  checks `lock.json`.
+- If it's unlocked, the agent acquires it, does its work, and releases it before stopping.
+- If it's already locked and not expired, the agent does not write — it treats the lock as
+  a blocker and stops or waits.
+- Every lock carries a `ttl_seconds` and `expires_at`. If an agent crashes or is interrupted
+  while holding the lock, it becomes stale once it expires, and the next agent may reclaim
+  it — recording that reclamation in `ledger.md` so it's not silent.
+
+See `templates/l00prite/LOCKING.md` for the full field reference and rules.
+
+**Be honest about what this is.** This is a lightweight protocol convention enforced by
+agent instructions, not a real distributed lock. It meaningfully reduces the odds of silent
+memory corruption when agents operate close together in time, but it cannot guarantee
+correctness the way a database transaction or a filesystem-level lock can — two agents that
+both check `lock.json` in the same instant can still race past each other before either
+writes. Multi-agent use still requires discipline, not just this file.
 
 ## Safety boundary
 

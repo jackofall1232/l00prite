@@ -22,7 +22,7 @@ Do not silently overwrite existing files. Ask whether to overwrite, write `.gene
 
 ## 4. Generate `.l00prite/`
 
-Copy `templates/l00prite/` into the target repo and fill obvious project-specific fields in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep files human-readable and agent-readable.
+Copy `templates/l00prite/` into the target repo and fill obvious project-specific fields in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep files human-readable and agent-readable. Leave `lock.json` in its shipped `"unlocked"` state — it is not project-specific and must not be pre-filled or set to `"active"`.
 
 ## 5. Scaffold the selected skeleton
 

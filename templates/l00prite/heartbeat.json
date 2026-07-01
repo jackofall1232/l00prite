@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "max_iterations": 10,
   "current_iteration": 0,
   "stop_conditions": [
