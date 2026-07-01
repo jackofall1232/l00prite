@@ -105,6 +105,12 @@ generated target `CLAUDE.md`.
 
 ## Step 4 — Generate the .l00prite memory folder and Codex/Claude prompts
 
+If a `.l00prite/lock.json` already exists at the target path, read it before doing anything
+else in this step. If its `status` is `active` and `expires_at` is in the future, another
+agent may currently be working in that project — stop and tell the user a lock is held
+(owner, purpose, expiry) instead of proceeding; do not scaffold over it. Only continue if
+`lock.json` is missing, `unlocked`, `released`, or `expired`.
+
 Create a `.l00prite/` folder in the target repo from `templates/l00prite/`. Fill obvious project-specific values in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep the files human-readable and vendor-neutral. Leave `lock.json` in its shipped `"unlocked"` state — it is not project-specific and must not be pre-filled or set to `"active"`. Do not silently overwrite existing `.l00prite/` files; ask whether to overwrite, write `.generated` copies, or abort.
 
 Also create `.codex/prompts/` in the target repo from `templates/codex/prompts/`, including `resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, and `handoff-summary.md`. These target-project prompts must be copy/paste-friendly, must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth, and must not assume Claude slash-command behavior. Do not silently overwrite existing `.codex/` prompt files; ask whether to overwrite, write `.generated` copies, or abort.
@@ -177,7 +183,7 @@ End the command here. Tell the user, explicitly and in plain language:
   agentic session at this blueprint. Unsupervised agentic loops can burn real API spend if
   left unattended.
 - To actually build this project with Claude, **open a fresh, separate Claude Code session** in the
-  target repo and let it pick up the new `CLAUDE.md` from there.
+  target repo, let it read `CLAUDE.md` for the blueprint, and use `.claude/prompts/resume-loop.md` to resume — that prompt (not `CLAUDE.md` alone) is what carries the lock/lease and event-lifecycle rules. To process an event or review, use `.claude/prompts/event-loop.md` or `.claude/prompts/respond-to-review.md`.
 - To resume with Codex or another CLI agent, open the target repo and use `.codex/prompts/resume-loop.md`; to process an event or review, use `.codex/prompts/event-loop.md` or `.codex/prompts/respond-to-review.md`.
 - All agents should treat `.l00prite/` as the shared source of truth and update it before stopping.
   Do not continue building inside this l00prite session — l00prite's job ends at scaffolding.

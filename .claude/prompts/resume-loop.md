@@ -48,7 +48,7 @@ Before changing files, read:
 
 1. State your understanding of the current project, current goal, status, blocker state, and next recommended action.
 2. State what you will **not** retry, based on `.l00prite/failures.md` and ledger do-not-retry notes.
-3. Check heartbeat limits and the precedence rules above before implementation. Stop if blocked, human review is required, completion is already reached, max iterations are reached, or the lock is held by another agent.
+3. Check heartbeat limits and the precedence rules above before implementation. Stop if blocked, human review is required, completion is already reached, max iterations are reached, or the lock is held by a different agent or session.
 4. Pick the next smallest useful step from `.l00prite/todos.md` or `.l00prite/state.json`.
 5. Execute only that step. Do not expand scope without human approval.
 6. Verify the step with the smallest meaningful test/check available.

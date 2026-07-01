@@ -23,6 +23,12 @@ Do not silently overwrite existing files. Ask whether to overwrite, write `.gene
 
 ## 4. Generate `.l00prite/`
 
+If a `.l00prite/lock.json` already exists at the target path, read it first. If its
+`status` is `active` and `expires_at` is in the future, another agent may currently be
+working in that project — stop and report the held lock (owner, purpose, expiry) instead
+of scaffolding over it. Only continue if `lock.json` is missing, `unlocked`, `released`, or
+`expired`.
+
 Copy `templates/l00prite/` into the target repo and fill obvious project-specific fields in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep files human-readable and agent-readable. Leave `lock.json` in its shipped `"unlocked"` state — it is not project-specific and must not be pre-filled or set to `"active"`.
 
 ## 5. Scaffold the selected skeleton

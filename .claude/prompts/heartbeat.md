@@ -32,7 +32,7 @@ Determine:
 
 When signals disagree, resolve in this order:
 
-1. An active, non-expired lock held by another agent wins over any recommendation to
+1. An active, non-expired lock held by a different agent or session wins over any recommendation to
    continue — recommend `pause` until it is released or expires.
 2. `state.json.blocked: true` wins over `heartbeat.json.should_continue`.
 3. Human review gates win over normal roadmap work.

@@ -34,8 +34,8 @@ Handle review events, CI events, issue events, human TODO events, security alert
 ## Lock check (required before any write)
 
 Before moving the event file or updating any protected path, check `.l00prite/lock.json`:
-acquire it if unlocked, released, or expired, do not write if another agent's lock is
-active and unexpired, reclaim it and record that in `ledger.md` if it's stale, and release
+acquire it if unlocked, released, or expired, do not write if a different agent or
+session's lock is active and unexpired, reclaim it and record that in `ledger.md` if it's stale, and release
 it before stopping. If a step is likely to run longer than `ttl_seconds`, refresh
 `expires_at` partway through rather than letting a still-running step look stale. See
 `.l00prite/LOCKING.md` for the full rules.
