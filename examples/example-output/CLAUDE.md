@@ -1,4 +1,8 @@
-<!-- Example output from /build-loop, included for reference. Not part of l00prite's own build. -->
+<!-- Example output from /build-loop, included for reference. Not part of l00prite's own build.
+     The Run Ledger in Section 7 below shows a mid-project snapshot after several build
+     sessions, for illustration. A fresh /build-loop run always writes that table empty
+     (header row only) — rows are appended later by the target project's own build
+     sessions, not by /build-loop itself. -->
 
 ## 1. Mission
 
