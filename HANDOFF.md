@@ -1,5 +1,78 @@
 # HANDOFF
 
+## Latest update: pre-release polish pass
+
+This update prepares the repo for first public release. It does not add new protocol
+capability — it corrects documentation that had drifted from reality and scaffolds
+`.l00prite/` for l00prite's own repo so the protocol is dogfooded on itself, not just
+described in examples.
+
+### What changed
+
+- **`CLAUDE.md` corrected.** The previous `CLAUDE.md` described an execution-mode feature
+  (an `--execute` flag, pre-flight confirmation, `execute-loop` prompts, 8 stop conditions)
+  as this session's mission. That feature was never built — commit `87384b4` ("Add
+  execution mode to l00prite with safety features") only edited `CLAUDE.md`'s own text; no
+  `execute-loop.md` file, `--execute` flag handling, or execution schema fields exist
+  anywhere in the repo. `CLAUDE.md` now describes the four protocol layers that actually
+  exist (scaffold, memory, event, handoff), with the execution-mode design preserved as an
+  explicitly-labeled "not yet built" note rather than presented as current or in-progress
+  work.
+- **Execution-mode design decision (unchanged, still the plan).** Opt-in only, gated behind
+  a `--execute` flag so default `build-loop` behavior never changes. Before any execution
+  loop starts, the agent must display the selected goal, max iterations, stop conditions,
+  files likely to change, forbidden destructive actions, and the tests/checks that will
+  verify each step, then wait for explicit confirmation. The loop must stop immediately on:
+  max iterations reached, unfixable failing tests, a destructive operation, missing
+  secrets/credentials, an unclear or ambiguous requirement, a human review gate, or a
+  lock/lease conflict. No push, merge, deploy, delete, or credential change without
+  per-action permission — not a blanket grant at the start. This is now the top item in
+  `.l00prite/todos.md` and the primary next milestone (see below).
+- **Lock/lease gap Codex found, and the fix applied.** During the protocol-hardening PR
+  (below), Codex flagged that `LOCKING.md` documented `status: "expired"` as a valid state
+  but no rule actually permitted acquiring or reclaiming a lock in that state — only
+  `unlocked`/`released` could be acquired, and stale-lock recovery only covered `active` +
+  past-expiry, leaving `expired` locks unreclaimable by the letter of the rules. Fixed by
+  Option 1: both the acquire rule and the stale-lock-recovery rule now explicitly cover
+  `expired` alongside `unlocked`/`released` and `active`+past-expiry, so a lock that reads
+  `status: "expired"` is reclaimable the same way a stale `active` lock is, with the
+  reclamation still required to be logged in `ledger.md`.
+- **ASCII banner updated.** The README's ASCII art banner was replaced with block letter art
+  inside its existing fenced code block; the fence and the SVG logo `<img>` line above it
+  were both verified intact (see README changes in this same pass).
+- **Root `.l00prite/` scaffolded for l00prite's own repo.** l00prite previously had no
+  `.l00prite/` of its own — only `templates/l00prite/` (a scaffolding template with
+  placeholder values) and `examples/vendor-neutral-output/.l00prite/` (a filled
+  demonstration, not this repo's real state). Added a real `.l00prite/` at repo root,
+  populated with this repo's actual blueprint, todos, state, and a ledger entry for this
+  session, so l00prite now dogfoods its own memory protocol instead of only documenting it.
+- **`README.md` roadmap updated** to list execution mode as the next planned milestone.
+- **`.l00prite/todos.md` updated**: v1 scaffold/memory/event/handoff work moved to Done,
+  "first public release" recorded as Done with today's date, execution-mode build listed as
+  the top Next item.
+- **Current state of the repo as of this release:** scaffold layer, memory layer, event
+  layer, and lock/lease convention are all built and validated; Claude and Codex have prompt
+  parity; the validator (`node scripts/validate-l00prite.js`) passes with zero FAIL lines;
+  execution mode is designed but not started.
+
+### Files added
+
+- `.l00prite/README.md`, `blueprint.md`, `constraints.md`, `failures.md`, `heartbeat.json`,
+  `ledger.md`, `LOCKING.md`, `lock.json`, `memory.md`, `state.json`, `todos.md`,
+  `events/README.md` and subfolders, `reviews/README.md` and subfolders, `sessions/README.md`
+- `RELEASE.md`
+
+### Files modified
+
+- `CLAUDE.md`, `HANDOFF.md`, `README.md`
+
+### Remaining gaps
+
+- Execution mode is designed (see `CLAUDE.md` and `.l00prite/todos.md`) but not built —
+  primary next milestone.
+- The lock/lease convention is still cooperative, not filesystem-enforced.
+- No automated CI runs the validator on this repo yet.
+
 ## Latest update: PR review fixes — lock state machine, event lifecycle, Claude parity in scaffolded projects
 
 PR #7 (the protocol hardening PR below) went through review from gemini-code-assist,
