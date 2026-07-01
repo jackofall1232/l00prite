@@ -42,6 +42,11 @@ const required = [
   'templates/codex/prompts/event-loop.md',
   'templates/codex/prompts/respond-to-review.md',
   'templates/codex/prompts/handoff-summary.md',
+  'templates/claude/prompts/resume-loop.md',
+  'templates/claude/prompts/heartbeat.md',
+  'templates/claude/prompts/event-loop.md',
+  'templates/claude/prompts/respond-to-review.md',
+  'templates/claude/prompts/handoff-summary.md',
   'templates/CLAUDE.md.template',
   'README.md',
   'AGENTS.md',
@@ -91,9 +96,10 @@ if (exists('.claude/commands/build-loop.md')) {
   check(buildLoop.includes('does not execute'), 'build-loop says it does not execute generated projects');
   check(buildLoop.includes('.l00prite'), 'build-loop generates .l00prite memory');
   check(buildLoop.includes('templates/codex/prompts'), 'build-loop uses target-project Codex prompt templates');
+  check(buildLoop.includes('templates/claude/prompts'), 'build-loop uses target-project Claude prompt templates');
 }
 
-const eventPrompts = ['.codex/prompts/event-loop.md', 'templates/codex/prompts/event-loop.md', '.claude/prompts/event-loop.md'];
+const eventPrompts = ['.codex/prompts/event-loop.md', 'templates/codex/prompts/event-loop.md', '.claude/prompts/event-loop.md', 'templates/claude/prompts/event-loop.md'];
 for (const rel of eventPrompts) {
   if (exists(rel)) {
     const prompt = read(rel).toLowerCase();
@@ -106,7 +112,7 @@ for (const rel of eventPrompts) {
   }
 }
 
-const reviewPrompts = ['.codex/prompts/respond-to-review.md', 'templates/codex/prompts/respond-to-review.md', '.claude/prompts/respond-to-review.md'];
+const reviewPrompts = ['.codex/prompts/respond-to-review.md', 'templates/codex/prompts/respond-to-review.md', '.claude/prompts/respond-to-review.md', 'templates/claude/prompts/respond-to-review.md'];
 for (const rel of reviewPrompts) {
   if (exists(rel)) {
     const prompt = read(rel).toLowerCase();
@@ -119,8 +125,8 @@ for (const rel of reviewPrompts) {
 }
 
 const lockAwarePrompts = [
-  '.codex/prompts/resume-loop.md', 'templates/codex/prompts/resume-loop.md', '.claude/prompts/resume-loop.md',
-  '.codex/prompts/heartbeat.md', 'templates/codex/prompts/heartbeat.md', '.claude/prompts/heartbeat.md',
+  '.codex/prompts/resume-loop.md', 'templates/codex/prompts/resume-loop.md', '.claude/prompts/resume-loop.md', 'templates/claude/prompts/resume-loop.md',
+  '.codex/prompts/heartbeat.md', 'templates/codex/prompts/heartbeat.md', '.claude/prompts/heartbeat.md', 'templates/claude/prompts/heartbeat.md',
   ...eventPrompts, ...reviewPrompts
 ];
 for (const rel of lockAwarePrompts) {

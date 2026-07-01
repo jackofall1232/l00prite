@@ -103,11 +103,13 @@ about `{{placeholder}}` rules at the very top of the template file) before writi
 documents the template for l00prite's own maintainers and must never appear in the
 generated target `CLAUDE.md`.
 
-## Step 4 — Generate the .l00prite memory folder and Codex prompts
+## Step 4 — Generate the .l00prite memory folder and Codex/Claude prompts
 
 Create a `.l00prite/` folder in the target repo from `templates/l00prite/`. Fill obvious project-specific values in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep the files human-readable and vendor-neutral. Leave `lock.json` in its shipped `"unlocked"` state — it is not project-specific and must not be pre-filled or set to `"active"`. Do not silently overwrite existing `.l00prite/` files; ask whether to overwrite, write `.generated` copies, or abort.
 
 Also create `.codex/prompts/` in the target repo from `templates/codex/prompts/`, including `resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, and `handoff-summary.md`. These target-project prompts must be copy/paste-friendly, must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth, and must not assume Claude slash-command behavior. Do not silently overwrite existing `.codex/` prompt files; ask whether to overwrite, write `.generated` copies, or abort.
+
+Also create `.claude/prompts/` in the target repo from `templates/claude/prompts/`, including the same five prompts (`resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, `handoff-summary.md`). `CLAUDE.md` is the project blueprint and entry point, but does not itself encode the lock/lease or event-lifecycle rules — these prompts are how a Claude session gets the same lock-aware, event-aware loop behavior Codex gets from `.codex/prompts/`. Do not silently overwrite existing `.claude/prompts/` files; ask whether to overwrite, write `.generated` copies, or abort.
 
 ## Step 5 — Generate the skeleton folder structure
 

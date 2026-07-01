@@ -16,6 +16,7 @@ Create or update agent guidance files appropriate to the target repo:
 
 - `CLAUDE.md` for Claude users, based on `templates/CLAUDE.md.template`.
 - `.codex/prompts/resume-loop.md`, `.codex/prompts/heartbeat.md`, `.codex/prompts/event-loop.md`, `.codex/prompts/respond-to-review.md`, and `.codex/prompts/handoff-summary.md` for Codex/CLI users.
+- `.claude/prompts/resume-loop.md`, `.claude/prompts/heartbeat.md`, `.claude/prompts/event-loop.md`, `.claude/prompts/respond-to-review.md`, and `.claude/prompts/handoff-summary.md` (from `templates/claude/prompts/`) so Claude sessions get the same lock-aware, event-aware loop behavior as Codex — `CLAUDE.md` alone does not encode lock/lease or event-lifecycle rules.
 - Preserve vendor-neutral language where possible and point all agents to `.l00prite/` as shared source of truth.
 
 Do not silently overwrite existing files. Ask whether to overwrite, write `.generated` copies, or abort.
@@ -34,6 +35,6 @@ Stop after scaffold and handoff. Refuse to run build, test, install, migration, 
 
 Tell the user how to resume:
 
-- Claude: open the target repo and use `CLAUDE.md`.
+- Claude: open the target repo and use `CLAUDE.md`, or paste `.claude/prompts/resume-loop.md` for lock-aware, event-aware loop behavior.
 - Codex: open the target repo and paste `.codex/prompts/resume-loop.md`.
 - All agents: use `.l00prite/` as the shared source of truth and update it before stopping.

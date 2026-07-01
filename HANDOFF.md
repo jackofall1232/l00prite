@@ -1,5 +1,79 @@
 # HANDOFF
 
+## Latest update: PR review fixes — lock state machine, event lifecycle, Claude parity in scaffolded projects
+
+PR #7 (the protocol hardening PR below) went through review from gemini-code-assist,
+Copilot, and Codex. All findings were verified against the actual files before acting —
+every one was real. Fixes landed as three follow-up commits.
+
+### gemini-code-assist findings (fixed)
+
+- `resume-loop.md` / `respond-to-review.md` (all copies) now record lock status in
+  `ledger.md`, matching the ledger template's `Lock` field.
+- `handoff-summary.md` (all copies) now prefixes every listed memory file with `.l00prite/`,
+  not just the first.
+- The validator now checks the ledger template for the `Lock` field.
+
+### Copilot findings (fixed)
+
+- `LOCKING.md` was referenced as a bare filename in 13 places — prompts living outside
+  `.l00prite/` (`.codex/prompts/`, `.claude/prompts/`, `templates/codex/prompts/`) and event
+  docs nested inside `.l00prite/events/` and `.l00prite/events/processing/` — ambiguous from
+  those locations. All now reference `.l00prite/LOCKING.md`. Also fixed the same bug in
+  `heartbeat.md` (all copies), which had the identical issue but wasn't flagged.
+
+### Codex findings
+
+Three fixed directly (small, mechanical, non-architectural):
+
+- `LOCKING.md` documented `status: "expired"` as valid but no rule permitted acquiring or
+  reclaiming a lock in that state — only `unlocked`/`released` could be acquired, and stale
+  recovery only covered `active` + past-expiry. Both rules now explicitly cover `expired`.
+- `resume-loop.md`'s lock check told an agent to stop on *any* active, unexpired lock —
+  including its own — so an agent updating several protected files in one run could block
+  itself after its first write. Now scoped to locks owned by a different agent/session.
+- `event-loop.md` and `respond-to-review.md` documented a `pending → processing →
+  completed` event lifecycle but never actually moved the event file into `processing/`
+  before executing, so an interrupted session left the event looking untouched instead of
+  in-progress. Both now move the event into `processing/` before execution.
+
+One required a human decision before fixing, since it touched `.claude/commands/build-loop.md`
+and `templates/CLAUDE.md.template` — files CLAUDE.md itself flags as requiring mandatory
+human review before merging:
+
+- A generated target project's `CLAUDE.md` (the only file a resuming Claude session reads
+  by default) had zero mention of the lock/lease protocol, so a Claude-only resume flow
+  would mutate protected memory files without ever checking `lock.json` — unlike Codex,
+  which gets lock-aware `.codex/prompts/`. Asked the user how to close this; they chose to
+  ship `.claude/prompts/` to target repos (new `templates/claude/prompts/`, mirroring
+  `templates/codex/prompts/`) rather than editing `CLAUDE.md.template` itself. `build-loop.md`
+  (both Claude and Codex variants) now scaffolds `.claude/prompts/` into every target repo
+  alongside `.codex/prompts/`, giving Claude the same lock-aware, event-aware prompts.
+  `CLAUDE.md.template` was left untouched, per that decision.
+
+### Files added
+
+- `templates/claude/prompts/resume-loop.md`, `heartbeat.md`, `event-loop.md`,
+  `respond-to-review.md`, `handoff-summary.md`
+
+### Files modified
+
+- All `.codex/`, `.claude/`, `templates/codex/prompts/` copies of `resume-loop.md`,
+  `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, `handoff-summary.md`
+- `templates/l00prite/LOCKING.md`, `templates/l00prite/events/README.md`,
+  `templates/l00prite/events/processing/README.md`, and their examples mirrors
+- `.claude/commands/build-loop.md`, `.codex/prompts/build-loop.md`
+- `README.md`, `scripts/validate-l00prite.js`
+
+### Remaining gaps
+
+- The lock/lease convention is still cooperative, not filesystem-enforced.
+- `CLAUDE.md.template` itself still doesn't mention the lock/lease protocol by design (per
+  the human's decision) — a Claude session that reads only `CLAUDE.md` and never opens
+  `.claude/prompts/resume-loop.md` still won't check the lock. The scaffold now hands it the
+  right prompt; nothing forces it to be read.
+- No automated CI runs the validator on this repo yet.
+
 ## Latest update: protocol hardening after independent architecture review
 
 An independent architecture review flagged concurrency, prompt-drift, prompt-injection, and

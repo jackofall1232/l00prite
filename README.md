@@ -128,9 +128,9 @@ Copy `.claude/commands/build-loop.md` into a Claude Code project, or run Claude 
 /build-loop a CLI tool that scrapes RSS feeds and emails a daily digest
 ```
 
-`/build-loop` asks clarifying questions (project type, scope, stack, constraints), picks a complexity tier, writes `CLAUDE.md`, scaffolds `.l00prite/`, creates a tiered skeleton, and **stops**. To implement, open a separate Claude Code session in the target repo and let it read `CLAUDE.md` and `.l00prite/` before doing any work. Claude-side resume behavior mirrors the Codex `resume-loop` prompt: read memory, state the plan, execute the next smallest step, verify, then update memory before stopping.
+`/build-loop` asks clarifying questions (project type, scope, stack, constraints), picks a complexity tier, writes `CLAUDE.md`, scaffolds `.l00prite/`, creates `.codex/prompts/` and `.claude/prompts/`, creates a tiered skeleton, and **stops**. `CLAUDE.md` is the project blueprint and entry point, but doesn't itself encode lock/lease or event-lifecycle rules — for that, the generated `.claude/prompts/resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, and `handoff-summary.md` give Claude the same lock-aware, event-aware loop behavior Codex gets from `.codex/prompts/`. To implement, open a separate Claude Code session in the target repo and let it read `CLAUDE.md` and `.l00prite/` before doing any work.
 
-l00prite's own repo also ships standalone Claude prompt mirrors of the full Codex prompt set — `.claude/prompts/resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, and `handoff-summary.md` (see `.claude/README.md`) — for using Claude directly against a l00prite-managed project instead of relying on `CLAUDE.md` prose alone.
+l00prite's own repo also ships the same five prompts at `.claude/prompts/` (see `.claude/README.md`) for using Claude directly against this repo or any l00prite-managed project.
 
 ## Codex usage
 
