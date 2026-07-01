@@ -41,7 +41,10 @@ they change rarely and reading them is always safe.
    the future, and `owner_agent`/`owner_session` do not match you, do not write to any
    protected path. Treat the lock as a blocker and stop or wait instead of proceeding. If
    `status` is `active` and you already own it (matching `owner_agent`/`owner_session`),
-   continue — you do not need to re-acquire before each write within the same run.
+   continue — you do not need to re-acquire before each write within the same run, provided
+   `expires_at` is still in the future. If your own lock has expired, refresh or re-acquire
+   it before your next write, even though you're still the owner — otherwise another agent
+   may reclaim it as stale (rule 4) and race you mid-write.
 4. **Stale-lock recovery.** If `status` is `active` but `expires_at` has passed, or `status`
    is explicitly `expired`, the lock is stale — its owner likely crashed or was interrupted.
    An agent may reclaim it (acquire as in rule 2), but **must** record a `ledger.md` entry

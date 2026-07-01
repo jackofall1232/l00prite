@@ -44,8 +44,12 @@ human) left off.
 ## How to get started
 
 1. Clone this repo.
-2. Copy `.claude/commands/build-loop.md` into your project's `.claude/commands/` (or, for
-   Codex/other CLI agents, open `.codex/prompts/build-loop.md` directly).
+2. `build-loop` reads from this repo's `templates/` directory (`templates/CLAUDE.md.template`,
+   `templates/l00prite/`, `templates/skeleton/`) while it scaffolds, so copying just
+   `.claude/commands/build-loop.md` into another project isn't enough on its own — either run
+   Claude Code/Codex from this cloned repo and point it at your target project's path, or
+   copy `templates/` into your target project alongside `.claude/commands/build-loop.md` (or
+   `.codex/prompts/build-loop.md` for Codex/other CLI agents).
 3. In your target project, run `/build-loop <describe your project>` (Claude Code) or paste
    the Codex prompt and follow the clarifying questions. It scaffolds your project's
    `CLAUDE.md` and `.l00prite/` memory, then stops — open a separate session afterward to

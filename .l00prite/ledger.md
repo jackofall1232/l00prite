@@ -76,4 +76,9 @@ Append one entry per agent run. Do not overwrite prior runs.
 - **Next action:** Maintainer reviews this pass and the pending changes; if satisfied, merge
   to `main`. After merge, the next roadmap item is designing and building execution mode.
 - **Do-not-retry notes:** none.
-- **Lock:** none — single-agent session, no concurrent writer to guard against.
+- **Lock:** none acquired — this run is the bootstrap that creates `.l00prite/lock.json`
+  itself, so there was no lock file yet to check before the initial writes to `ledger.md`,
+  `todos.md`, `state.json`, `heartbeat.json`, `memory.md`, and `failures.md` in this same
+  run. Single-agent session, no concurrent writer to guard against. Lock/lease enforcement
+  (check-before-write per `LOCKING.md`) applies starting with the next run, now that
+  `lock.json` exists.
