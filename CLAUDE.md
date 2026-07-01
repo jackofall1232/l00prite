@@ -89,8 +89,10 @@ current capability.
       scaffold-only safety boundary and the lock/lease model's actual guarantees.
 - [x] The repo has been dogfooded against its own protocol at least once (this file, and
       `.l00prite/`, are themselves an instance of the protocol).
-- [ ] Execution mode is designed, built, validated, and merged — tracked as the next
-      milestone, not part of this release's Definition of Done.
+
+Execution mode is explicitly **not** part of this release's Definition of Done — it is the
+next milestone, tracked separately in `.l00prite/todos.md` and Section 8 below, not as an
+unmet item in this checklist.
 
 ## 5. Agent Operating Loop
 
