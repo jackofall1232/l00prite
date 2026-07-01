@@ -52,7 +52,7 @@ When recommending the next loop, prioritize:
 ## Required output and updates
 
 - If you need to write `heartbeat.json`/`state.json` below, follow the lock rules in
-  `LOCKING.md` first: acquire if unlocked, respect an active unexpired lock, reclaim and log
+  `.l00prite/LOCKING.md` first: acquire if unlocked, respect an active unexpired lock, reclaim and log
   a stale one, release before stopping.
 - Update `.l00prite/heartbeat.json` with last_run_time, completion_status, current_iteration if appropriate, should_continue, and pause_reason.
 - Update `.l00prite/state.json` with pending_event_count, active_event_id, last_event_processed, review_response_required, ci_status, and next_recommended_action when known.

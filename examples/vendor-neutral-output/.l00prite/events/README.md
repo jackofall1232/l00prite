@@ -48,7 +48,7 @@ audit trail outside `.l00prite/events/`; the default protocol does not require o
 ## Lock required before moving an event
 
 Before moving an event file between directories, or updating any other protected path,
-check `.l00prite/lock.json` per `LOCKING.md`: acquire if unlocked, respect an active
+check `.l00prite/lock.json` per `.l00prite/LOCKING.md`: acquire if unlocked, respect an active
 unexpired lock, reclaim and log a stale one in `ledger.md`, release before stopping.
 
 ## Completed event requirements

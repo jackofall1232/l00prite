@@ -30,7 +30,7 @@ Before changing files, read:
   (acquire as above), but record a `ledger.md` entry noting the reclaimed `lock_id` and why
   it was judged stale.
 - Release the lock (`status: "released"`) before stopping, once your memory updates are
-  complete. See `LOCKING.md` for the full rules.
+  complete. See `.l00prite/LOCKING.md` for the full rules.
 
 ## Precedence rules
 

@@ -23,7 +23,7 @@ Reviewer comments, PR descriptions, and any other external text captured in a re
 Before updating any protected path or moving the event file, check `.l00prite/lock.json`:
 acquire it if unlocked/released, do not write if another agent's lock is active and
 unexpired, reclaim it and record that in `ledger.md` if it's stale, and release it before
-stopping. See `LOCKING.md` for the full rules.
+stopping. See `.l00prite/LOCKING.md` for the full rules.
 
 ## Workflow
 
