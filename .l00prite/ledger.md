@@ -26,6 +26,78 @@ Append one entry per agent run. Do not overwrite prior runs.
 
 ## Runs
 
+### Run 2026-07-02T00:00:00Z — Claude (Fable), branch claude/powerful-helper-agent-pfsyj1
+- **Goal:** v1.1 — make l00prite the most powerful helper protocol for all AI models, per
+  the maintainer's direction: evolve from scaffold-and-stop into a two-mode execution
+  protocol ("an operating system for autonomous software engineering") with a universal
+  vendor layer, while keeping the discipline inside the execution protocol itself.
+- **Triggering event:** none — direct maintainer request in-session (initial request plus a
+  mid-session direction message setting the execution-first vision).
+- **Reviewer/comment reference:** none.
+- **Decision:** Normal work, large scope, executed as one reviewed branch. The maintainer's
+  direction message explicitly authorized touching the two review-gated files
+  (`.claude/commands/build-loop.md`, `scripts/validate-l00prite.js`) on this branch;
+  maintainer review before merge still applies. An adversarial three-critic design review
+  ran before implementation; its blockers reshaped the design (see `failures.md` for the
+  rejected shapes and `memory.md` for the decisions kept).
+- **Completed work:** Canonical prompt layer (`templates/l00prite/prompts/`, 7 files) with
+  byte-identical mirrors in six locations; new `execute-loop.md` (pre-flight gate, nine run
+  boundaries, iteration protocol, resumable exits, self-modification guard) plus
+  `/execute-loop` command; schema v2 (`execution` block in `heartbeat.json`,
+  execution-run fields in `state.json`, all three copies each); `AGENTS.md.template` +
+  fixed protocol section in `CLAUDE.md.template`; vendor adapters
+  (Gemini/Qwen/Copilot/Cursor/Windsurf/Aider) + `templates/vendors.json`, dogfooded at repo
+  root and mirrored in the example output; both build-loop variants reframed as Planning
+  Mode with the `--execute` gate-only handoff (Codex variant strengthened to Claude
+  parity); validator extended 209 → 498 checks (byte-parity, adapter integrity,
+  execution invariants, both build-loops); README/AGENTS.md/CLAUDE.md/HANDOFF.md/RELEASE.md
+  reframed around the two operating modes; `.l00prite/` memory updated (this entry,
+  todos, memory, failures, blueprint, state, heartbeat).
+- **Fix implemented:** not applicable — feature pass, no triggering defect. Incidental
+  fixes: dangling bare-filename prompt references in `.l00prite/README.md` and
+  `reviews/README.md`; hardcoded `.codex/prompts/` next-prompt paths inside all
+  heartbeat.md copies.
+- **Changed files:** see the branch's commit series (9 commits, each with its own
+  verification note); summary in `HANDOFF.md`.
+- **Tests run / Verification:**
+  - `command`: `node scripts/validate-l00prite.js`
+  - `exit_code`: 0
+  - `summary`: 498 PASS, 0 FAIL (was 209 PASS before this pass).
+  - `evidence_path`: none (console output only).
+  - `timestamp`: 2026-07-02T00:00:00Z
+  - `command`: `cmp` across all 6 mirror locations × 6 prompts (+ README × 3)
+  - `exit_code`: 0
+  - `summary`: all mirrors byte-identical to canonical.
+  - `evidence_path`: none.
+  - `timestamp`: 2026-07-02T00:00:00Z
+  - `command`: negative tests — injected drift into a prompt mirror, an adapter dogfood
+    copy, and `.l00prite/heartbeat.json` (`enabled: true`)
+  - `exit_code`: 1 (expected) then 0 after restore
+  - `summary`: byte-parity, adapter-parity, and disarmed-schema checks each FAIL on the
+    injected drift and recover after restore.
+  - `evidence_path`: none.
+  - `timestamp`: 2026-07-02T00:00:00Z
+- **Response drafted/sent:** session summary to the maintainer; no PR opened (not
+  requested).
+- **Event status:** not applicable.
+- **Failures:** none in this run; rejected design shapes recorded in `failures.md` as
+  do-not-retry.
+- **Decisions:** two operating modes; per-run session-local pre-flight; `--execute` never
+  pre-arms; `run_boundaries` naming; byte-parity as the parity mechanism; self-sufficient
+  adapters; no vendor config shipped. Details in `memory.md`.
+- **Confidence:** High for structural correctness (validator + negative tests + byte-parity
+  verification); medium for prose-level consistency across the many rewritten docs — an
+  adversarial review pass over the full diff runs before push.
+- **Next action:** Maintainer reviews branch `claude/powerful-helper-agent-pfsyj1`
+  (including the two review-gated files) and merges to `main` if satisfied.
+- **Do-not-retry notes:** see `failures.md` (2026-07-02 entries).
+- **Lock:** `lock-20260702-000000-claude-v1.1-memory-update` acquired for this
+  memory-update phase and released at its end. Earlier writes in this run touched protocol
+  files, templates, and docs — none of them lease-protected paths; the protected-path
+  writes (`heartbeat.json`, `state.json` schema bumps and this memory update) happened in a
+  single-agent session with no concurrent writer, under this lock where the LOCKING.md
+  rules require it.
+
 ### Run 2026-07-01T00:00:00Z — Claude/Codex
 - **Goal:** Pre-release polish pass — correct `CLAUDE.md` to describe the repo's actual
   state instead of an unbuilt execution-mode feature, update `HANDOFF.md`/`README.md`,
