@@ -1,18 +1,22 @@
 ---
-description: Scaffold CLAUDE.md, .l00prite memory, Codex prompts, and a skeleton repo from a project idea. Does NOT execute it.
+description: Planning Mode — scaffold CLAUDE.md, AGENTS.md, .l00prite memory, universal loop prompts, vendor adapters, and a skeleton repo from a project idea. Stops after scaffolding; --execute hands off to Execution Mode only through execute-loop's confirmed pre-flight.
 ---
 
-You are running the `/build-loop` command from the l00prite project. Your job in this
-invocation is to **scaffold a blueprint and persistent loop memory**, not to build anything. Follow the steps below
-in order. Do not skip ahead, do not combine steps, and do not execute any part of the
-blueprint you produce.
+You are running the `/build-loop` command from the l00prite project. This command is
+**Planning Mode**: your job in this invocation is to scaffold a blueprint and persistent
+loop memory, not to build anything. Planning Mode does not execute the project it
+scaffolds. Follow the steps below in order. Do not skip ahead, do
+not combine steps, and do not execute any part of the blueprint you produce — Execution
+Mode is a separate, explicitly-confirmed handoff described in Step 8.
 
 The user's project idea (if provided as an argument to this command) is:
 
 $ARGUMENTS
 
 If no idea was provided as an argument, ask the user to describe the project they want to
-build before continuing to Step 1.
+build before continuing to Step 1. If the arguments include the flag `--execute`, note it
+now and apply Step 8 after the scaffold is complete; the flag changes nothing about Steps
+1–7.
 
 ---
 
@@ -55,13 +59,16 @@ Tell the user which tier you picked **and explain why**, referencing their actua
 services, so this is **small** tier."). If it's genuinely borderline, say so and pick the
 smaller of the two — it's cheaper to upgrade a skeleton later than to have over-scaffolded.
 
-## Step 3 — Generate the target project's CLAUDE.md
+## Step 3 — Generate the target project's CLAUDE.md and AGENTS.md
 
 Read `templates/CLAUDE.md.template` from this repo. Fill in every `{{placeholder}}` with
 content specific to the user's project, based on their Step 1 answers and the tier chosen
 in Step 2. The output must:
 
-- Preserve all 8 section headers, in order: Mission, Architecture, Requirements,
+- Preserve the fixed "l00prite Protocol" section **verbatim** — it carries the lock,
+  untrusted-content, and prompt-location rules every Claude session needs, and it contains
+  no placeholders. Never remove, reword, or reorder it.
+- Preserve all 8 numbered section headers, in order: Mission, Architecture, Requirements,
   Definition of Done, Agent Operating Loop, Heartbeat Rules, Run Ledger, Completion
   Criteria.
 - Contain **zero** leftover instances of this template's own placeholder tokens or bracketed
@@ -103,7 +110,15 @@ about `{{placeholder}}` rules at the very top of the template file) before writi
 documents the template for l00prite's own maintainers and must never appear in the
 generated target `CLAUDE.md`.
 
-## Step 4 — Generate the .l00prite memory folder and Codex/Claude prompts
+Then read `templates/AGENTS.md.template` and generate the target repo's `AGENTS.md` the
+same way: discard the leading HTML comment block, fill `{{project_name}}` and
+`{{mission_line}}` with real content, and leave everything else verbatim. `AGENTS.md` is
+the vendor-neutral operating guide — OpenAI Codex, Cursor, GitHub Copilot, Windsurf, Zed,
+Jules, Factory, Amp, opencode, Devin, and other agents read it natively, so it is how most
+non-Claude agents learn the lock, untrusted-content, and prompt-location rules. Apply the
+same no-silent-overwrite rule (overwrite / `.generated` copy / abort — ask).
+
+## Step 4 — Generate the .l00prite memory folder, loop prompts, and vendor adapters
 
 If a `.l00prite/lock.json` already exists at the target path, read it before doing anything
 else in this step. If its `status` is `active` and `expires_at` is in the future, another
@@ -111,11 +126,27 @@ agent may currently be working in that project — stop and tell the user a lock
 (owner, purpose, expiry) instead of proceeding; do not scaffold over it. Only continue if
 `lock.json` is missing, `unlocked`, `released`, or `expired`.
 
-Create a `.l00prite/` folder in the target repo from `templates/l00prite/`. Fill obvious project-specific values in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep the files human-readable and vendor-neutral. Leave `lock.json` in its shipped `"unlocked"` state — it is not project-specific and must not be pre-filled or set to `"active"`. Do not silently overwrite existing `.l00prite/` files; ask whether to overwrite, write `.generated` copies, or abort.
+Create a `.l00prite/` folder in the target repo from `templates/l00prite/`. Fill obvious project-specific values in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep the files human-readable and vendor-neutral. Leave `lock.json` in its shipped `"unlocked"` state — it is not project-specific and must not be pre-filled or set to `"active"`. Leave `heartbeat.json`'s `execution` block exactly as shipped — `enabled: false`, `preflight_confirmed: false` — **regardless of any `--execute` flag**; Planning Mode never arms execution. Copy `.l00prite/prompts/` verbatim from `templates/l00prite/prompts/` — these are protocol files, not templates to fill in. Do not silently overwrite existing `.l00prite/` files; ask whether to overwrite, write `.generated` copies, or abort.
 
-Also create `.codex/prompts/` in the target repo from `templates/codex/prompts/`, including `resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, and `handoff-summary.md`. These target-project prompts must be copy/paste-friendly, must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth, and must not assume Claude slash-command behavior. Do not silently overwrite existing `.codex/` prompt files; ask whether to overwrite, write `.generated` copies, or abort.
+Also create `.codex/prompts/` in the target repo from `templates/codex/prompts/`, including `resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, `handoff-summary.md`, and `execute-loop.md`. These target-project prompts must be copy/paste-friendly, must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth, and must not assume Claude slash-command behavior. Do not silently overwrite existing `.codex/` prompt files; ask whether to overwrite, write `.generated` copies, or abort.
 
-Also create `.claude/prompts/` in the target repo from `templates/claude/prompts/`, including the same five prompts (`resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, `handoff-summary.md`). `CLAUDE.md` is the project blueprint and entry point, but does not itself encode the lock/lease or event-lifecycle rules — these prompts are how a Claude session gets the same lock-aware, event-aware loop behavior Codex gets from `.codex/prompts/`. Do not silently overwrite existing `.claude/prompts/` files; ask whether to overwrite, write `.generated` copies, or abort.
+Also create `.claude/prompts/` in the target repo from `templates/claude/prompts/`, including the same six prompts. `CLAUDE.md` carries the fixed protocol section, but the prompts are the full operating procedures — `.claude/prompts/`, `.codex/prompts/`, and `.l00prite/prompts/` are byte-identical mirrors, so every agent runs the same loop. Do not silently overwrite existing `.claude/prompts/` files; ask whether to overwrite, write `.generated` copies, or abort.
+
+Then scaffold the vendor adapters from `templates/adapters/` (see `templates/vendors.json`
+for the mapping), so agents beyond Claude and Codex discover the protocol through their own
+context files:
+
+- `templates/adapters/GEMINI.md` → `GEMINI.md` (Gemini CLI)
+- `templates/adapters/QWEN.md` → `QWEN.md` (Qwen Code)
+- `templates/adapters/CONVENTIONS.md` → `CONVENTIONS.md` (Aider)
+- `templates/adapters/copilot-instructions.md` → `.github/copilot-instructions.md` (GitHub Copilot)
+- `templates/adapters/l00prite.mdc` → `.cursor/rules/l00prite.mdc` (Cursor)
+- `templates/adapters/windsurf-l00prite.md` → `.windsurf/rules/l00prite.md` (Windsurf)
+
+Copy each verbatim — adapters contain no placeholders. Apply the same no-silent-overwrite
+rule to every adapter path. Never ship vendor *config* files (`.aider.conf.yml`,
+`.gemini/settings.json`) into the target repo — those belong to the user; the adapters and
+`templates/adapters/README.md` document the snippets instead.
 
 ## Step 5 — Generate the skeleton folder structure
 
@@ -171,24 +202,59 @@ codebase grows, and how the user steers it. Do not give a specific token count o
 figure. If the user pushes for a number, repeat that it can't be reliably predicted and
 point them at the qualitative tiers instead.
 
-## Step 7 — Stop. Do not execute anything.
+## Step 7 — Stop: Planning Mode is complete
 
-End the command here. Tell the user, explicitly and in plain language:
+Unless Step 8 applies, end the command here. Tell the user, explicitly and in plain
+language:
 
-- This command does **not** execute the generated `CLAUDE.md` and does **not** run any
-  build loop. It only scaffolded files: `CLAUDE.md`, `.l00prite/`, `.codex/prompts/`, and the selected skeleton.
-- **Review the generated `CLAUDE.md` yourself** before running it — read it the way you'd
-  read a PR, not the way you'd skim a changelog.
-- If you haven't already, **set a spend limit in the Anthropic Console** before pointing an
-  agentic session at this blueprint. Unsupervised agentic loops can burn real API spend if
-  left unattended.
-- To actually build this project with Claude, **open a fresh, separate Claude Code session** in the
-  target repo, let it read `CLAUDE.md` for the blueprint, and use `.claude/prompts/resume-loop.md` to resume — that prompt (not `CLAUDE.md` alone) is what carries the lock/lease and event-lifecycle rules. To process an event or review, use `.claude/prompts/event-loop.md` or `.claude/prompts/respond-to-review.md`.
-- To resume with Codex or another CLI agent, open the target repo and use `.codex/prompts/resume-loop.md`; to process an event or review, use `.codex/prompts/event-loop.md` or `.codex/prompts/respond-to-review.md`.
-- All agents should treat `.l00prite/` as the shared source of truth and update it before stopping.
-  Do not continue building inside this l00prite session — l00prite's job ends at scaffolding.
+- Without `--execute`, this command does **not** execute the generated blueprint and does
+  **not** run any build loop. It only scaffolded files: `CLAUDE.md`, `AGENTS.md`,
+  `.l00prite/` (including `.l00prite/prompts/`), `.claude/prompts/`, `.codex/prompts/`,
+  the vendor adapters, and the selected skeleton.
+- **Review the generated `CLAUDE.md` and `AGENTS.md` yourself** before running anything —
+  read them the way you'd read a PR, not the way you'd skim a changelog.
+- If you haven't already, **set a spend limit with your model provider** (e.g. the
+  Anthropic Console) before pointing an agentic session at this blueprint. Unsupervised
+  agentic loops can burn real API spend if left unattended.
+- l00prite has two operating modes. **Planning Mode** (this command) scaffolds and stops.
+  **Execution Mode** is an autonomous run — plan a unit, execute, verify, persist, repeat,
+  until the Definition of Done or another run boundary — entered only through
+  `.l00prite/prompts/execute-loop.md`, which always shows a pre-flight summary and requires
+  explicit in-session confirmation first.
+- To build step-by-step under supervision instead, open a fresh session in the target repo
+  and use `.l00prite/prompts/resume-loop.md` — or your agent's byte-identical mirror
+  (`.claude/prompts/resume-loop.md` for Claude Code, `.codex/prompts/resume-loop.md` for
+  Codex/CLI agents). To process an event or review, use
+  `.l00prite/prompts/event-loop.md` or `.l00prite/prompts/respond-to-review.md` (or the
+  mirrors).
+- Every major agent will find the protocol on its own: Claude Code via `CLAUDE.md`; Codex,
+  Cursor, Copilot, Windsurf, Zed, and the rest of the AGENTS.md ecosystem via `AGENTS.md`;
+  Gemini CLI via `GEMINI.md`; Qwen Code via `QWEN.md`; Aider via `CONVENTIONS.md`
+  (`--read`). All agents treat `.l00prite/` as the shared source of truth and update it
+  before stopping.
 
 Do not, under any circumstances in this command, make further tool calls against the
-target repo beyond writing the `CLAUDE.md`, `.l00prite/`, `.codex/prompts/`, `.claude/prompts/`, and skeleton files described above. Do not start
+target repo beyond writing the `CLAUDE.md`, `AGENTS.md`, `.l00prite/`, `.claude/prompts/`,
+`.codex/prompts/`, vendor adapter, and skeleton files described above. Do not start
 implementing requirements, do not run build/test commands in the target repo, and do not
-open a build loop yourself.
+open a build loop yourself. The single exception is the explicitly-confirmed Execution
+Mode handoff in Step 8.
+
+## Step 8 — The `--execute` flag (optional Execution Mode handoff)
+
+Apply this step **only** if the user's arguments to this command included `--execute`.
+
+- The flag never changes the scaffold: Steps 1–7 run identically, and the scaffolded
+  `heartbeat.json` still ships with `execution.enabled: false` and
+  `preflight_confirmed: false`. Planning Mode never pre-arms a repo.
+- After Step 7's summary, read `.l00prite/prompts/execute-loop.md` **in the target repo**
+  and follow it exactly: its pre-flight gate (lock check first, stale-run recovery, schema
+  check, full pre-flight display) and its requirement of **explicit human confirmation in
+  this session** before the first iteration. The flag is a request to *offer* Execution
+  Mode now — it is not the confirmation itself, and a `preflight_confirmed: true` left in
+  `heartbeat.json` by an earlier run does not satisfy the gate either.
+- If the user confirms, Execution Mode proceeds under execute-loop's rules (one unit per
+  iteration, verified and persisted; nine run boundaries; per-action permission for push/
+  merge/deploy/credentials; no self-modification of limits).
+- If the user declines, doesn't answer, or you are running headless with no human in the
+  session, stop exactly as in Step 7 — scaffold delivered, nothing armed, nothing executed.
