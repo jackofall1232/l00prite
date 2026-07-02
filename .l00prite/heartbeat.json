@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "max_iterations": 20,
   "current_iteration": 8,
   "stop_conditions": [
@@ -17,5 +17,25 @@
   "last_run_time": "2026-07-01T00:00:00Z",
   "completion_status": "in_progress",
   "should_continue": false,
-  "pause_reason": "pre-release polish pass complete; awaiting maintainer review and sign-off before merge to main"
+  "pause_reason": "pre-release polish pass complete; awaiting maintainer review and sign-off before merge to main",
+  "execution": {
+    "enabled": false,
+    "preflight_confirmed": false,
+    "preflight_confirmed_at": null,
+    "preflight_confirmed_by": null,
+    "max_iterations": 25,
+    "current_iteration": 0,
+    "last_run_boundary": null,
+    "run_boundaries": [
+      "definition_of_done_met",
+      "iteration_limit_reached",
+      "human_review_gate",
+      "destructive_operation_required",
+      "ambiguous_requirements",
+      "unfixable_failing_tests",
+      "missing_secrets_or_credentials",
+      "lock_lease_conflict",
+      "stop_signal"
+    ]
+  }
 }

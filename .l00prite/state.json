@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "project_name": "l00prite",
   "current_goal": "prepare l00prite for first public release",
   "current_phase": "pre-release",
@@ -14,5 +14,7 @@
   "pending_event_count": 0,
   "review_response_required": false,
   "ci_status": "unknown",
+  "execution_active": false,
+  "execution_stop_reason": null,
   "next_recommended_action": "build execution mode per CLAUDE.md design"
 }

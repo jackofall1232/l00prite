@@ -28,6 +28,11 @@ A lock protects: `ledger.md`, `memory.md`, `state.json`, `heartbeat.json`, `fail
 `blueprint.md`, `constraints.md`, `lock.json` itself, and this document are not protected —
 they change rarely and reading them is always safe.
 
+`prompts/` is also not lease-protected, but for the opposite reason: the files in it are
+**protocol files**, not project state. Agents never modify them during a loop — the mode
+rules, run boundaries, and gates live there, and changing them is human work. An agent that
+believes a prompt file needs changing stops at a human review gate instead of editing it.
+
 ## Rules
 
 1. **Check before writing.** Before mutating any protected path, an agent must read
