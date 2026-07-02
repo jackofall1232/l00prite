@@ -1,3 +1,24 @@
+# l00prite v1.1 (in review)
+
+v1.1 adds the two things v1 explicitly deferred:
+
+- **Execution Mode** — `execute-loop` prompts everywhere (canonical copy in
+  `.l00prite/prompts/`), a `--execute` handoff on `build-loop`, a mandatory pre-flight
+  display + explicit in-session confirmation gate (persisted flags never satisfy it), nine
+  run boundaries, resumable exits, and schema v2 execution fields in
+  `heartbeat.json`/`state.json`. Planning Mode's scaffold-and-stop default is unchanged and
+  always ships execution disarmed.
+- **Universal agent layer** — a generated `AGENTS.md` (read natively by OpenAI Codex,
+  Cursor, GitHub Copilot, Windsurf, Zed, Jules, Factory, Amp, opencode, Devin, and more), a
+  fixed protocol section in the generated `CLAUDE.md`, canonical loop prompts inside
+  `.l00prite/prompts/` with byte-identical vendor mirrors (validator-enforced), and
+  self-sufficient adapters for Gemini CLI, Qwen Code, Copilot, Cursor, Windsurf, and Aider
+  (`templates/adapters/`, manifest in `templates/vendors.json`).
+
+See `HANDOFF.md` and `CLAUDE.md` Sections 2–4 for the full description. The v1 notes below
+are kept as shipped; where they say execution mode "does not exist yet," v1.1 is the
+release that adds it.
+
 # l00prite v1
 
 ## What l00prite is
@@ -15,6 +36,8 @@ human) left off.
   (Codex/CLI) ask clarifying questions, pick a complexity tier, and write a project
   `CLAUDE.md`, `.l00prite/` memory folder, `.codex/prompts/`, `.claude/prompts/`, and a
   tiered skeleton — then stop. Scaffolding never executes the generated project.
+  (As of v1.1, the scaffold also writes `AGENTS.md`, `.l00prite/prompts/`, and the vendor
+  adapters.)
 - **Memory layer** — a `.l00prite/` folder (`blueprint.md`, `ledger.md`, `memory.md`,
   `constraints.md`, `failures.md`, `todos.md`, `heartbeat.json`, `state.json`) that any
   agent treats as the source of truth for project state.

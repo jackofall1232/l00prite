@@ -1,5 +1,123 @@
 # HANDOFF
 
+## Latest update: universal agent layer + Execution Mode (v1.1, in review)
+
+This pass, directed by the maintainer, evolves l00prite from a scaffold-and-stop protocol
+into a two-mode execution protocol — "an operating system for autonomous software
+engineering" — while making the protocol discoverable by every major AI coding agent, not
+just Claude and Codex. All work is on branch `claude/powerful-helper-agent-pfsyj1`,
+awaiting maintainer review; the two review-gated files
+(`.claude/commands/build-loop.md`, `scripts/validate-l00prite.js`) were changed at the
+maintainer's explicit direction and need that review before merge.
+
+### The two-mode architecture
+
+- **Planning Mode** (`build-loop`, unchanged default behavior): clarify → blueprint →
+  scaffold → initialize `.l00prite/` → stop. Never executes; always ships Execution Mode
+  disarmed (`execution.enabled: false`).
+- **Execution Mode** (`execute-loop`, new): read blueprint → pre-flight gate → iterate
+  (select one unit → execute → verify with evidence → persist → re-check boundaries) →
+  stop at a run boundary → resumable by any vendor's agent. The gate is per-run and
+  session-local: a pre-flight display plus explicit in-session human confirmation, which
+  no persisted `preflight_confirmed`/`enabled` flag can substitute for. Headless sessions
+  cannot enter Execution Mode. `build-loop --execute` offers the handoff after scaffolding
+  but never pre-arms and never skips the gate.
+- Nine run boundaries (heartbeat.json `execution.run_boundaries` — named to avoid
+  colliding with the existing top-level `stop_conditions`): `definition_of_done_met`,
+  `iteration_limit_reached`, `human_review_gate`, `destructive_operation_required`,
+  `ambiguous_requirements`, `unfixable_failing_tests`, `missing_secrets_or_credentials`,
+  `lock_lease_conflict` (special case: report only, write nothing to memory another agent
+  holds), `stop_signal`.
+- Discipline moved into the loop itself: per-action permission for
+  push/merge/deploy/credentials; a self-modification guard (the loop may never raise
+  `max_iterations`, edit `run_boundaries`/`human_review_gates`, or touch
+  `.l00prite/prompts/`, `AGENTS.md`, adapters, `LOCKING.md`; `should_continue` moves
+  false→true only via a confirmed pre-flight); events arriving mid-run need fresh
+  confirmation so injected text can't expand an autonomous run's scope; verification
+  failures are retried differently within budget (failure is data), with attempt counts
+  recorded in `failures.md`.
+
+### The universal agent layer
+
+- **Canonical prompts moved into the protocol**: `templates/l00prite/prompts/` now holds
+  the single source for all six loop prompts (the five existing ones plus `execute-loop`),
+  with byte-identical mirrors in `.claude/prompts/`, `.codex/prompts/`,
+  `templates/claude/prompts/`, `templates/codex/prompts/`, this repo's own
+  `.l00prite/prompts/`, and the example output. The old model (4 hand-maintained copies,
+  keyword-only validation, a hardcoded `.codex/` path baked into even the Claude copies)
+  is gone; the validator now fails on any byte drift. Every scaffolded `.l00prite/` is
+  self-describing — an agent that finds the memory folder finds the procedures.
+- **AGENTS.md standard**: `templates/AGENTS.md.template` generates a vendor-neutral
+  operating guide into every target repo — read natively by OpenAI Codex, Cursor, GitHub
+  Copilot (agent/CLI/VS Code/review), Windsurf, Zed, Jules, Factory, Amp, opencode, Devin,
+  and others. `templates/CLAUDE.md.template` gained a fixed "l00prite Protocol" section so
+  Claude Code (which reads CLAUDE.md, not AGENTS.md) finally gets the lock/untrusted/
+  prompts rules in its default context file — previously only prompt-aware sessions
+  learned about `lock.json`.
+- **Vendor adapters** (`templates/adapters/`, manifest in `templates/vendors.json`,
+  dogfooded at this repo's root, mirrored in the example output): `GEMINI.md` and
+  `QWEN.md` (default context files; `@AGENTS.md` import), `.github/copilot-instructions.md`,
+  `.cursor/rules/l00prite.mdc` (`alwaysApply`), `.windsurf/rules/l00prite.md`
+  (`always_on`, sized far under Windsurf's ~6k/file truncation limit), `CONVENTIONS.md`
+  (Aider, `--read` usage documented). Every adapter is self-sufficient — six protocol
+  rules inline, never a bare pointer — because some Copilot surfaces can't open other
+  files and Zed loads only its first match (where `copilot-instructions.md` outranks
+  `AGENTS.md`). Deliberately **not** shipped: vendor config files (`.aider.conf.yml`,
+  `.gemini/settings.json`) — a repo-root config can silently override a user's own; the
+  snippets are documented instead.
+
+### Schema v2
+
+`heartbeat.json` gained the `execution` block (disarmed defaults, its own
+`max_iterations`/`current_iteration`, `last_run_boundary`, `run_boundaries`);
+`state.json` gained `execution_active`/`execution_stop_reason`. A file without the
+`execution` block is a v1 file: execution is simply disabled until `execute-loop`
+migrates it under lock, recorded in the ledger. Nothing in the repo checks
+`schema_version === 1`, so the bump is safe.
+
+### Validator
+
+Extended (review-gated file) with: byte-parity checks for all prompt mirrors and adapter
+copies; `templates/vendors.json`-driven adapter checks plus a reverse check that every
+adapter file is in the manifest; execute-loop invariant checks (pre-flight language,
+persisted-flag-never-satisfies rule, all nine boundary ids, lock-conflict no-write rule,
+self-modification guard, per-action permission); disarmed-schema assertions
+(`enabled === false`, `preflight_confirmed === false`, `execution_active === false`) on
+all three heartbeat/state copies; both build-loop variants checked (previously only the
+Claude one); template checks for the AGENTS.md/CLAUDE.md protocol sections; README
+vendor-coverage and mode checks. All previous checks retained.
+
+### Design decisions recorded (and rejected alternatives)
+
+An adversarial three-critic design review ran before implementation; its blockers shaped
+the final design. Rejected, do-not-retry (also in `.l00prite/failures.md`):
+scaffold-time pre-arming (`--execute` writing `enabled: true` at scaffold — stale
+confirmation, durable ambient arming); treating persisted `preflight_confirmed` as
+authorization (forgeable via any memory write, transferable across sessions); bare-pointer
+adapters (break on non-file-reading surfaces and Zed's first-match list); shipping
+`.aider.conf.yml` (clobbers user config per-key; `.aider*` gitignore convention swallows
+it); naming the new list `stop_conditions` (collides with the existing top-level field).
+
+### Files added / modified
+
+Added: `templates/l00prite/prompts/` (7 files) + 6 mirror sets; `.claude/commands/execute-loop.md`;
+`templates/AGENTS.md.template`; `templates/adapters/` (7 files); `templates/vendors.json`;
+dogfood adapters (`GEMINI.md`, `QWEN.md`, `CONVENTIONS.md`, `.github/copilot-instructions.md`,
+`.cursor/rules/l00prite.mdc`, `.windsurf/rules/l00prite.md`) and their example-output twins;
+`examples/vendor-neutral-output/AGENTS.md`.
+Modified: both build-loop variants; `templates/CLAUDE.md.template`; heartbeat/state JSON
+(all three copies each); `LOCKING.md`, `.l00prite/README.md`, `reviews/README.md` (all
+three copies each); `scripts/validate-l00prite.js`; `README.md`, `AGENTS.md`, `CLAUDE.md`,
+`RELEASE.md`, this file; `.l00prite/` memory files.
+
+### Remaining gaps
+
+- Execution Mode's invariants are validator-enforced prompt text, not a runtime harness —
+  a non-compliant model can still ignore them. The harness is the next milestone.
+- The lock/lease convention is still cooperative, not filesystem-enforced.
+- No automated CI runs the validator on this repo yet.
+- No event ingestion: events are still hand-authored JSON.
+
 ## Latest update: pre-release polish pass
 
 This update prepares the repo for first public release. It does not add new protocol
