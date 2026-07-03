@@ -9,6 +9,13 @@ independently verified, lives in `sandbox-results/runs/{task}-{arm}.md`; full di
 plan review) → Sonnet 5 executor, brokered by the orchestrating workflow script — see
 *Methodology deviation* below for why this differs from the literally-specified mechanism.
 
+All raw per-run figures below (including implied input-token counts, exact commit hashes, and
+own-test-suite pass/fail counts, which are omitted from the prose table for brevity) are also
+available as a single consolidated table in `sandbox-results/metrics.csv`, one row per run.
+Its `cost_basis` column is either `actual` (Arm C — 100% Sonnet 5, so the cost is exact) or
+`floor_estimate` (Arm B — see the accounting limitation below; the true cost is higher than
+what's recorded).
+
 ## 1. Results table
 
 | Task | Arm | Wall-clock | Cost (intro / standard pricing) | Validator | Own test suite | DoD met | Diff size |
