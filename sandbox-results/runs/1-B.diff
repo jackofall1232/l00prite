@@ -1,0 +1,44 @@
+diff --git a/.github/workflows/validate.yml b/.github/workflows/validate.yml
+new file mode 100644
+index 0000000..f11b783
+--- /dev/null
++++ b/.github/workflows/validate.yml
+@@ -0,0 +1,38 @@
++name: Validate l00prite protocol
++
++# Automated backstop only. This workflow runs the repo's own structural/protocol
++# validator (scripts/validate-l00prite.js) on every pull request against the default
++# branch. It does NOT replace, remove, or substitute for the mandatory human-review
++# gates listed in CLAUDE.md section 6 ("Heartbeat Rules") and .l00prite/heartbeat.json
++# (human_review_gates) -- e.g. changes to .claude/commands/build-loop.md, changes to
++# scripts/validate-l00prite.js itself, and declaring a release's Definition of Done met
++# still require explicit human review before merge. A green check here only means the
++# validator's own invariants passed; a human must still review and approve.
++
++"on":
++  pull_request:
++    branches:
++      - main
++
++permissions:
++  contents: read
++
++concurrency:
++  group: validate-l00prite-${{ github.event.pull_request.number }}
++  cancel-in-progress: true
++
++jobs:
++  validate:
++    name: node scripts/validate-l00prite.js
++    runs-on: ubuntu-latest
++    steps:
++      - name: Check out repository
++        uses: actions/checkout@v4
++
++      - name: Set up Node.js
++        uses: actions/setup-node@v4
++        with:
++          node-version: "lts/*"
++
++      - name: Run l00prite validator
++        run: node scripts/validate-l00prite.js
