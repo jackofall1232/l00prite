@@ -35,8 +35,10 @@ plus which prompt to use for which job.
 
 In `heartbeat.json`, the top-level `max_iterations`/`current_iteration`/`stop_conditions`
 govern planning-mode and supervised loops; the `execution` block (its own
-`max_iterations`, `current_iteration`, and `run_boundaries`) governs Execution Mode runs
-and is never touched by other loops. A `heartbeat.json` without an `execution` block is a
+`max_iterations`, `current_iteration`, and `run_boundaries`) governs Execution Mode runs;
+other loops never arm it and may at most disarm it (`execution.enabled` true-to-false,
+e.g. a heartbeat check delivering a stop) — only execute-loop's confirmed pre-flight ever
+sets `execution.enabled: true`. A `heartbeat.json` without an `execution` block is a
 schema-version-1 file: execution is simply disabled until `execute-loop` migrates it (under
 lock, recorded in the ledger).
 

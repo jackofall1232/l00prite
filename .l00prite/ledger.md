@@ -49,7 +49,7 @@ Append one entry per agent run. Do not overwrite prior runs.
   (Gemini/Qwen/Copilot/Cursor/Windsurf/Aider) + `templates/vendors.json`, dogfooded at repo
   root and mirrored in the example output; both build-loop variants reframed as Planning
   Mode with the `--execute` gate-only handoff (Codex variant strengthened to Claude
-  parity); validator extended 209 → 498 checks (byte-parity, adapter integrity,
+  parity); validator extended 209 → 519 checks (byte-parity, adapter integrity,
   execution invariants, both build-loops); README/AGENTS.md/CLAUDE.md/HANDOFF.md/RELEASE.md
   reframed around the two operating modes; `.l00prite/` memory updated (this entry,
   todos, memory, failures, blueprint, state, heartbeat).
@@ -57,12 +57,12 @@ Append one entry per agent run. Do not overwrite prior runs.
   fixes: dangling bare-filename prompt references in `.l00prite/README.md` and
   `reviews/README.md`; hardcoded `.codex/prompts/` next-prompt paths inside all
   heartbeat.md copies.
-- **Changed files:** see the branch's commit series (9 commits, each with its own
+- **Changed files:** see the branch's commit series (each commit carries its own
   verification note); summary in `HANDOFF.md`.
 - **Tests run / Verification:**
   - `command`: `node scripts/validate-l00prite.js`
   - `exit_code`: 0
-  - `summary`: 498 PASS, 0 FAIL (was 209 PASS before this pass).
+  - `summary`: 519 PASS, 0 FAIL (was 209 PASS before this pass; 498 before the post-review fix round).
   - `evidence_path`: none (console output only).
   - `timestamp`: 2026-07-02T00:00:00Z
   - `command`: `cmp` across all 6 mirror locations × 6 prompts (+ README × 3)

@@ -91,10 +91,19 @@ const memoryFiles = [
 const exampleMemoryFiles = memoryFiles.map((rel) => rel.replace('templates/l00prite/', 'examples/vendor-neutral-output/.l00prite/'));
 exampleMemoryFiles.push('examples/vendor-neutral-output/CLAUDE.md', 'examples/vendor-neutral-output/README.md');
 
-// This repo dogfoods its own protocol: the loop prompts must exist in .l00prite/ too.
-const ownPromptFiles = ['.l00prite/prompts/README.md', ...PROMPT_NAMES.map((p) => `.l00prite/prompts/${p}.md`)];
+// This repo dogfoods its own protocol: the loop prompts and the live memory files whose
+// content is asserted below must exist in .l00prite/ too — otherwise those content checks
+// would skip silently.
+const ownDogfoodFiles = [
+  '.l00prite/prompts/README.md',
+  ...PROMPT_NAMES.map((p) => `.l00prite/prompts/${p}.md`),
+  '.l00prite/heartbeat.json',
+  '.l00prite/state.json',
+  '.l00prite/lock.json',
+  '.l00prite/LOCKING.md'
+];
 
-for (const rel of required.concat(memoryFiles, exampleMemoryFiles, ownPromptFiles)) {
+for (const rel of required.concat(memoryFiles, exampleMemoryFiles, ownDogfoodFiles)) {
   check(exists(rel), `${rel} exists`);
 }
 
@@ -126,6 +135,12 @@ for (const dir of ['.l00prite/prompts', 'examples/vendor-neutral-output/.l00prit
   const mirror = `${dir}/README.md`;
   if (exists('templates/l00prite/prompts/README.md') && exists(mirror)) {
     check(read(mirror) === read('templates/l00prite/prompts/README.md'), `${mirror} is byte-identical to canonical templates/l00prite/prompts/README.md`);
+  }
+}
+// LOCKING.md is one document in three copies — keep them from drifting apart.
+for (const mirror of ['.l00prite/LOCKING.md', 'examples/vendor-neutral-output/.l00prite/LOCKING.md']) {
+  if (exists('templates/l00prite/LOCKING.md') && exists(mirror)) {
+    check(read(mirror) === read('templates/l00prite/LOCKING.md'), `${mirror} is byte-identical to canonical templates/l00prite/LOCKING.md`);
   }
 }
 
@@ -268,35 +283,52 @@ if (exists('templates/vendors.json')) {
   if (manifest) {
     check(Object.prototype.hasOwnProperty.call(manifest, 'schema_version'), 'vendors.json contains schema_version');
     check(Array.isArray(manifest.vendors) && manifest.vendors.length > 0, 'vendors.json lists vendors');
-    const referencedAdapters = new Set();
+    const adapterRefCounts = new Map();
     for (const vendor of manifest.vendors || []) {
-      if (!vendor.adapter_template) continue;
-      referencedAdapters.add(vendor.adapter_template);
-      check(exists(vendor.adapter_template), `${vendor.id}: adapter template ${vendor.adapter_template} exists`);
-      if (!exists(vendor.adapter_template)) continue;
-      const template = read(vendor.adapter_template);
-      const low = template.toLowerCase();
-      for (const term of vendor.required_strings || []) {
-        check(low.includes(String(term).toLowerCase()), `${vendor.id}: adapter contains "${term}"`);
-      }
-      check(template.length < 5500, `${vendor.id}: adapter stays under 5,500 characters (${template.length})`);
-      if (vendor.target_path) {
-        check(exists(vendor.target_path), `${vendor.id}: dogfood copy ${vendor.target_path} exists at this repo's root`);
-        if (exists(vendor.target_path)) {
-          check(read(vendor.target_path) === template, `${vendor.id}: dogfood ${vendor.target_path} is byte-identical to ${vendor.adapter_template}`);
+      if (vendor.adapter_template) {
+        // Adapter-bearing vendor: template + dogfood + example copies, byte-identical.
+        adapterRefCounts.set(vendor.adapter_template, (adapterRefCounts.get(vendor.adapter_template) || 0) + 1);
+        check(exists(vendor.adapter_template), `${vendor.id}: adapter template ${vendor.adapter_template} exists`);
+        if (!exists(vendor.adapter_template)) continue;
+        const template = read(vendor.adapter_template);
+        const low = template.toLowerCase();
+        for (const term of vendor.required_strings || []) {
+          check(low.includes(String(term).toLowerCase()), `${vendor.id}: adapter contains "${term}"`);
         }
-        const exampleCopy = `examples/vendor-neutral-output/${vendor.target_path}`;
-        check(exists(exampleCopy), `${vendor.id}: example copy ${exampleCopy} exists`);
-        if (exists(exampleCopy)) {
-          check(read(exampleCopy) === template, `${vendor.id}: example ${exampleCopy} is byte-identical to ${vendor.adapter_template}`);
+        check(template.length < 5500, `${vendor.id}: adapter stays under 5,500 characters (${template.length})`);
+        if (vendor.target_path) {
+          check(exists(vendor.target_path), `${vendor.id}: dogfood copy ${vendor.target_path} exists at this repo's root`);
+          if (exists(vendor.target_path)) {
+            check(read(vendor.target_path) === template, `${vendor.id}: dogfood ${vendor.target_path} is byte-identical to ${vendor.adapter_template}`);
+          }
+          const exampleCopy = `examples/vendor-neutral-output/${vendor.target_path}`;
+          check(exists(exampleCopy), `${vendor.id}: example copy ${exampleCopy} exists`);
+          if (exists(exampleCopy)) {
+            check(read(exampleCopy) === template, `${vendor.id}: example ${exampleCopy} is byte-identical to ${vendor.adapter_template}`);
+          }
+        }
+      } else if (vendor.target_path) {
+        // Generated context file (AGENTS.md, CLAUDE.md): dogfood + example copies exist and
+        // carry the required strings, but are NOT byte-compared — placeholders are filled
+        // per-project.
+        for (const copy of [vendor.target_path, `examples/vendor-neutral-output/${vendor.target_path}`]) {
+          check(exists(copy), `${vendor.id}: generated file ${copy} exists`);
+          if (!exists(copy)) continue;
+          const low = read(copy).toLowerCase();
+          for (const term of vendor.required_strings || []) {
+            check(low.includes(String(term).toLowerCase()), `${vendor.id}: ${copy} contains "${term}"`);
+          }
         }
       }
+      // Vendors with neither adapter_template nor target_path (covered natively by
+      // AGENTS.md) contribute documentation only.
     }
     const adapterDir = path.join(root, 'templates/adapters');
     if (fs.existsSync(adapterDir)) {
       for (const file of fs.readdirSync(adapterDir)) {
         if (file === 'README.md') continue;
-        check(referencedAdapters.has(`templates/adapters/${file}`), `templates/adapters/${file} is referenced by exactly one vendors.json entry`);
+        const refCount = adapterRefCounts.get(`templates/adapters/${file}`) || 0;
+        check(refCount === 1, `templates/adapters/${file} is referenced by exactly one vendors.json entry (found ${refCount})`);
       }
     }
   }
@@ -403,15 +435,21 @@ const RUN_BOUNDARY_IDS = [
   'lock_lease_conflict',
   'stop_signal'
 ];
+// Shipped copies (template + example) must be disarmed unconditionally. The live dogfood
+// copy is checked separately below: it may legitimately be armed mid-run, but only with a
+// matching active execute-loop lock — otherwise a crashed run left arming state committed.
 const heartbeatCopies = ['templates/l00prite/heartbeat.json', 'examples/vendor-neutral-output/.l00prite/heartbeat.json', '.l00prite/heartbeat.json'];
 for (const rel of heartbeatCopies) {
   if (!exists(rel)) continue;
   try {
     const hb = JSON.parse(read(rel));
+    const isDogfood = rel === '.l00prite/heartbeat.json';
     check(hb.execution && typeof hb.execution === 'object', `${rel} contains the execution block`);
     if (hb.execution) {
-      check(hb.execution.enabled === false, `${rel} ships Execution Mode disarmed (enabled === false)`);
-      check(hb.execution.preflight_confirmed === false, `${rel} ships preflight_confirmed === false`);
+      if (!isDogfood) {
+        check(hb.execution.enabled === false, `${rel} ships Execution Mode disarmed (enabled === false)`);
+        check(hb.execution.preflight_confirmed === false, `${rel} ships preflight_confirmed === false`);
+      }
       check(typeof hb.execution.max_iterations === 'number' && hb.execution.max_iterations > 0, `${rel} execution.max_iterations is a bounded number`);
       check(Object.prototype.hasOwnProperty.call(hb.execution, 'current_iteration'), `${rel} execution has current_iteration`);
       check(Object.prototype.hasOwnProperty.call(hb.execution, 'last_run_boundary'), `${rel} execution has last_run_boundary`);
@@ -430,32 +468,74 @@ for (const rel of stateCopies) {
   if (!exists(rel)) continue;
   try {
     const state = JSON.parse(read(rel));
-    check(state.execution_active === false, `${rel} ships execution_active === false`);
+    if (rel !== '.l00prite/state.json') {
+      check(state.execution_active === false, `${rel} ships execution_active === false`);
+    }
     check(Object.prototype.hasOwnProperty.call(state, 'execution_stop_reason'), `${rel} contains execution_stop_reason`);
   } catch (error) {
     check(false, `${rel} parses for execution checks: ${error.message}`);
   }
 }
 
+// Live dogfood arming state: armed is legal only mid-run, i.e. with an active, unexpired
+// execute-loop lock; and heartbeat/state must agree about whether a run is active.
+if (exists('.l00prite/heartbeat.json') && exists('.l00prite/state.json')) {
+  try {
+    const hb = JSON.parse(read('.l00prite/heartbeat.json'));
+    const state = JSON.parse(read('.l00prite/state.json'));
+    const enabled = hb.execution ? hb.execution.enabled === true : false;
+    const active = state.execution_active === true;
+    check(enabled === active, `.l00prite/ heartbeat execution.enabled matches state execution_active (${enabled} vs ${active})`);
+    if (enabled || active) {
+      let lockOk = false;
+      if (exists('.l00prite/lock.json')) {
+        const lock = JSON.parse(read('.l00prite/lock.json'));
+        lockOk = lock.status === 'active'
+          && typeof lock.expires_at === 'string'
+          && Date.parse(lock.expires_at) > Date.now()
+          && typeof lock.purpose === 'string'
+          && lock.purpose.includes('execute-loop');
+      }
+      check(lockOk, '.l00prite/ armed execution state has a matching active, unexpired execute-loop lock (otherwise a crashed run left arming state committed)');
+    } else {
+      check(true, '.l00prite/ dogfood execution state is disarmed');
+    }
+  } catch (error) {
+    check(false, `.l00prite/ dogfood arming-state consistency: ${error.message}`);
+  }
+}
+
 if (exists('templates/l00prite/state.json')) {
-  const state = JSON.parse(read('templates/l00prite/state.json'));
-  for (const field of ['active_event_id', 'last_event_processed', 'pending_event_count', 'review_response_required', 'ci_status']) {
-    check(Object.prototype.hasOwnProperty.call(state, field), `state.json contains ${field}`);
+  try {
+    const state = JSON.parse(read('templates/l00prite/state.json'));
+    for (const field of ['active_event_id', 'last_event_processed', 'pending_event_count', 'review_response_required', 'ci_status']) {
+      check(Object.prototype.hasOwnProperty.call(state, field), `state.json contains ${field}`);
+    }
+  } catch (error) {
+    check(false, `templates/l00prite/state.json parses for field checks: ${error.message}`);
   }
 }
 
 if (exists('templates/l00prite/events/example-event.json')) {
-  const event = JSON.parse(read('templates/l00prite/events/example-event.json'));
-  for (const field of ['id', 'type', 'source', 'status', 'priority', 'verification_required', 'response_required', 'do_not_retry', 'notes', 'resolved_at', 'resolving_agent', 'verification_summary', 'response_summary', 'related_commit', 'outcome']) {
-    check(Object.prototype.hasOwnProperty.call(event, field), `example-event.json contains ${field}`);
+  try {
+    const event = JSON.parse(read('templates/l00prite/events/example-event.json'));
+    for (const field of ['id', 'type', 'source', 'status', 'priority', 'verification_required', 'response_required', 'do_not_retry', 'notes', 'resolved_at', 'resolving_agent', 'verification_summary', 'response_summary', 'related_commit', 'outcome']) {
+      check(Object.prototype.hasOwnProperty.call(event, field), `example-event.json contains ${field}`);
+    }
+    check(typeof event.id === 'string' && /^event-\d{8}-\d{6}-/.test(event.id), 'example-event.json id follows event-YYYYMMDD-HHMMSS-... format');
+  } catch (error) {
+    check(false, `templates/l00prite/events/example-event.json parses for field checks: ${error.message}`);
   }
-  check(typeof event.id === 'string' && /^event-\d{8}-\d{6}-/.test(event.id), 'example-event.json id follows event-YYYYMMDD-HHMMSS-... format');
 }
 
 if (exists('templates/l00prite/lock.json')) {
-  const lock = JSON.parse(read('templates/l00prite/lock.json'));
-  for (const field of ['schema_version', 'lock_id', 'owner_agent', 'owner_session', 'acquired_at', 'expires_at', 'ttl_seconds', 'purpose', 'protected_paths', 'status']) {
-    check(Object.prototype.hasOwnProperty.call(lock, field), `lock.json contains ${field}`);
+  try {
+    const lock = JSON.parse(read('templates/l00prite/lock.json'));
+    for (const field of ['schema_version', 'lock_id', 'owner_agent', 'owner_session', 'acquired_at', 'expires_at', 'ttl_seconds', 'purpose', 'protected_paths', 'status']) {
+      check(Object.prototype.hasOwnProperty.call(lock, field), `lock.json contains ${field}`);
+    }
+  } catch (error) {
+    check(false, `templates/l00prite/lock.json parses for field checks: ${error.message}`);
   }
 }
 

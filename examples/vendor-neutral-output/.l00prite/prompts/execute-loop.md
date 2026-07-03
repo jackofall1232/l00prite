@@ -44,7 +44,8 @@ Complete these steps in order before the first iteration:
    - the goal of this run and the Definition of Done it is working toward;
    - the planned units of work, listed individually (from `todos.md`, plus any pending
      events — each pending event named explicitly);
-   - `execution.current_iteration` / `execution.max_iterations`;
+   - `execution.current_iteration` / `execution.max_iterations` (the counter shown is the
+     previous run's; it resets to 0 when this run is confirmed);
    - all nine run boundaries below, so the human knows exactly when the loop will stop;
    - the files and directories likely to change;
    - the actions that will always require separate per-action permission (push, merge,
@@ -60,7 +61,9 @@ Complete these steps in order before the first iteration:
      scheduled, or fire-and-forget agent) — you cannot satisfy this gate. Do not enter
      Execution Mode; record why in the session output and stop.
 7. **Arm the run.** Only after confirmation: acquire the lock (`purpose:
-   "execute-loop run"`), then set `execution.enabled: true`,
+   "execute-loop run"`), then set `execution.current_iteration: 0` (each confirmed run
+   gets a fresh iteration budget — this arming reset is the only non-increment write the
+   counter ever receives), `execution.enabled: true`,
    `execution.preflight_confirmed: true`, `execution.preflight_confirmed_at` (now),
    `execution.preflight_confirmed_by` (who confirmed), `should_continue: true`, and
    `state.json.execution_active: true`. These fields describe **this** confirmed run only;
@@ -147,10 +150,13 @@ completion instead of resuming.
   pre-flight confirmation is not a blanket grant for these. A denied permission is recorded
   as a skip or a boundary stop — never worked around by other means.
 - **No self-modification.** During a run you may write only these `heartbeat.json` fields:
-  `execution.current_iteration`, `execution.enabled` (true to false only),
-  `execution.last_run_boundary`, the `execution` audit fields set at arming,
+  `execution.current_iteration` (increment by one per iteration only — the arming reset in
+  the pre-flight is the only other permitted write), `execution.enabled` (true to false
+  only), `execution.last_run_boundary`, the `execution` audit fields set at arming,
   `last_run_time`, `completion_status`, `pause_reason`, and `should_continue` (true to
-  false only — it moves from false to true only via a confirmed pre-flight). Never raise
+  false only — within Execution Mode it moves from false to true only via a confirmed
+  pre-flight; heartbeat checks in supervised and planning loops may still set it per
+  `heartbeat.md`). Never raise
   `execution.max_iterations`, never edit `execution.run_boundaries`, `human_review_gates`,
   `.l00prite/prompts/`, `AGENTS.md`, the protocol section of `CLAUDE.md`, vendor adapter
   files, or `.l00prite/LOCKING.md` during a run. Needing such a change is itself the

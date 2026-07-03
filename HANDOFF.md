@@ -31,8 +31,8 @@ maintainer's explicit direction and need that review before merge.
 - Discipline moved into the loop itself: per-action permission for
   push/merge/deploy/credentials; a self-modification guard (the loop may never raise
   `max_iterations`, edit `run_boundaries`/`human_review_gates`, or touch
-  `.l00prite/prompts/`, `AGENTS.md`, adapters, `LOCKING.md`; `should_continue` moves
-  false→true only via a confirmed pre-flight); events arriving mid-run need fresh
+  `.l00prite/prompts/`, `AGENTS.md`, adapters, `LOCKING.md`; within Execution Mode
+  `should_continue` moves false→true only via a confirmed pre-flight); events arriving mid-run need fresh
   confirmation so injected text can't expand an autonomous run's scope; verification
   failures are retried differently within budget (failure is data), with attempt counts
   recorded in `failures.md`.
@@ -83,7 +83,8 @@ adapter file is in the manifest; execute-loop invariant checks (pre-flight langu
 persisted-flag-never-satisfies rule, all nine boundary ids, lock-conflict no-write rule,
 self-modification guard, per-action permission); disarmed-schema assertions
 (`enabled === false`, `preflight_confirmed === false`, `execution_active === false`) on
-all three heartbeat/state copies; both build-loop variants checked (previously only the
+the shipped template/example heartbeat/state copies, with the live dogfood copy allowed
+to be armed only under a matching active execute-loop lock; both build-loop variants checked (previously only the
 Claude one); template checks for the AGENTS.md/CLAUDE.md protocol sections; README
 vendor-coverage and mode checks. All previous checks retained.
 
@@ -103,7 +104,8 @@ it); naming the new list `stop_conditions` (collides with the existing top-level
 Added: `templates/l00prite/prompts/` (7 files) + 6 mirror sets; `.claude/commands/execute-loop.md`;
 `templates/AGENTS.md.template`; `templates/adapters/` (7 files); `templates/vendors.json`;
 dogfood adapters (`GEMINI.md`, `QWEN.md`, `CONVENTIONS.md`, `.github/copilot-instructions.md`,
-`.cursor/rules/l00prite.mdc`, `.windsurf/rules/l00prite.md`) and their example-output twins;
+`.cursor/rules/l00prite.mdc`, `.windsurf/rules/l00prite.md`) and their twins under
+`examples/vendor-neutral-output/`;
 `examples/vendor-neutral-output/AGENTS.md`.
 Modified: both build-loop variants; `templates/CLAUDE.md.template`; heartbeat/state JSON
 (all three copies each); `LOCKING.md`, `.l00prite/README.md`, `reviews/README.md` (all

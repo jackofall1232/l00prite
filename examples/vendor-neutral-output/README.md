@@ -15,5 +15,13 @@ A generated project includes:
   (Qwen Code), `CONVENTIONS.md` (Aider), `.github/copilot-instructions.md` (Copilot),
   `.cursor/rules/l00prite.mdc` (Cursor), `.windsurf/rules/l00prite.md` (Windsurf).
 
+A real scaffold also writes two things this example intentionally omits: the
+`.claude/prompts/` and `.codex/prompts/` directories (they would duplicate
+`.l00prite/prompts/` byte-for-byte — parity between them is enforced by l00prite's
+validator at scaffold-template level), and the tier skeleton (`src/`, `tests/`, …), which
+is tier- and stack-dependent, so no single copy would be representative. The `.l00prite/`
+memory files here are filled in for a small fictional project (`example-project`, an RSS
+daily-digest CLI) so you can see what a freshly planned project looks like.
+
 Any of these agents — plus GPT, Gemini, and future ones — can hand off to each other
 through the same project intelligence layer.

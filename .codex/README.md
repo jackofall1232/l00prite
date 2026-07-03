@@ -1,7 +1,7 @@
 # Codex Prompts for l00prite
 
 Copy/paste prompts for Codex and any CLI agent — no slash-command tooling required. The
-five loop prompts are **byte-identical mirrors** of the canonical set at
+six loop prompts are **byte-identical mirrors** of the canonical set at
 `templates/l00prite/prompts/` (enforced by `scripts/validate-l00prite.js`; edit the
 canonical file, not these).
 

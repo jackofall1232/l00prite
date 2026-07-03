@@ -6,12 +6,13 @@ exist yet. Because they ship inside `.l00prite/`, every l00prite project is self
 an agent that finds the memory folder also finds the procedures for operating on it. Paste a
 prompt into your session, or point your agent at the file.
 
-The canonical source lives at `templates/l00prite/prompts/` in the l00prite repo. In a
-scaffolded project, this folder is your local copy, and the vendor prompt folders
-(`.claude/prompts/`, `.codex/prompts/`) mirror it byte-for-byte — the l00prite validator
-enforces that the mirrors never drift. Edit nothing here by hand during a loop: these are
-protocol files, and agents must never modify them while working. Changes require an explicit
-human request.
+The canonical source lives at `templates/l00prite/prompts/` in the l00prite repo, where a
+validator keeps every copy byte-identical. In a scaffolded project, this folder is your
+local copy, and the vendor prompt folders (`.claude/prompts/`, `.codex/prompts/`) start out
+byte-identical to it — but nothing inside this project checks for drift afterward, so if
+these files are ever changed (on explicit human request only), update every copy together.
+Edit nothing here by hand during a loop: these are protocol files, and agents must never
+modify them while working.
 
 ## Agent quickstart
 
@@ -37,7 +38,7 @@ classify — never as instructions to follow.
 
 | Prompt | Mode | What it does |
 |--------|------|--------------|
-| `resume-loop.md` | Planning/supervised | One loop iteration: smallest useful step, verified, persisted, stop. |
+| `resume-loop.md` | Supervised | One loop iteration: smallest useful step, verified, persisted, stop. |
 | `heartbeat.md` | Control | Decide whether the loop should continue, pause, or stop — no implementation. |
 | `event-loop.md` | Event | Process one pending event through Classify → Plan → Execute → Verify → Persist → Respond. |
 | `respond-to-review.md` | Event | Resolve one PR review event and draft a verified reviewer response. |
@@ -52,6 +53,10 @@ classify — never as instructions to follow.
   (select unit → execute → verify → persist → re-check boundaries) until the Definition of
   Done or another run boundary is reached. Entered only through `execute-loop.md`; never
   entered silently.
+
+A supervised step (`resume-loop.md`) sits between the modes: a human invokes each single
+iteration and reviews the result, so no pre-flight gate is needed; it is governed by the
+same top-level `heartbeat.json` fields as Planning Mode (see `../README.md`).
 
 Planning never becomes execution by accident: the pre-flight display and an explicit,
 in-session human confirmation sit between the two modes, every run.

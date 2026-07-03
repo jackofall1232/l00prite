@@ -21,7 +21,8 @@ Durable project facts and decisions that future agents should preserve.
 - A running loop may never raise its own limits: `execution.max_iterations`,
   `run_boundaries`, `human_review_gates`, and the protocol files
   (`.l00prite/prompts/`, `AGENTS.md`, adapters, `LOCKING.md`) are off-limits during a run;
-  `should_continue` moves false→true only via a confirmed pre-flight.
+  within Execution Mode, `should_continue` moves false→true only via a confirmed
+  pre-flight (heartbeat checks in supervised/planning loops may still set it).
 - The execution block's boundary list is named `run_boundaries`, not `stop_conditions`, to
   avoid colliding with heartbeat.json's existing top-level `stop_conditions`; execution has
   its own iteration counters and the top-level pair is untouched by execute-loop.
@@ -49,7 +50,7 @@ Durable project facts and decisions that future agents should preserve.
 - Prompt parity is byte-exact across seven locations per prompt (canonical + 6 mirrors),
   mechanically enforced — `node scripts/validate-l00prite.js` fails on any drift.
 - `scripts/validate-l00prite.js` has no external dependencies; as of the v1.1 pass it runs
-  498 checks (structural, byte-parity, adapter, execution-invariant), not full semantic
+  519 checks (structural, byte-parity, adapter, execution-invariant), not full semantic
   correctness.
 - Execution Mode's invariants are validator-enforced prompt text, not a runtime harness —
   a non-compliant model can still ignore them; the harness is roadmap.

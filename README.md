@@ -136,7 +136,7 @@ The protocol travels through the files each tool already reads:
 
 | Agent | How it finds the protocol |
 |-------|---------------------------|
-| Claude Code | `CLAUDE.md` (fixed protocol section) + `.claude/prompts/` mirrors + `/build-loop`, `/execute-loop` commands |
+| Claude Code | `CLAUDE.md` (fixed protocol section) + `.claude/prompts/` mirrors (plus the `/build-loop`, `/execute-loop` commands when running from the l00prite repo or after copying its `.claude/` folder) |
 | OpenAI Codex | `AGENTS.md` (native) + `.codex/prompts/` mirrors |
 | GitHub Copilot (agent, CLI, review, chat) | `AGENTS.md` (native) + `.github/copilot-instructions.md` |
 | Cursor | `AGENTS.md` (native) + `.cursor/rules/l00prite.mdc` (`alwaysApply`) |
@@ -144,7 +144,8 @@ The protocol travels through the files each tool already reads:
 | Google Gemini CLI | `GEMINI.md` (imports `@AGENTS.md`) |
 | Qwen Code | `QWEN.md` (imports `@AGENTS.md`) |
 | Aider | `CONVENTIONS.md` via `--read` (documented in the file) |
-| Zed, Jules, Factory, Amp, opencode, Devin, Warp, Roo Code, JetBrains Junie, … | `AGENTS.md` (native) |
+| Zed | `.github/copilot-instructions.md` — Zed loads only its first-match rules file, which outranks `AGENTS.md`; that adapter is self-sufficient by design |
+| Jules, Factory, Amp, opencode, Devin, Warp, Roo Code, JetBrains Junie, … | `AGENTS.md` (native) |
 | Anything else | `.l00prite/prompts/README.md` — the agent quickstart; paste any prompt into any session |
 
 Every adapter is self-sufficient (the six load-bearing rules inline, never a bare pointer),
@@ -213,10 +214,12 @@ autonomous run. Its discipline is the protocol, not a wrapper around it:
    `unfixable_failing_tests`, `missing_secrets_or_credentials`, `lock_lease_conflict`
    (special case: report only, write nothing to memory another agent holds), and
    `stop_signal`.
-4. **Resumable exits.** Every stop records why (ledger, `state.json.execution_stop_reason`,
-   `heartbeat.json.execution.last_run_boundary`), releases the lock, and disarms
-   (`execution.enabled: false`). A new session — any vendor — re-runs the pre-flight and
-   continues.
+4. **Resumable exits.** Every stop except `lock_lease_conflict` records why (ledger,
+   `state.json.execution_stop_reason`, `heartbeat.json.execution.last_run_boundary`),
+   releases the lock, and disarms (`execution.enabled: false`). A lock-conflict stop
+   reports the boundary in-session and writes nothing — the next run's pre-flight
+   stale-run recovery cleans up. A new session — any vendor — re-runs the pre-flight and
+   continues with a fresh iteration budget.
 5. **Hard rules.** Per-action permission for push/merge/deploy/credentials; no
    self-modification of limits, boundaries, or protocol files; one unit per iteration;
    honest verification.
@@ -345,7 +348,8 @@ across every mirror location (canonical: `templates/l00prite/prompts/`); the ven
 adapters match `templates/vendors.json` and stay self-sufficient and under size limits;
 `execute-loop` carries the pre-flight gate, the re-confirmation rule, all nine run
 boundaries, the lock-conflict no-write rule, and the self-modification guard; the
-`heartbeat.json`/`state.json` copies ship disarmed (`execution.enabled: false`); both
+shipped `heartbeat.json`/`state.json` copies are disarmed (`execution.enabled: false`),
+and this repo's own live copy may be armed only with a matching active execute-loop lock; both
 build-loop variants keep Planning Mode non-executing and `--execute` gate-only; event and
 review prompts keep the untrusted-content and one-event-per-loop rules; and all JSON
 templates parse with their required fields.

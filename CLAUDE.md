@@ -33,8 +33,9 @@ layers, all plain Markdown and JSON:
    `failures.md`, `todos.md`, `heartbeat.json` (schema v2, with the `execution` block),
    `state.json` (schema v2, with execution-run fields), `lock.json`, `LOCKING.md`,
    `prompts/` (the canonical loop prompts — see layer 5), `events/`, `reviews/`,
-   `sessions/`. `examples/vendor-neutral-output/` is a filled reference copy of the full
-   scaffold output, adapters included.
+   `sessions/`. `examples/vendor-neutral-output/` is a filled reference copy of the
+   scaffold output (adapters included; the `.claude/`/`.codex/` prompt mirrors and the
+   tier skeleton are omitted — its README explains why).
 3. **Event layer** — pending interrupts (PR review comments, failed CI runs) are modeled as
    first-class JSON objects moved through `pending/ → processing/ → completed/` and handled
    via the event-loop/respond-to-review prompts
