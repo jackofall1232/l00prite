@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
-  "project_name": "replace-with-project-name",
-  "current_goal": "replace-with-current-goal",
+  "schema_version": 2,
+  "project_name": "example-project",
+  "current_goal": "implement the RSS daily digest CLI described in blueprint.md",
   "current_phase": "scaffolded",
   "active_agent": null,
   "last_agent": null,
@@ -14,5 +14,7 @@
   "pending_event_count": 0,
   "review_response_required": false,
   "ci_status": "unknown",
-  "next_recommended_action": "review the generated blueprint and choose the first implementation step"
+  "execution_active": false,
+  "execution_stop_reason": null,
+  "next_recommended_action": "review the generated blueprint, then start prompts/resume-loop.md with the first todos.md item"
 }

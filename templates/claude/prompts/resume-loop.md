@@ -2,6 +2,11 @@
 
 You are resuming a l00prite-managed project. Treat `.l00prite/` as the shared source of truth across Claude, Codex, GPT, Gemini, and future agents.
 
+This prompt performs **one** supervised loop iteration: one smallest useful step, verified,
+persisted, then stop. For an autonomous multi-iteration run that continues until a run
+boundary, use `.l00prite/prompts/execute-loop.md` instead — it requires its own pre-flight
+confirmation before starting.
+
 ## Required context read
 
 Before changing files, read:

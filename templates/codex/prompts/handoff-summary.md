@@ -13,6 +13,7 @@ Write or update `HANDOFF.md` with:
 - Failed approaches / do-not-retry notes
 - Verification status
 - Blockers or human review gates
+- Execution mode status (`heartbeat.json` `execution.enabled`, `execution.current_iteration` / `execution.max_iterations`, and the last run boundary, if the project has an `execution` block)
 - Next smallest useful step
 - Which `.l00prite/` files were updated
 
