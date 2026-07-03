@@ -1,0 +1,42 @@
+diff --git a/.github/workflows/validate.yml b/.github/workflows/validate.yml
+new file mode 100644
+index 0000000..66892b8
+--- /dev/null
++++ b/.github/workflows/validate.yml
+@@ -0,0 +1,36 @@
++# Automated backstop only — this does NOT replace or remove the human-review
++# gates listed in CLAUDE.md section 6 / .l00prite/heartbeat.json
++# (human_review_gates). Those gates still require an explicit human review
++# before: changing .claude/commands/build-loop.md, changing
++# scripts/validate-l00prite.js, or declaring a release's Definition of Done
++# met and merging to main. This workflow just runs the same zero-dependency
++# validator PRs are already expected to pass, so a missed local run doesn't
++# slip through.
++name: Validate l00prite
++
++on:
++  pull_request:
++    branches:
++      - main
++
++permissions:
++  contents: read
++
++jobs:
++  validate:
++    name: Run validate-l00prite.js
++    runs-on: ubuntu-latest
++    steps:
++      - name: Check out repository
++        uses: actions/checkout@v4
++
++      - name: Set up Node.js
++        uses: actions/setup-node@v4
++        with:
++          node-version: '20'
++
++      # No install step: scripts/validate-l00prite.js only uses Node's
++      # built-in `fs` and `path` modules and has no third-party
++      # dependencies (no package.json, nothing to `npm install`).
++      - name: Run l00prite validator
++        run: node scripts/validate-l00prite.js
