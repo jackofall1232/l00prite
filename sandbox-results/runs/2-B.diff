@@ -1,0 +1,950 @@
+diff --git a/.l00prite/ledger.md b/.l00prite/ledger.md
+index cd8d070..080d9be 100644
+--- a/.l00prite/ledger.md
++++ b/.l00prite/ledger.md
+@@ -26,6 +26,139 @@ Append one entry per agent run. Do not overwrite prior runs.
+ 
+ ## Runs
+ 
++### Run 2026-07-03T16:08:12Z — Claude Sonnet 5, branch sandbox-exp/2-B
++- **Goal:** Implement mechanical enforcement of exactly the `iteration_limit_reached`
++  Execution Mode run boundary — a minimal, dependency-free Node script, per an explicit
++  task with a fixed scope (the other eight run boundaries stay protocol-only/unenforced,
++  as before).
++- **Triggering event:** none — direct task request in-session.
++- **Reviewer/comment reference:** none. A plan/advisor round-trip (Opus 4.8) preceded this
++  implementation; its feedback (write-error exit-code hole, two additional stale-doc
++  claims, deferred-wiring hazards) was incorporated before writing code.
++- **Decision:** Normal, deliberately minimal-scope work. `.claude/commands/build-loop.md`
++  and `scripts/validate-l00prite.js` intentionally left untouched — both are human-review
++  gated per `CLAUDE.md` section 6, and the task's Definition of Done only required the
++  validator to keep passing, not gain new checks. `templates/l00prite/prompts/
++  execute-loop.md` and its six byte-identical mirrors were left unwired (still say
++  "increment `execution.current_iteration`" as agent instruction text, not a call to the
++  new script) — recorded as a follow-up in `todos.md` rather than done in this pass, to
++  avoid a 7-location byte-identical prose edit plus revalidation and keep this change
++  minimal per the task's own framing.
++- **Completed work:** New `scripts/execution-harness.js` (subcommands `status`/`advance`;
++  reads/validates `execution.current_iteration`/`execution.max_iterations`; `advance`
++  increments and atomically persists the counter, or refuses via non-zero exit with zero
++  writes once `current_iteration >= max_iterations`; exit codes 0/1/2 distinguish success,
++  the `iteration_limit_reached` boundary, and usage/data/write errors respectively; no code
++  path anywhere in the file assigns to `execution.max_iterations`, structurally realizing
++  the self-modification guard already documented in `CLAUDE.md` section 2). New
++  `scripts/execution-harness.test.js` (built-ins only: `assert`/`child_process`/`fs`/`os`/
++  `path`) — 9 passing assertions proving the boundary refusal, byte-identical file state
++  after refusal, the self-modification guard across a sequence of calls, `status`'s
++  read-only nature, the missing-execution-block error path, and the write-error exit code.
++  Doc/memory updates for accuracy per `CLAUDE.md` section 1 ("reflects what is actually
++  built today"): `CLAUDE.md` (section 2 closing paragraph, Run Ledger row, section 8
++  roadmap bullet), `README.md` (Roadmap bullet), `HANDOFF.md` (new dated section plus a
++  correction to the v1.1 section's now-stale "harness is the next milestone" claim),
++  `.l00prite/todos.md` (moved to Done; narrowed the "Later" harness bullet to the remaining
++  eight boundaries; added a deferred-wiring follow-up bullet naming the double-count and
++  sole-gate hazards), `.l00prite/memory.md` (narrowed the existing Fact that called the
++  harness "roadmap"; added a new Fact describing the script's exact scope and its
++  not-yet-wired status).
++- **Fix implemented:** not applicable — feature addition, no triggering defect.
++- **Changed files:** `scripts/execution-harness.js` (created),
++  `scripts/execution-harness.test.js` (created), `CLAUDE.md`, `README.md`, `HANDOFF.md`
++  (modified, outside `.l00prite/`, not lock-protected), `.l00prite/todos.md`,
++  `.l00prite/memory.md`, `.l00prite/ledger.md` (this entry; modified under the lock below).
++  Intentionally untouched: `scripts/validate-l00prite.js`, `.claude/commands/build-loop.md`,
++  `templates/l00prite/prompts/execute-loop.md` and its six mirrors, `templates/` scaffolding.
++- **Tests run / Verification:**
++  - `command`: `node scripts/validate-l00prite.js`
++  - `exit_code`: 0
++  - `summary`: 519 PASS, 0 FAIL — identical to the pre-change baseline, since the validator
++    itself was not modified and the two new scripts are outside every list it checks.
++  - `evidence_path`: none (console output only).
++  - `timestamp`: 2026-07-03T16:03:00Z (before doc edits) and again at 2026-07-03T16:09:00Z
++    (after doc edits) — both 519/0.
++  - `command`: `node scripts/execution-harness.test.js`
++  - `exit_code`: 0
++  - `summary`: 9 assertions passed, 0 failed — advance-under-cap increments by exactly 1;
++    advance-at-cap and advance-past-cap both refuse via exit 1 with a byte-identical file
++    and a stderr message containing `iteration_limit_reached`; `execution.max_iterations`
++    never changes across an 8-call status/advance sequence that runs the counter to its
++    cap; `status` never mutates the file, including when already at the cap (exits 0,
++    reports `limit_reached: true`); a heartbeat with no `execution` block exits 2 with a
++    message distinct from the boundary message; a write failure (directory made immutable
++    via `chattr +i`) on `advance` exits 2, not 1, leaving the file unchanged.
++  - `evidence_path`: none (console output only).
++  - `timestamp`: 2026-07-03T16:06:00Z
++  - `command`: manual CLI demonstration against a scratch copy of `heartbeat.json` (never
++    the live `.l00prite/heartbeat.json`), `execution.max_iterations=3`,
++    `execution.current_iteration=2`:
++    1. `node scripts/execution-harness.js status --heartbeat <scratch>` →
++       `execution.current_iteration=2 execution.max_iterations=3 remaining=1
++       limit_reached=false`, exit 0.
++    2. `node scripts/execution-harness.js advance --heartbeat <scratch>` →
++       `advanced execution.current_iteration 2 -> 3 (execution.max_iterations=3
++       unchanged)`, exit 0; file's `execution.current_iteration` confirmed 2 → 3.
++    3. `node scripts/execution-harness.js advance --heartbeat <scratch>` (now at the cap) →
++       stderr `REFUSED [iteration_limit_reached] iteration_limit_reached:
++       execution.current_iteration (3) has reached execution.max_iterations (3). Refusing
++       to advance. ... execution.current_iteration was NOT modified.`, exit 1; file
++       byte-compared before/after this call and confirmed unchanged
++       (`execution.current_iteration` still 3, `execution.max_iterations` still 3).
++    4. Self-modification guard: grepped the script source for `max_iterations` — every
++       occurrence is a read, a comparison, or a comment; none is an assignment. Also tried
++       passing an invented `--max-iterations 999` flag to `advance`: rejected as an
++       unrecognized argument, exit 2, file's `max_iterations` still 3 afterward.
++  - `exit_code`: see above per step (0, 0, 1, 2)
++  - `summary`: harness blocks a call once the limit is reached, and no flag or code path
++    can raise `max_iterations`.
++  - `evidence_path`: none (transcript above is the record).
++  - `timestamp`: 2026-07-03T16:05:00Z
++- **Response drafted/sent:** not applicable — no reviewer/PR event.
++- **Event status:** not applicable.
++- **Failures:** none. One deviation from the pre-approved plan, noted here per the task's
++  own instruction to proceed on judgment rather than wait for an unavailable second
++  advisor round-trip: the plan's file list did not mention `.l00prite/lock.json` as a file
++  to be modified, though its narrative did describe acquiring/releasing the lock for this
++  memory-update batch per `LOCKING.md`. Acquiring the lock necessarily means writing
++  `lock.json` (`status: "released"` → `"active"` → `"released"`), so this run edited it
++  twice (acquire, then release) as an implied consequence of the plan's own stated lock
++  protocol, not as a new substantive change beyond what was planned.
++- **Decisions:** Scope fixed to `iteration_limit_reached` only, matching the task's
++  explicit instruction not to implement the other eight boundaries. Write errors on
++  `advance` (EACCES/ENOSPC/EPERM/etc.) map to exit 2, not exit 1, so a wrapping shell loop
++  can always tell "boundary legitimately reached" apart from "the tool malfunctioned" —
++  this was the advisor's one correctness fix and is now verified by an automated test plus
++  a manual `chattr +i` demonstration. The self-modification guard is structural (no
++  assignment statement exists), not a runtime check, matching the plan's and advisor's
++  shared framing. The harness is not wired into `execute-loop.md`; it exists but is not yet
++  load-bearing in the live protocol — recorded explicitly in `memory.md` and `todos.md` so
++  a future agent does not assume otherwise.
++- **Confidence:** High for the script's own correctness (validator unchanged at 519/0, 9
++  automated test assertions plus a manual demonstration all pass, self-modification guard
++  confirmed both by code inspection and by an empirical multi-call sequence). Medium for
++  the doc-consistency edits' completeness — six files were touched for accuracy
++  (`CLAUDE.md` x2 locations, `README.md`, `HANDOFF.md` x2 locations, `todos.md`,
++  `memory.md`); a `grep -rn harness` pass was run before and after to confirm no other
++  now-stale "the harness is roadmap"-style claim was missed, but a full repo grep is not a
++  substitute for a second reviewer's read.
++- **Next action:** Wire `scripts/execution-harness.js advance` into
++  `templates/l00prite/prompts/execute-loop.md`'s iteration protocol step 5 (replacing, not
++  duplicating, the manual increment instruction), re-copy to all six mirrors, and
++  revalidate — tracked in `todos.md`. Separately, decide whether to scaffold a harness like
++  this into `templates/` for target projects.
++- **Do-not-retry notes:** none.
++- **Lock:** `lock-20260703-160000-claude-execution-harness-memory-update` acquired (from
++  `status: "released"`, cleanly acquirable per `LOCKING.md` rule 2 — no reclamation
++  needed) for this `.l00prite/` memory-update batch (`ledger.md`, `todos.md`, `memory.md`)
++  and released (`status: "released"`, owner fields cleared) at the end of this run.
++  `CLAUDE.md`, `README.md`, and `HANDOFF.md` are outside `.l00prite/` and not
++  lock-protected per `LOCKING.md`'s "Protected paths" section. `heartbeat.json` was touched
++  only in throwaway scratch copies under the session scratchpad during testing — the live
++  `.l00prite/heartbeat.json` was read but never written by this run, and its
++  `execution.current_iteration` remains 0 as it was at the start.
++
+ ### Run 2026-07-02T00:00:00Z — Claude (Fable), branch claude/powerful-helper-agent-pfsyj1
+ - **Goal:** v1.1 — make l00prite the most powerful helper protocol for all AI models, per
+   the maintainer's direction: evolve from scaffold-and-stop into a two-mode execution
+diff --git a/.l00prite/lock.json b/.l00prite/lock.json
+index 1b8d20b..56cb27d 100644
+--- a/.l00prite/lock.json
++++ b/.l00prite/lock.json
+@@ -1,10 +1,10 @@
+ {
+   "schema_version": 1,
+-  "lock_id": "lock-20260702-000000-claude-v1.1-memory-update",
++  "lock_id": "lock-20260703-160000-claude-execution-harness-memory-update",
+   "owner_agent": null,
+   "owner_session": null,
+-  "acquired_at": "2026-07-02T00:00:00Z",
+-  "expires_at": "2026-07-02T00:30:00Z",
++  "acquired_at": "2026-07-03T16:00:00Z",
++  "expires_at": "2026-07-03T16:30:00Z",
+   "ttl_seconds": 1800,
+   "purpose": null,
+   "protected_paths": [
+diff --git a/.l00prite/memory.md b/.l00prite/memory.md
+index 8c4902a..8596673 100644
+--- a/.l00prite/memory.md
++++ b/.l00prite/memory.md
+@@ -53,9 +53,20 @@ Durable project facts and decisions that future agents should preserve.
+   519 checks (structural, byte-parity, adapter, execution-invariant), not full semantic
+   correctness.
+ - Execution Mode's invariants are validator-enforced prompt text, not a runtime harness —
+-  a non-compliant model can still ignore them; the harness is roadmap.
++  a non-compliant model can still ignore them — except `iteration_limit_reached`, now
++  mechanically enforced by `scripts/execution-harness.js` in its own control flow; the
++  other eight remain prompt-only.
+ - `heartbeat.json`/`state.json` are schema_version 2; a file without the `execution` block
+   is v1 and means execution disabled until execute-loop migrates it under lock.
++- `scripts/execution-harness.js` (dependency-free: `fs`/`path` only) mechanically enforces
++  only the `iteration_limit_reached` run boundary against
++  `execution.current_iteration`/`execution.max_iterations` in `.l00prite/heartbeat.json`.
++  Its `advance` subcommand refuses (non-zero exit, no write) once
++  `current_iteration >= max_iterations`, and no code path in the script writes
++  `execution.max_iterations` — by design, it cannot raise its own limit. It is NOT yet
++  called from `execute-loop.md`'s iteration protocol (that prompt still says "increment
++  `execution.current_iteration`" as agent instruction text) — tracked in `todos.md` — so a
++  future agent should not assume it is already load-bearing in the live loop.
+ 
+ ## Avoid
+ - Do not store random temporary notes, speculative ideas, or stale debugging output here.
+diff --git a/.l00prite/todos.md b/.l00prite/todos.md
+index 044e3d0..7d34dae 100644
+--- a/.l00prite/todos.md
++++ b/.l00prite/todos.md
+@@ -7,9 +7,27 @@
+       `scripts/validate-l00prite.js`. Merge to `main` when satisfied.
+ 
+ ## Later
+-- [ ] Runtime harness that mechanically enforces run boundaries and iteration budgets
+-      (today they are validator-enforced prompt invariants; a harness would make them
+-      guarantees a non-compliant model can't ignore).
++- [ ] Runtime harness that mechanically enforces the remaining eight run boundaries and the
++      supervised/planning-loop iteration budget: `definition_of_done_met`,
++      `human_review_gate`, `destructive_operation_required`, `ambiguous_requirements`,
++      `unfixable_failing_tests`, `missing_secrets_or_credentials`, `lock_lease_conflict`,
++      `stop_signal` (today they are validator-enforced prompt invariants; a harness would
++      make them guarantees a non-compliant model can't ignore). `iteration_limit_reached`
++      is done — see `scripts/execution-harness.js` in the Done section below.
++- [ ] Wire `scripts/execution-harness.js` into `templates/l00prite/prompts/execute-loop.md`'s
++      iteration protocol (step 5 currently says "increment `execution.current_iteration`" as
++      agent instruction text; it should instead call `node scripts/execution-harness.js
++      advance` and treat a non-zero exit as the `iteration_limit_reached` boundary), then
++      re-copy byte-identical to all six mirrors and revalidate. Two hazards to watch when
++      doing this: (1) the manual "increment `execution.current_iteration`" instruction must
++      be *replaced*, not kept alongside the `advance` call, or the counter double-counts;
++      (2) the harness is deliberately agnostic to `execution.enabled`/`should_continue`, so
++      it must never become the run's *sole* gate without a conscious decision that
++      `stop_signal` stays unenforced — that boundary is out of this harness's scope by
++      design. Also decide whether a harness like this should ship into `templates/` for
++      scaffolded target projects, or stay a repo-local dev tool the way
++      `scripts/validate-l00prite.js` does. Not done in the 2026-07-03 pass, to keep that
++      change minimal and avoid a 7-location byte-identical prompt edit plus revalidation.
+ - [ ] GitHub event ingestion (turn real PR comments into `.l00prite/events/` entries
+       automatically).
+ - [ ] CI failure capture as events.
+@@ -43,3 +61,10 @@
+       confirmation gate, nine run boundaries, resumable exits, schema v2
+       `heartbeat.json`/`state.json` execution fields, self-modification guard — 2026-07-02
+       (in review).
++- [x] Mechanical enforcement of the `iteration_limit_reached` run boundary via
++      `scripts/execution-harness.js` (dependency-free; reads/increments
++      `execution.current_iteration` against `execution.max_iterations` in
++      `.l00prite/heartbeat.json`; refuses with a non-zero exit and no write once the cap is
++      reached; no code path can raise `execution.max_iterations`), plus
++      `scripts/execution-harness.test.js` — 2026-07-03. The other eight run boundaries
++      remain protocol-only (validator-checked prompt text), unchanged by this pass.
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 470f844..1563a52 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -74,10 +74,16 @@ risk of racing writes to shared memory files. `prompts/` files are protocol file
+ agent-modified during a loop.
+ 
+ No backend, no hosted service, no external dependencies. Everything is prompt files, JSON
+-schemas, and `scripts/validate-l00prite.js`, a Node script with no dependencies of its own.
+-Execution Mode is a protocol the agent follows — its invariants are validator-enforced
+-prompt text, not a runtime harness that mechanically forces compliance (that harness is
+-roadmap).
++schemas, and two dependency-free Node scripts: `scripts/validate-l00prite.js` (the protocol
++validator) and `scripts/execution-harness.js` (mechanical enforcement of the
++`iteration_limit_reached` run boundary). Execution Mode is a protocol the agent follows —
++most of its invariants are validator-enforced prompt text, not a runtime harness that
++mechanically forces compliance. One exception: `scripts/execution-harness.js` mechanically
++enforces `iteration_limit_reached` alone, in its own control flow (reading and
++incrementing `execution.current_iteration` against `execution.max_iterations` in
++`.l00prite/heartbeat.json`, refusing to advance once the cap is reached, with no code path
++able to raise `max_iterations`); the other eight run boundaries remain prompt-only, and
++full mechanical enforcement of all nine is still roadmap.
+ 
+ ## 3. Requirements
+ 
+@@ -164,6 +170,7 @@ roadmap).
+ | Branding | 2026-07-01 | Replaced ASCII banner with block letter art in README | Manual review | Merged |
+ | Pre-release polish | 2026-07-01 | Corrected `CLAUDE.md` to describe actual repo state; updated `HANDOFF.md`, `README.md` roadmap, `.l00prite/` (new, scaffolded for this repo); added `RELEASE.md` | `node scripts/validate-l00prite.js` | Merged |
+ | Universal agent layer + Execution Mode | 2026-07-02 | Canonical prompts in `templates/l00prite/prompts/` with byte-identical mirrors; `execute-loop` (pre-flight gate, nine run boundaries, self-modification guard); `AGENTS.md.template` + `CLAUDE.md.template` protocol section; vendor adapters + `vendors.json`; schema v2 (`execution` block, execution-run state); build-loop reframed as Planning Mode with `--execute` handoff; validator byte-parity/adapter/execution checks; docs reframed around two operating modes | `node scripts/validate-l00prite.js` (zero FAIL), byte-parity `cmp` across all mirrors, adversarial multi-agent design/code review | In review |
++| Mechanical iteration_limit_reached enforcement | 2026-07-03 | `scripts/execution-harness.js` (mechanical enforcement of the iteration_limit_reached run boundary) + `scripts/execution-harness.test.js` | `node scripts/validate-l00prite.js`; `node scripts/execution-harness.test.js`; manual CLI demo | In review |
+ 
+ ## 8. Completion Criteria
+ 
+@@ -184,7 +191,11 @@ l00prite v1.1 (this branch) is complete when:
+ 
+ What's next, tracked in `.l00prite/todos.md`:
+ 
+-- [ ] Runtime harness that mechanically enforces run boundaries and iteration budgets.
++- [ ] Runtime harness that mechanically enforces the remaining eight run boundaries
++      (`definition_of_done_met`, `human_review_gate`, `destructive_operation_required`,
++      `ambiguous_requirements`, `unfixable_failing_tests`, `missing_secrets_or_credentials`,
++      `lock_lease_conflict`, `stop_signal`). `iteration_limit_reached` is already
++      mechanically enforced by `scripts/execution-harness.js`.
+ - [ ] GitHub event ingestion and CI failure capture as events.
+ - [ ] Cross-agent compatibility tests, including a mid-execution boundary stop and resume
+       by a different vendor.
+diff --git a/HANDOFF.md b/HANDOFF.md
+index 0f17088..37c7856 100644
+--- a/HANDOFF.md
++++ b/HANDOFF.md
+@@ -1,5 +1,75 @@
+ # HANDOFF
+ 
++## Latest update: mechanical iteration_limit_reached enforcement
++
++This pass adds `scripts/execution-harness.js`, a minimal, dependency-free Node script
++(only `fs`/`path`) that mechanically enforces exactly one Execution Mode run boundary:
++`iteration_limit_reached`. It reads `execution.current_iteration` and
++`execution.max_iterations` from `.l00prite/heartbeat.json`; its `advance` subcommand
++increments and persists the counter, or refuses (non-zero exit, a message naming the
++`iteration_limit_reached` boundary, and no write at all) once
++`current_iteration >= max_iterations`. The refusal runs in the script's own control
++flow — an unconditional `if` before any write — not something an LLM is merely asked to
++respect. `scripts/execution-harness.test.js` is a self-contained smoke test (built-in
++`assert`/`child_process`/`fs`/`os`/`path` only) that empirically proves the boundary
++refusal, the byte-identical file state after a refusal, and the self-modification guard
++across a sequence of calls.
++
++### Why scope is fixed to one boundary
++
++l00prite's roadmap has long described "a runtime harness that mechanically enforces run
++boundaries and iteration budgets" as future work (see the prior `HANDOFF.md`/`README.md`/
++`CLAUDE.md`/`.l00prite/todos.md` entries below). This pass narrows that from an aspiration
++to a real, working script — but only for `iteration_limit_reached`. That boundary is a
++pure numeric comparison (`current_iteration >= max_iterations`) with no judgment call
++involved, so it is the one boundary a small script can enforce correctly and completely.
++The other eight (`definition_of_done_met`, `human_review_gate`,
++`destructive_operation_required`, `ambiguous_requirements`, `unfixable_failing_tests`,
++`missing_secrets_or_credentials`, `lock_lease_conflict`, `stop_signal`) require judgment —
++"is the Definition of Done genuinely verified?", "is this operation destructive?" — that
++this script does not attempt. They remain protocol-only, validator-checked prompt text in
++`templates/l00prite/prompts/execute-loop.md` and its mirrors.
++
++### What was deliberately left alone, and why
++
++- `scripts/validate-l00prite.js` and `.claude/commands/build-loop.md` — both are
++  human-review-gated per `CLAUDE.md` section 6; nothing in this task's Definition of Done
++  required opening either gate (the validator only needed to keep passing, not gain new
++  checks), so neither was touched.
++- `templates/l00prite/prompts/execute-loop.md` and its six byte-identical mirrors — the
++  iteration protocol still says "increment `execution.current_iteration`" as agent
++  instruction text; it does not yet call `scripts/execution-harness.js advance`. Wiring it
++  in is a separate, larger change (a 7-location byte-identical prose edit plus
++  revalidation) tracked as a follow-up in `.l00prite/todos.md`, not done here to keep this
++  pass minimal and to avoid two double-counting/scope hazards recorded there: the manual
++  increment instruction must be *replaced*, not kept alongside, when the wiring happens;
++  and the harness is deliberately agnostic to `execution.enabled`/`should_continue`, so it
++  must never become the run's sole gate without a conscious decision that `stop_signal`
++  stays unenforced.
++- `templates/` scaffolding — the harness is a repo-local dev tool for l00prite's own repo,
++  the same way `scripts/validate-l00prite.js` is not copied into scaffolded projects.
++  Whether target projects should eventually get a harness like this too is a bigger product
++  question, left to `.l00prite/todos.md`.
++
++### Honest limitation
++
++This is mechanical enforcement only for callers that route iteration advancement through
++`scripts/execution-harness.js` and treat a non-zero exit as a hard stop. It cannot stop a
++caller that bypasses the script entirely — hand-editing `heartbeat.json` directly, or
++editing the script itself. No userland script in a filesystem-writable agent environment
++can prevent that; this is the same cooperative-not-enforced philosophy `LOCKING.md` already
++discloses for `lock.json`.
++
++### Updated remaining gaps (supersedes the blanket claim in the v1.1 section below)
++
++- Execution Mode's invariants are validator-enforced prompt text for eight of the nine run
++  boundaries; a non-compliant model can still ignore those eight. `iteration_limit_reached`
++  is the exception — mechanically enforced by `scripts/execution-harness.js`, not yet wired
++  into `execute-loop.md`'s live iteration protocol.
++- The lock/lease convention is still cooperative, not filesystem-enforced.
++- No automated CI runs the validator (or the new test) on this repo yet.
++- No event ingestion: events are still hand-authored JSON.
++
+ ## Latest update: universal agent layer + Execution Mode (v1.1, in review)
+ 
+ This pass, directed by the maintainer, evolves l00prite from a scaffold-and-stop protocol
+@@ -114,8 +184,10 @@ three copies each); `scripts/validate-l00prite.js`; `README.md`, `AGENTS.md`, `C
+ 
+ ### Remaining gaps
+ 
+-- Execution Mode's invariants are validator-enforced prompt text, not a runtime harness —
+-  a non-compliant model can still ignore them. The harness is the next milestone.
++- Execution Mode's invariants were, at the time of this pass, validator-enforced prompt
++  text only, not a runtime harness — a non-compliant model could ignore them. Superseded:
++  see "Updated remaining gaps" in the "mechanical iteration_limit_reached enforcement"
++  section above, which narrows this to the eight boundaries still unenforced.
+ - The lock/lease convention is still cooperative, not filesystem-enforced.
+ - No automated CI runs the validator on this repo yet.
+ - No event ingestion: events are still hand-authored JSON.
+diff --git a/README.md b/README.md
+index a089ff2..b0796a8 100644
+--- a/README.md
++++ b/README.md
+@@ -370,9 +370,10 @@ templates parse with their required fields.
+ 
+ - GitHub event ingestion (turning real PR comments into `.l00prite/events/` entries automatically).
+ - CI failure capture as events.
+-- A runtime harness that mechanically enforces run boundaries and iteration budgets
+-  (today they're validator-checked prompt invariants; a harness would make them
+-  guarantees).
++- A runtime harness that mechanically enforces the remaining run boundaries and iteration
++  budgets. `scripts/execution-harness.js` already mechanically enforces
++  `iteration_limit_reached` alone; the other eight boundaries are still validator-checked
++  prompt invariants only.
+ - Richer, filled-in examples (a real resolved PR review, a real multi-session Execution
+   Mode run with a boundary stop and resume).
+ - Stack-specific skeleton packs (e.g. a Python/pytest pack, a Node/vitest pack).
+diff --git a/scripts/execution-harness.js b/scripts/execution-harness.js
+new file mode 100644
+index 0000000..956d044
+--- /dev/null
++++ b/scripts/execution-harness.js
+@@ -0,0 +1,337 @@
++#!/usr/bin/env node
++'use strict';
++
++/**
++ * execution-harness.js — mechanical enforcement of exactly ONE Execution Mode run
++ * boundary: `iteration_limit_reached`.
++ *
++ * Scope (deliberately narrow — see CLAUDE.md section 2 and templates/l00prite/prompts/
++ * execute-loop.md "Run boundaries" list): l00prite's execute-loop protocol defines nine
++ * run boundaries. Eight of them (`definition_of_done_met`, `human_review_gate`,
++ * `destructive_operation_required`, `ambiguous_requirements`, `unfixable_failing_tests`,
++ * `missing_secrets_or_credentials`, `lock_lease_conflict`, `stop_signal`) require judgment
++ * calls this script cannot make and remain protocol-only: validator-checked prompt text
++ * that an agent is asked (not forced) to follow. This script does NOT attempt any of them.
++ *
++ * This script mechanically enforces only `iteration_limit_reached`: it reads
++ * execution.current_iteration and execution.max_iterations from a heartbeat.json file,
++ * and its `advance` subcommand refuses — in its own control flow, via a plain `if` that
++ * runs unconditionally before any write — to increment the counter once
++ * current_iteration >= max_iterations, no matter what a prompt or agent asks it to do.
++ * There is no flag, subcommand, or code path anywhere in this file that assigns to
++ * execution.max_iterations (or reads it for anything other than the `>=` comparison) —
++ * "raise the limit" is not a bug this script avoids, it is an operation the script has no
++ * way to perform. This mirrors the self-modification guard already documented in
++ * CLAUDE.md section 2 and execute-loop.md's "No self-modification" rule.
++ *
++ * Honest limitation: this guarantee holds only for callers that route iteration
++ * advancement through this script and treat a non-zero exit as a hard stop. It cannot
++ * stop a caller that bypasses the script entirely — hand-editing heartbeat.json directly,
++ * or editing this script itself. No userland script in a filesystem-writable agent
++ * environment can prevent that. This script also does not detect a hand-raised
++ * max_iterations; it simply re-serializes whatever value it reads.
++ *
++ * Dependency-free: only Node's built-in `fs` and `path` modules, matching the
++ * conservatism of scripts/validate-l00prite.js.
++ *
++ * Usage:
++ *   node scripts/execution-harness.js status  [--heartbeat <path>] [--json]
++ *   node scripts/execution-harness.js advance [--heartbeat <path>] [--json]
++ *
++ * Exit codes:
++ *   0 = success (status report, or advance incremented and persisted)
++ *   1 = the iteration_limit_reached boundary fired; advance refused; file left untouched
++ *   2 = usage or data error (bad flags, unreadable/unparseable file, missing/malformed
++ *       execution block, or a write failure) — NOT a run boundary. Kept distinct from
++ *       exit 1 so a wrapping shell loop (e.g. `while node scripts/execution-harness.js
++ *       advance; do ...; done`) can tell "the run legitimately hit its cap" apart from
++ *       "the tool was misconfigured."
++ *
++ * `status` is read-only and always exits 0 on a successful read, even when the cap has
++ * already been reached (it reports `limit_reached: true` rather than refusing) — only
++ * `advance`'s non-zero exit is the enforcement signal. Do not gate a loop on `status`.
++ *
++ * This script does not check or acquire `.l00prite/lock.json`. A caller wiring this into
++ * execute-loop's iteration protocol is expected to already hold the run lock per
++ * LOCKING.md before calling `advance`; this script only touches heartbeat.json itself.
++ */
++
++const fs = require('fs');
++const path = require('path');
++
++const BOUNDARY_ID = 'iteration_limit_reached';
++
++const HELP_TEXT = `execution-harness.js — mechanical enforcement of the iteration_limit_reached run boundary only.
++
++Usage:
++  node scripts/execution-harness.js status  [--heartbeat <path>] [--json]
++  node scripts/execution-harness.js advance [--heartbeat <path>] [--json]
++  node scripts/execution-harness.js --help
++
++Commands:
++  status   Read-only. Reports execution.current_iteration, execution.max_iterations,
++           remaining, and whether the iteration_limit_reached boundary has been reached.
++           Never writes. Exits 0 on a successful read (even at the cap) or 2 on error.
++  advance  Enforcement command. Increments execution.current_iteration by exactly one and
++           persists it — UNLESS current_iteration >= max_iterations, in which case it
++           refuses: exits 1, prints a message naming the iteration_limit_reached boundary,
++           and writes nothing.
++
++Options:
++  --heartbeat <path>   Path to a heartbeat.json file. Defaults to this repo's own
++                        .l00prite/heartbeat.json (resolved relative to this script, not
++                        the caller's working directory).
++  --json                Emit a single JSON object instead of text. Exit codes are
++                        unchanged, so callers can branch on the exit code without
++                        parsing JSON.
++  -h, --help            Show this help text and exit 0.
++
++Exit codes:
++  0   success (status report, or advance incremented and persisted)
++  1   iteration_limit_reached boundary fired; advance refused; file untouched
++  2   usage or data error (bad flags, unreadable/unparseable file, missing or malformed
++      execution block, or a write failure) — not a run boundary
++
++Scope: this script enforces ONLY iteration_limit_reached. The other eight Execution Mode
++run boundaries (definition_of_done_met, human_review_gate, destructive_operation_required,
++ambiguous_requirements, unfixable_failing_tests, missing_secrets_or_credentials,
++lock_lease_conflict, stop_signal) are not implemented here and remain protocol-only
++(validator-checked prompt text in templates/l00prite/prompts/execute-loop.md).
++
++Self-modification guard: this script contains no code path that writes
++execution.max_iterations. It cannot raise its own limit.
++`;
++
++function defaultHeartbeatPath() {
++  return path.resolve(__dirname, '..', '.l00prite', 'heartbeat.json');
++}
++
++function parseArgs(argv) {
++  const args = {
++    command: null,
++    heartbeatPath: null,
++    json: false,
++    help: false
++  };
++  const rest = argv.slice(2);
++  for (let i = 0; i < rest.length; i++) {
++    const arg = rest[i];
++    if (arg === '-h' || arg === '--help') {
++      args.help = true;
++    } else if (arg === '--json') {
++      args.json = true;
++    } else if (arg === '--heartbeat') {
++      const value = rest[i + 1];
++      if (value === undefined) {
++        throw new UsageError('--heartbeat requires a path argument');
++      }
++      args.heartbeatPath = value;
++      i++;
++    } else if (arg.startsWith('--heartbeat=')) {
++      args.heartbeatPath = arg.slice('--heartbeat='.length);
++    } else if (arg === 'status' || arg === 'advance') {
++      if (args.command !== null) {
++        throw new UsageError(`unexpected extra command "${arg}" (already have "${args.command}")`);
++      }
++      args.command = arg;
++    } else {
++      throw new UsageError(`unrecognized argument "${arg}"`);
++    }
++  }
++  return args;
++}
++
++class UsageError extends Error {}
++class DataError extends Error {}
++class BoundaryError extends Error {
++  constructor(message, details) {
++    super(message);
++    this.details = details;
++  }
++}
++
++function readHeartbeat(heartbeatPath) {
++  let raw;
++  try {
++    raw = fs.readFileSync(heartbeatPath, 'utf8');
++  } catch (error) {
++    throw new DataError(`could not read heartbeat file at ${heartbeatPath}: ${error.message}`);
++  }
++  let data;
++  try {
++    data = JSON.parse(raw);
++  } catch (error) {
++    throw new DataError(`could not parse heartbeat file at ${heartbeatPath} as JSON: ${error.message}`);
++  }
++  return data;
++}
++
++function validateExecutionBlock(data, heartbeatPath) {
++  if (!data || typeof data !== 'object' || Array.isArray(data)) {
++    throw new DataError(`heartbeat file at ${heartbeatPath} does not contain a JSON object`);
++  }
++  if (!data.execution || typeof data.execution !== 'object' || Array.isArray(data.execution)) {
++    // Matches execute-loop.md: "A missing execution block always means execution is
++    // disabled." This is a schema/config error, not the iteration_limit_reached boundary.
++    throw new DataError(
++      `heartbeat file at ${heartbeatPath} has no "execution" block. Per execute-loop.md, ` +
++      `a missing execution block always means execution is disabled — this script has ` +
++      `nothing to enforce until the schema is migrated (see execute-loop.md step 4).`
++    );
++  }
++  const execution = data.execution;
++  const current = execution.current_iteration;
++  const max = execution.max_iterations;
++  if (!Number.isInteger(current) || current < 0) {
++    throw new DataError(
++      `heartbeat file at ${heartbeatPath}: execution.current_iteration must be an integer >= 0 (got ${JSON.stringify(current)})`
++    );
++  }
++  if (!Number.isInteger(max) || max < 1) {
++    throw new DataError(
++      `heartbeat file at ${heartbeatPath}: execution.max_iterations must be an integer >= 1 (got ${JSON.stringify(max)})`
++    );
++  }
++  return { current, max };
++}
++
++function writeHeartbeatAtomic(heartbeatPath, data) {
++  const serialized = JSON.stringify(data, null, 2) + '\n';
++  const dir = path.dirname(heartbeatPath);
++  const tmpPath = path.join(dir, `.${path.basename(heartbeatPath)}.tmp-${process.pid}-${Date.now()}`);
++  try {
++    fs.writeFileSync(tmpPath, serialized, 'utf8');
++    fs.renameSync(tmpPath, heartbeatPath);
++  } catch (error) {
++    try {
++      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
++    } catch (cleanupError) {
++      // best-effort cleanup only; surface the original error
++    }
++    throw new DataError(`failed to write heartbeat file at ${heartbeatPath}: ${error.message}`);
++  }
++}
++
++function runStatus(heartbeatPath, json) {
++  const data = readHeartbeat(heartbeatPath);
++  const { current, max } = validateExecutionBlock(data, heartbeatPath);
++  const remaining = max - current;
++  const limitReached = current >= max;
++  if (json) {
++    process.stdout.write(JSON.stringify({
++      ok: true,
++      command: 'status',
++      heartbeat_path: heartbeatPath,
++      current_iteration: current,
++      max_iterations: max,
++      remaining,
++      limit_reached: limitReached
++    }, null, 2) + '\n');
++  } else {
++    process.stdout.write(
++      `execution.current_iteration=${current} execution.max_iterations=${max} remaining=${remaining} limit_reached=${limitReached}\n`
++    );
++  }
++  return 0;
++}
++
++function runAdvance(heartbeatPath, json) {
++  const data = readHeartbeat(heartbeatPath);
++  const { current, max } = validateExecutionBlock(data, heartbeatPath);
++
++  // --- Enforcement: this `if` is the entire mechanism. It runs unconditionally, before
++  // any write, for every invocation of `advance`. There is no flag or argument that skips
++  // it, and no path below it that touches execution.max_iterations.
++  if (current >= max) {
++    const message =
++      `${BOUNDARY_ID}: execution.current_iteration (${current}) has reached ` +
++      `execution.max_iterations (${max}). Refusing to advance. Per execute-loop.md, the ` +
++      `run must stop at this boundary. execution.current_iteration was NOT modified.`;
++    if (json) {
++      process.stderr.write(JSON.stringify({
++        ok: false,
++        command: 'advance',
++        boundary: BOUNDARY_ID,
++        heartbeat_path: heartbeatPath,
++        current_iteration: current,
++        max_iterations: max,
++        message
++      }, null, 2) + '\n');
++    } else {
++      process.stderr.write(`REFUSED [${BOUNDARY_ID}] ${message}\n`);
++    }
++    return 1;
++  }
++
++  const next = current + 1;
++  data.execution.current_iteration = next;
++  writeHeartbeatAtomic(heartbeatPath, data);
++
++  if (json) {
++    process.stdout.write(JSON.stringify({
++      ok: true,
++      command: 'advance',
++      heartbeat_path: heartbeatPath,
++      previous_iteration: current,
++      current_iteration: next,
++      max_iterations: max
++    }, null, 2) + '\n');
++  } else {
++    process.stdout.write(
++      `advanced execution.current_iteration ${current} -> ${next} (execution.max_iterations=${max} unchanged)\n`
++    );
++  }
++  return 0;
++}
++
++function main() {
++  let args;
++  try {
++    args = parseArgs(process.argv);
++  } catch (error) {
++    process.stderr.write(`usage error: ${error.message}\n\n${HELP_TEXT}`);
++    process.exit(2);
++    return;
++  }
++
++  if (args.help) {
++    process.stdout.write(HELP_TEXT);
++    process.exit(0);
++    return;
++  }
++
++  if (!args.command) {
++    process.stderr.write(`usage error: missing command (expected "status" or "advance")\n\n${HELP_TEXT}`);
++    process.exit(2);
++    return;
++  }
++
++  const heartbeatPath = args.heartbeatPath
++    ? path.resolve(args.heartbeatPath)
++    : defaultHeartbeatPath();
++
++  try {
++    let code;
++    if (args.command === 'status') {
++      code = runStatus(heartbeatPath, args.json);
++    } else {
++      code = runAdvance(heartbeatPath, args.json);
++    }
++    process.exit(code);
++  } catch (error) {
++    if (error instanceof DataError) {
++      if (args.json) {
++        process.stderr.write(JSON.stringify({ ok: false, error: error.message }, null, 2) + '\n');
++      } else {
++        process.stderr.write(`error: ${error.message}\n`);
++      }
++      process.exit(2);
++      return;
++    }
++    // Unexpected error: still map to exit 2, never let it collide with exit 1's meaning.
++    process.stderr.write(`unexpected error: ${error && error.stack ? error.stack : error}\n`);
++    process.exit(2);
++  }
++}
++
++main();
+diff --git a/scripts/execution-harness.test.js b/scripts/execution-harness.test.js
+new file mode 100644
+index 0000000..9deaaa1
+--- /dev/null
++++ b/scripts/execution-harness.test.js
+@@ -0,0 +1,210 @@
++#!/usr/bin/env node
++'use strict';
++
++/**
++ * Self-contained smoke test for scripts/execution-harness.js.
++ *
++ * Dependency-free: only Node's built-in assert/strict, child_process, fs, os, path
++ * modules, matching the conservatism of scripts/validate-l00prite.js. Not wired into any
++ * CI (none exists yet in this repo — see .l00prite/todos.md) or into
++ * scripts/validate-l00prite.js (a human-review-gated file). Run manually:
++ *
++ *   node scripts/execution-harness.test.js
++ *
++ * Exits 0 with a summary line if every assertion passes; an assertion failure throws and
++ * Node exits non-zero with a stack trace, the same "no framework" style as
++ * scripts/validate-l00prite.js.
++ */
++
++const assert = require('assert/strict');
++const { execFileSync } = require('child_process');
++const fs = require('fs');
++const os = require('os');
++const path = require('path');
++
++const HARNESS = path.resolve(__dirname, 'execution-harness.js');
++
++function writeHeartbeat(dir, execution, extra) {
++  const file = path.join(dir, 'heartbeat.json');
++  const data = Object.assign(
++    { schema_version: 2, max_iterations: 20, current_iteration: 9 },
++    extra || {}
++  );
++  if (execution !== null) {
++    data.execution = Object.assign(
++      {
++        enabled: true,
++        preflight_confirmed: true,
++        preflight_confirmed_at: '2026-07-03T00:00:00Z',
++        preflight_confirmed_by: 'test',
++        last_run_boundary: null,
++        run_boundaries: [
++          'definition_of_done_met',
++          'iteration_limit_reached',
++          'human_review_gate',
++          'destructive_operation_required',
++          'ambiguous_requirements',
++          'unfixable_failing_tests',
++          'missing_secrets_or_credentials',
++          'lock_lease_conflict',
++          'stop_signal'
++        ]
++      },
++      execution
++    );
++  }
++  fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
++  return file;
++}
++
++function run(args) {
++  try {
++    const stdout = execFileSync('node', [HARNESS, ...args], { encoding: 'utf8' });
++    return { code: 0, stdout, stderr: '' };
++  } catch (error) {
++    return {
++      code: typeof error.status === 'number' ? error.status : -1,
++      stdout: error.stdout ? error.stdout.toString() : '',
++      stderr: error.stderr ? error.stderr.toString() : ''
++    };
++  }
++}
++
++function readFile(file) {
++  return fs.readFileSync(file, 'utf8');
++}
++
++let passCount = 0;
++function pass(label) {
++  passCount++;
++  console.log(`PASS ${label}`);
++}
++
++const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'l00prite-harness-test-'));
++
++try {
++  // --- (1) advance under the cap exits 0 and increments current_iteration by exactly 1.
++  {
++    const file = writeHeartbeat(tmpDir, { max_iterations: 5, current_iteration: 2 });
++    const before = JSON.parse(readFile(file));
++    const result = run(['advance', '--heartbeat', file]);
++    assert.equal(result.code, 0, 'advance under cap should exit 0');
++    const after = JSON.parse(readFile(file));
++    assert.equal(after.execution.current_iteration, before.execution.current_iteration + 1,
++      'current_iteration should increment by exactly 1');
++    pass('advance under the cap exits 0 and increments current_iteration by exactly 1');
++  }
++
++  // --- (2) advance at the cap exits 1, stderr names iteration_limit_reached, file byte-identical.
++  {
++    const file = writeHeartbeat(tmpDir, { max_iterations: 3, current_iteration: 3 });
++    const before = readFile(file);
++    const result = run(['advance', '--heartbeat', file]);
++    assert.equal(result.code, 1, 'advance at the cap should exit 1');
++    assert.ok(result.stderr.includes('iteration_limit_reached'),
++      'stderr should contain the literal string iteration_limit_reached');
++    const after = readFile(file);
++    assert.equal(after, before, 'file must be byte-identical after a refused advance');
++    pass('advance at the cap exits 1, stderr names iteration_limit_reached, file untouched (byte-identical)');
++  }
++
++  // --- (2b) advance when current_iteration is already PAST the cap (corrupted state) also refuses via exit 1.
++  {
++    const file = writeHeartbeat(tmpDir, { max_iterations: 3, current_iteration: 5 });
++    const before = readFile(file);
++    const result = run(['advance', '--heartbeat', file]);
++    assert.equal(result.code, 1, 'advance past the cap should still exit 1 (>=, not ==)');
++    assert.ok(result.stderr.includes('iteration_limit_reached'));
++    assert.equal(readFile(file), before, 'file must be untouched');
++    pass('advance with current_iteration already past max_iterations refuses via exit 1 (>= comparison)');
++  }
++
++  // --- (3) execution.max_iterations never changes across any sequence of status/advance calls.
++  {
++    const file = writeHeartbeat(tmpDir, { max_iterations: 4, current_iteration: 0 });
++    const originalMax = JSON.parse(readFile(file)).execution.max_iterations;
++    const sequence = ['status', 'advance', 'status', 'advance', 'advance', 'advance', 'advance', 'status'];
++    for (const cmd of sequence) {
++      run([cmd, '--heartbeat', file]);
++      const current = JSON.parse(readFile(file)).execution.max_iterations;
++      assert.equal(current, originalMax,
++        `execution.max_iterations must never change (command was "${cmd}")`);
++    }
++    // Confirm the run did actually advance to and past the cap, proving the sequence was
++    // a meaningful exercise of the guard, not a no-op.
++    const finalState = JSON.parse(readFile(file));
++    assert.equal(finalState.execution.current_iteration, 4, 'sequence should have advanced to the cap');
++    pass('execution.max_iterations never changes across a sequence of status/advance calls (self-modification guard, empirically proven)');
++  }
++
++  // --- (4) status never mutates the file (hash/byte-compare before/after).
++  {
++    const file = writeHeartbeat(tmpDir, { max_iterations: 10, current_iteration: 5 });
++    const before = readFile(file);
++    const result = run(['status', '--heartbeat', file]);
++    assert.equal(result.code, 0, 'status should exit 0');
++    const after = readFile(file);
++    assert.equal(after, before, 'status must never write to the file');
++    pass('status never mutates the file');
++  }
++
++  // --- (4b) status at/beyond the cap still exits 0 and reports limit_reached: true (not an error).
++  {
++    const file = writeHeartbeat(tmpDir, { max_iterations: 2, current_iteration: 2 });
++    const result = run(['status', '--heartbeat', file, '--json']);
++    assert.equal(result.code, 0, 'status at the cap should still exit 0 (reporting only)');
++    const parsed = JSON.parse(result.stdout);
++    assert.equal(parsed.limit_reached, true, 'status --json should report limit_reached: true');
++    pass('status at/beyond the cap exits 0 and reports limit_reached: true (status never enforces)');
++  }
++
++  // --- (5) a heartbeat.json with no execution block exits 2 with a distinct message.
++  {
++    const file = writeHeartbeat(tmpDir, null);
++    // writeHeartbeat with execution=null omits the execution key entirely.
++    const data = JSON.parse(readFile(file));
++    assert.ok(!('execution' in data), 'fixture must omit the execution block');
++    const result = run(['advance', '--heartbeat', file]);
++    assert.equal(result.code, 2, 'missing execution block should exit 2, not the boundary exit 1');
++    assert.ok(!result.stderr.includes('iteration_limit_reached'),
++      'missing-execution-block error must be distinct from the boundary message');
++    pass('heartbeat.json with no execution block exits 2 with a message distinct from the boundary');
++  }
++
++  // --- (5b) an unwritable target on the write path also maps to exit 2, not exit 1.
++  {
++    const badDir = path.join(tmpDir, 'immutable-write-target');
++    fs.mkdirSync(badDir);
++    const file = writeHeartbeat(badDir, { max_iterations: 5, current_iteration: 1 });
++    let guardAvailable = true;
++    try {
++      execFileSync('chattr', ['+i', badDir], { stdio: 'ignore' });
++    } catch (error) {
++      guardAvailable = false;
++    }
++    if (guardAvailable) {
++      const before = readFile(file);
++      const result = run(['advance', '--heartbeat', file]);
++      execFileSync('chattr', ['-i', badDir], { stdio: 'ignore' });
++      assert.equal(result.code, 2, 'a write failure on advance must map to exit 2, not exit 1');
++      assert.equal(readFile(file), before, 'file must be unchanged when the write fails');
++      pass('a write failure on advance (unwritable target) exits 2, distinct from the exit-1 boundary meaning');
++    } else {
++      console.log('SKIP write-failure exit-code test (chattr not available in this sandbox)');
++    }
++  }
++
++  // --- (6) usage errors: no command, unrecognized command, both exit 2.
++  {
++    const noCmd = run([]);
++    assert.equal(noCmd.code, 2, 'missing command should exit 2');
++    const badCmd = run(['bogus']);
++    assert.equal(badCmd.code, 2, 'unrecognized command should exit 2');
++    pass('usage errors (missing/unrecognized command) exit 2');
++  }
++
++  console.log(`\n${passCount} assertions passed. 0 failed.`);
++  process.exit(0);
++} finally {
++  fs.rmSync(tmpDir, { recursive: true, force: true });
++}
