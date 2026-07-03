@@ -25,4 +25,4 @@ The complete operating rules are imported below from the vendor-neutral standard
 @AGENTS.md
 
 > Alternative: configure the CLI to read `AGENTS.md` directly by setting
-> `{"context": {"fileName": ["AGENTS.md", "GEMINI.md"]}}` in `.qwen/settings.json`.
+> `{"context": {"fileName": ["AGENTS.md", "QWEN.md"]}}` in `.qwen/settings.json`.

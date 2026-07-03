@@ -40,6 +40,9 @@ Complete these steps in order before the first iteration:
    `preflight_confirmed: false`, null audit fields, `max_iterations`, `current_iteration: 0`,
    `last_run_boundary: null`, and the nine `run_boundaries` listed below), set the file's
    `schema_version` to `2`, do it under the lock, and record the migration in `ledger.md`.
+   Release the lock (`status: "released"`) as soon as the recovery (step 3) or migration
+   writes are done — never hold it while waiting for the confirmation below; step 7
+   re-acquires it for the confirmed run.
 5. **Display the pre-flight summary** in the session:
    - the goal of this run and the Definition of Done it is working toward;
    - the planned units of work, listed individually (from `todos.md`, plus any pending

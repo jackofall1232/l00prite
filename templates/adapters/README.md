@@ -55,7 +55,9 @@ always-on file costs context in tools that load several of them.
   `GEMINI.md` — root only. l00prite ships nothing above `copilot-instructions.md`, and that
   file is self-sufficient, so Zed is covered.
 - **Gemini CLI / Qwen Code** users can skip the adapter entirely with
-  `{"context": {"fileName": ["AGENTS.md", "GEMINI.md"]}}` in their own settings file.
+  `{"context": {"fileName": ["AGENTS.md", "GEMINI.md"]}}` in their own
+  `.gemini/settings.json`, or `{"context": {"fileName": ["AGENTS.md", "QWEN.md"]}}` in
+  `.qwen/settings.json`.
 - **Nested `AGENTS.md` files** (monorepos): several tools apply only the closest file to
   the code being edited. If you add one, start it with a one-line pointer back to the root
   `AGENTS.md` and `.l00prite/`, or that subtree silently loses the protocol.
