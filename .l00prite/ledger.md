@@ -26,6 +26,68 @@ Append one entry per agent run. Do not overwrite prior runs.
 
 ## Runs
 
+### Run 2026-07-04T00:00:00Z — Claude (Opus 4.8), branch claude/looprite-cli-os-jntwqi
+- **Goal:** Design pass for l00prite CLI-OS — turn the scaffold-only memory protocol into a
+  self-hostable coding gateway (OpenAI-compatible endpoint + repo memory + routing + cost
+  tracking + safety policy). Deliver an architecture doc, module layout, scoped v1 plan, and
+  open questions; verify provider API specs (especially "GLM 5.2") before building against
+  them. Report back before writing implementation code beyond adapter-approach validation.
+- **Triggering event:** none — direct maintainer build brief in-session (CLI-OS).
+- **Reviewer/comment reference:** none.
+- **Decision:** Normal work, design-only deliverable. Confirmed the repo is prompt-files +
+  JSON + the dependency-free validator with no server/agent runtime, so CLI-OS is greenfield
+  runtime code placed in a new non-interfering `cli-os/` subtree. Ran a fan-out research pass
+  (Opus researchers; Fable 5 assigned adversarial-verify) to verify current provider specs
+  from primary sources.
+- **Completed work:** Wrote `cli-os/` docs — `architecture.md` (two-track Gateway/Memory
+  design, request lifecycle, PEP enforcement, module boundaries), `interface-contract.md`
+  (`MemoryQuery`/`MemoryContext`), `provider-adapters.md` (verified specs + caveats),
+  `routing-rules-v1.md`, `security-model.md`, `v1-scope.md`, `open-questions.md`; `README.md`
+  with the module tree; module stubs (`gateway/`, `memory/`, `policy/`); and verified example
+  provider manifests (`anthropic.json`, `openai.json`, `zhipu.json`). Verified **GLM 5.2 is
+  real** (`glm-5.2` in Zhipu's official SDK). Confirmed Anthropic needs a full native
+  `/v1/messages` adapter (its OpenAI-compat endpoint is test/eval-only) and OpenAI's dual
+  `/v1/chat/completions` vs `/v1/responses` surfaces.
+- **Fix implemented:** not applicable — design deliverable, no triggering defect.
+- **Changed files:** created `cli-os/**` (docs, README, module stubs, provider manifests);
+  modified `.l00prite/ledger.md` (this entry) and `.l00prite/todos.md`. No existing protocol
+  files, templates, prompts, `.claude/commands/build-loop.md`, or
+  `scripts/validate-l00prite.js` were touched (human-review-gated files left untouched).
+- **Tests run / Verification:**
+  - `command`: `node scripts/validate-l00prite.js`
+  - `exit_code`: 0
+  - `summary`: still passes with zero FAIL — CLI-OS lives in a separate subtree the validator
+    does not inspect, so the protocol's invariants are unaffected.
+  - `evidence_path`: none (console output only).
+  - `timestamp`: 2026-07-04T00:00:00Z
+  - `command`: provider-spec verification (fan-out web research over vendor OpenAPI specs + SDKs)
+  - `exit_code`: n/a
+  - `summary`: API shapes high-confidence (from first-party OpenAPI/SDKs on GitHub); pricing for
+    several providers third-party/unconfirmed because their first-party doc domains were
+    egress-blocked and the proxy denials were respected, not routed around.
+  - `evidence_path`: `cli-os/docs/provider-adapters.md` (verification caveats section).
+  - `timestamp`: 2026-07-04T00:00:00Z
+- **Response drafted/sent:** architecture summary + open questions returned to the maintainer;
+  no PR opened (not requested).
+- **Event status:** not applicable.
+- **Failures:** Fable 5 adversarial-verify verdicts did not complete — the verifiers hit the
+  same egress blocks and ran long; the pass was stopped and the researchers' own confidence
+  self-assessments used instead. Provider pricing remains unconfirmed pending a first-party pass.
+- **Decisions:** two-track (Gateway/Memory) with a typed latency-bounded interface as the
+  seam; PEP enforces cost/retry/destructive gates outside the deciding process (dollars, not
+  tokens); explainable non-ML routing v1; Anthropic full native adapter vs thin shims for
+  OpenAI-compatible providers; CLI-OS supersedes the "no backend" constraint for the new
+  subtree only (needs maintainer blessing — recorded as assumption A1).
+- **Confidence:** High for architecture/module boundaries and for the GLM 5.2 existence
+  finding (primary-source SDK). Medium on provider pricing (third-party, unconfirmed).
+- **Next action:** Maintainer answers the open questions (esp. Q1 provider set, Q2 "quality"
+  definition, Q3 runtime language) before implementation of the Gateway/Memory tracks begins.
+- **Do-not-retry notes:** Do not hardcode provider pricing from training-data memory — the
+  manifests deliberately leave unconfirmed prices null/flagged pending a first-party pass.
+- **Lock:** none acquired. All CLI-OS work is in the new `cli-os/` subtree, which is not a
+  lease-protected path. The only protected-path write was appending this `.l00prite/ledger.md`
+  entry (and a `todos.md` line) in a single-agent session with no concurrent writer.
+
 ### Run 2026-07-02T00:00:00Z — Claude (Fable), branch claude/powerful-helper-agent-pfsyj1
 - **Goal:** v1.1 — make l00prite the most powerful helper protocol for all AI models, per
   the maintainer's direction: evolve from scaffold-and-stop into a two-mode execution
