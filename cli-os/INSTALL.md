@@ -80,9 +80,11 @@ so keep it consistent between `init`, `serve`, and any CLI calls.
 
 ```
 Initialized l00prite CLI-OS at ~/.l00prite-cli-os
-Next:
-  l00prite provider add mock --adapter mock --default   # zero-key demo upstream
-  l00prite token mint --project demo
+Next (easiest): start the server and finish setup in your browser —
+  l00prite serve        # then open http://127.0.0.1:8787/
+Or do the same from the CLI:
+  l00prite provider add anthropic --key sk-ant-... --default
+  l00prite token mint --project default
   l00prite serve
 ```
 
@@ -229,9 +231,9 @@ The wizard walks through these steps (this is the **actual current flow**):
 
 1. **Welcome** — overview.
 2. **Vault** — generate a master key (recommended) or paste your own base64-encoded 32-byte key.
-3. **Provider** — pick an adapter (Anthropic native, OpenAI-compatible, or the zero-key mock), give it a
-   name and API key. The key is **validated with a real upstream call before it is saved** — a bad key
-   fails here, not on your first request.
+3. **Provider** — pick an adapter (Anthropic native, or OpenAI-compatible for OpenAI/GLM/DeepSeek/Groq
+   and friends), give it a name and API key. The key is **validated with a real upstream call before it
+   is saved** — a bad key fails here, not on your first request.
 4. **Network** — shows your real bind host / port / TLS / exposure so you know exactly how it's reachable.
 5. **Token** — mints your first gateway token. It is **shown once** — copy it on this screen.
 6. **Done** — your working base URL, the token, and copy-paste `curl` / tool-config snippets.
@@ -241,23 +243,26 @@ afterward.
 
 > **Accuracy note — what the wizard does NOT include.** The current wizard has no *model-selection* step and
 > no *repository-registration* step (an earlier plan mentioned these; the shipped wizard is Vault → Provider
-> → Network → Token). Instead:
+> → Network → Token). Instead, both live in the dashboard **after** setup:
 >
-> - **Model selection** and **ongoing provider management** live in the dashboard **after** setup. In this
->   build (Part E), the dashboard's Providers section lets you **add, rotate, remove, enable/disable, set as
->   default, and choose which models are enabled** for a provider — no CLI needed post-setup.
-> - **Repository registration is CLI-only** and takes a **local filesystem path** (there is no git-URL
->   support today):
+> - **Model selection** and **ongoing provider management**: the dashboard's Providers section lets you
+>   **add, rotate, remove, enable/disable, set as default, and choose which models are enabled** for a
+>   provider — no CLI needed post-setup.
+> - **Repository registration**: the dashboard's Repositories section has a **Register repo** modal (and the
+>   CLI equivalent below). Registration takes a **filesystem path on the machine running the gateway** —
+>   there is no git-URL support today — and the server verifies the directory exists before storing anything:
 >   ```bash
->   ./cli-os repo register myrepo --root /path/to/repo --project demo
+>   ./cli-os repo register myrepo --root /path/to/repo
 >   ```
 >   This registers a repo so the gateway can inject its `.l00prite` memory into requests scoped to it.
+> - **Prompting**: the dashboard's **Playground** panel sends real requests through the gateway — pick a
+>   model (or `auto`), optionally a registered repo for memory injection, and chat from the browser.
 
 Everything the wizard does is available from the CLI as well:
 
 ```bash
 ./cli-os provider add anthropic --key sk-ant-... --default
-./cli-os token mint --project demo
+./cli-os token mint --project default
 ./cli-os serve
 ```
 
