@@ -164,6 +164,7 @@ roadmap).
 | Branding | 2026-07-01 | Replaced ASCII banner with block letter art in README | Manual review | Merged |
 | Pre-release polish | 2026-07-01 | Corrected `CLAUDE.md` to describe actual repo state; updated `HANDOFF.md`, `README.md` roadmap, `.l00prite/` (new, scaffolded for this repo); added `RELEASE.md` | `node scripts/validate-l00prite.js` | Merged |
 | Universal agent layer + Execution Mode | 2026-07-02 | Canonical prompts in `templates/l00prite/prompts/` with byte-identical mirrors; `execute-loop` (pre-flight gate, nine run boundaries, self-modification guard); `AGENTS.md.template` + `CLAUDE.md.template` protocol section; vendor adapters + `vendors.json`; schema v2 (`execution` block, execution-run state); build-loop reframed as Planning Mode with `--execute` handoff; validator byte-parity/adapter/execution checks; docs reframed around two operating modes | `node scripts/validate-l00prite.js` (zero FAIL), byte-parity `cmp` across all mirrors, adversarial multi-agent design/code review | In review |
+| Loop-maturity gap pass (from loop-engineering analysis) | 2026-07-04 | Read-only `scripts/l00prite-doctor.js` health check for scaffolded projects; `docs/` loop-wisdom catalogs (failure-modes/anti-patterns/concepts, S1/S2/S3); seeded inherited failure catalog in `failures.md`; machine-readable Autonomous-Edit Denylist in `constraints.md` enforced via the existing `destructive_operation_required` boundary; additive no-progress telemetry (`iterations_since_progress`/`last_progress_iteration`/`no_progress_threshold`) + execute-loop maintenance + doctor stall check. Fable 5 advised the scope; **zero** edits to the two review-gated files; deferred gated work queued as one v1.2 batch | `node scripts/validate-l00prite.js` (zero FAIL, 519 PASS), `node scripts/l00prite-doctor.js .` (HEALTHY), byte-parity `cmp` across all 7 execute-loop copies, doctor negative test | In review |
 
 ## 8. Completion Criteria
 
@@ -184,6 +185,11 @@ l00prite v1.1 (this branch) is complete when:
 
 What's next, tracked in `.l00prite/todos.md`:
 
+- [ ] **v1.2 gated batch** (needs review of the two review-gated files, so held out of the
+      2026-07-04 ungated pass): formal `no_progress_detected` + wall-clock-first
+      `budget_exceeded` boundaries (nine → eleven), a machine-parseable run-log, phased
+      autonomy levels (restriction ladder), an independent verifier prompt, and a pattern
+      library. Enumerated as one coherent batch in `.l00prite/todos.md`.
 - [ ] Runtime harness that mechanically enforces run boundaries and iteration budgets.
 - [ ] GitHub event ingestion and CI failure capture as events.
 - [ ] Cross-agent compatibility tests, including a mid-execution boundary stop and resume
