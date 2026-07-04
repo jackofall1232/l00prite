@@ -423,3 +423,34 @@ Append one entry per agent run. Do not overwrite prior runs.
 - **Confidence:** High — validator clean, Go suite green, UI verified end-to-end in both schemes.
 - **Next action:** maintainer review of this branch.
 - **Lock:** none acquired — single-agent session; `lock.json` remains `released`.
+
+### Run 2026-07-04T23:30:00Z — Claude (Fable 5), branch claude/os-setup-onboarding-x23ohp (review round, PR #22)
+- **Goal:** Address PR #22 review feedback from gemini-code-assist, Copilot, and Codex, plus the
+  confirmed findings of this session's own adversarial review workflow (16 agents, 10 confirmed).
+- **Triggering event:** PR #22 review webhooks + completed internal review workflow.
+- **Decision / fixes:** `repos.go` — duplicate-check+INSERT made one transaction (concurrent
+  duplicate now 409, never a constraint 500); Scan errors surfaced as 500 instead of masquerading
+  as "not found"/0; blank remove id → 400; **register now lands in the acting token's project and
+  an explicit different project is 403** (closes the workflow's major security finding — the
+  endpoint could otherwise re-home a host directory across the request-time project gate; also
+  fixes Codex's project-mismatch UX findings at the root). Dashboard — Playground repo picker
+  filtered to repos the token can actually use (project match, repo-scoped tokens); register modal
+  prefills the token's project and says project = access scope; remove modal warns how many active
+  tokens are scoped to the repo; Clear-during-send can no longer poison the next conversation
+  (generation counter); registered-but-no-memory branch refreshes immediately so Esc/backdrop can't
+  leave stale UI; 20s auto-refresh no longer rebuilds unchanged chat/selects (text selection +
+  open dropdowns survive); non-header-safe repo ids get a clear error instead of "network error";
+  model-to-test relabeled per adapter (openai-compat: "usually required", since its catalog is
+  intentionally PENDING). Docs — removed the false "Claude Code works unchanged via OPENAI_*"
+  claim (no /v1/messages ingress) in GETTING_STARTED/README/INSTALL/install.sh/wizard done-screen;
+  INSTALL no longer implies the CLI verifies paths; stale Dockerfile seed comment fixed.
+- **Tests run / Verification:**
+  - `command: go test ./...` · `exit_code: 0` · `summary: all pass incl. new 403 cross-project +
+    blank-id 400 cases`.
+  - `command: node scripts/validate-l00prite.js` · `exit_code: 0` · `summary: 519 PASS, 0 FAIL`.
+  - `command: node uitest.js (Playwright end-to-end, rebuilt binary)` · `exit_code: 0` ·
+    `summary: 18/18`.
+- **Response drafted/sent:** none — fixes pushed; the diff is the reply.
+- **Failures:** none.
+- **Next action:** watch PR #22 (subscription active, ~1h self check-ins) until merge/close.
+- **Lock:** none acquired — single-agent session; `lock.json` remains `released`.
