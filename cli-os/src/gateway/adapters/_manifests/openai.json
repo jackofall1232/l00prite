@@ -1,0 +1,45 @@
+{
+  "provider": "openai",
+  "display_name": "OpenAI",
+  "adapter": "openai-native",
+  "base_url": "https://api.openai.com/v1",
+  "endpoints": {
+    "chat": "/chat/completions",
+    "responses": "/responses",
+    "models": "/models"
+  },
+  "auth": {
+    "scheme": "bearer",
+    "header": "Authorization",
+    "optional_headers": ["OpenAI-Organization", "OpenAI-Project"]
+  },
+  "streaming": {
+    "chat_completions": "openai-sse-chunks",
+    "responses": "openai-responses-named-events"
+  },
+  "tool_schema": {
+    "chat_completions": "openai-function",
+    "responses": "openai-function-flat"
+  },
+  "notes": [
+    "chat/completions: SSE `data: {chat.completion.chunk}`, choices[].delta, tool args accumulate by index, terminates `data: [DONE]`; opt in to usage via stream_options.include_usage=true.",
+    "responses: NAMED SSE events (response.created ... response.output_text.delta ... response.completed), NO [DONE] sentinel; tools are FLATTENED {type:function,name,description,parameters,strict}.",
+    "Some newer models are Responses-only -> /v1/responses is a SECOND full stream+tool translator (v1/v2 scope decision Q4)."
+  ],
+  "verification": {
+    "shape": "high",
+    "shape_source": "OpenAI official OpenAPI spec (github.com/openai/openai-openapi)",
+    "pricing": "unconfirmed",
+    "pricing_source": "NONE fetched first-party -- openai.com doc domains were egress-blocked in the research session"
+  },
+  "models": [
+    {
+      "id": "PENDING-first-party-confirmation",
+      "context": null, "max_output": null,
+      "capabilities": { "tools": true, "parallel_tools": true, "vision": true, "streaming_usage": "opt-in" },
+      "price_per_mtok": { "input": null, "output": null },
+      "price_confidence": "unconfirmed",
+      "notes": "Model ids + pricing intentionally left null. The API SHAPE is verified; concrete flagship model ids and prices need a first-party confirmation pass (Open Question Q7) before wiring real numbers. Do NOT backfill from training-data memory."
+    }
+  ]
+}

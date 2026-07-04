@@ -1,6 +1,11 @@
 # Prioritized TODOs
 
 ## Next
+- [ ] Maintainer decisions on l00prite CLI-OS design (branch `claude/looprite-cli-os-jntwqi`,
+      `cli-os/`): answer `cli-os/docs/open-questions.md` — esp. Q1 (which providers in v1),
+      Q2 ("quality" in routing), Q3 (runtime language), Q7 (authoritative pricing). Bless
+      assumption A1 (CLI-OS supersedes the "no backend" constraint for the `cli-os/` subtree
+      only). Implementation of the Gateway/Memory tracks waits on these.
 - [ ] Maintainer review of branch `claude/powerful-helper-agent-pfsyj1` (v1.1: universal
       agent layer + Execution Mode), including the two review-gated files changed at the
       maintainer's direction: `.claude/commands/build-loop.md` and
