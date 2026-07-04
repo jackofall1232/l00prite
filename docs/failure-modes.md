@@ -82,8 +82,8 @@ or finished work. The loop then acts on ghosts.
 - Events move `pending/ → processing/ → completed/` with a documented lifecycle, so a
   processed event is not re-processed.
 - `scripts/l00prite-doctor.js` cross-checks `state.pending_event_count` against the files in
-  `events/pending/`, warns on a stale `state.last_updated`, and flags placeholder-only memory
-  files — the mechanical State-Rot detector.
+  `events/pending/` and flags placeholder-only memory files — the mechanical State-Rot
+  detector.
 
 **Mitigation**: prune resolved events and closed todos every run; keep `memory.md` for durable
 facts only (speculative notes belong in `sessions/`).

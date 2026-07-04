@@ -36,6 +36,7 @@ function readJSON(rel) {
   try { return { ok: true, data: JSON.parse(readL(rel)) }; }
   catch (e) { return { ok: false, err: e.message }; }
 }
+function isParsableDate(s) { return typeof s === 'string' && !Number.isNaN(Date.parse(s)); }
 
 const PROMPT_NAMES = ['resume-loop', 'heartbeat', 'event-loop', 'respond-to-review', 'handoff-summary', 'execute-loop'];
 const RUN_BOUNDARY_IDS = [
@@ -105,11 +106,22 @@ const lock = lkR.ok ? lkR.data : null;
 // Event JSON files parse.
 const pendingDir = path.join(lp, 'events', 'pending');
 let pendingEventFiles = [];
+let pendingDirReadable = true;
 if (fs.existsSync(pendingDir)) {
-  pendingEventFiles = fs.readdirSync(pendingDir).filter((f) => f.endsWith('.json'));
-  for (const f of pendingEventFiles) {
-    try { JSON.parse(fs.readFileSync(path.join(pendingDir, f), 'utf8')); }
-    catch (e) { fail(`events/pending/${f} does not parse: ${e.message}`, `fix the JSON in that event file`); }
+  try {
+    if (fs.statSync(pendingDir).isDirectory()) {
+      pendingEventFiles = fs.readdirSync(pendingDir).filter((f) => f.endsWith('.json'));
+      for (const f of pendingEventFiles) {
+        try { JSON.parse(fs.readFileSync(path.join(pendingDir, f), 'utf8')); }
+        catch (e) { fail(`events/pending/${f} does not parse: ${e.message}`, `fix the JSON in that event file`); }
+      }
+    } else {
+      pendingDirReadable = false;
+      fail('.l00prite/events/pending exists but is not a directory', 'events/pending/ must be a directory holding pending event JSON files');
+    }
+  } catch (e) {
+    pendingDirReadable = false;
+    fail(`could not read .l00prite/events/pending: ${e.message}`, 'check permissions or recreate the directory');
   }
 }
 
@@ -139,7 +151,7 @@ if (hb && st) {
   // Is there a matching active, unexpired execute-loop lock right now?
   let lockActiveExecute = false;
   if (lock) {
-    const notExpired = typeof lock.expires_at === 'string' && Date.parse(lock.expires_at) > Date.now();
+    const notExpired = isParsableDate(lock.expires_at) && Date.parse(lock.expires_at) > Date.now();
     lockActiveExecute = lock.status === 'active' && notExpired &&
       typeof lock.purpose === 'string' && lock.purpose.includes('execute-loop');
   }
@@ -163,9 +175,14 @@ if (hb && st) {
     warn('execution.preflight_confirmed is true while Execution Mode is disarmed', 'a persisted preflight flag never authorizes a run; it is safe but stale — the next pre-flight overwrites it');
   }
 
-  // blocked must win over should_continue.
-  if (st.blocked === true && hb.should_continue === true) {
-    warn('state.blocked is true while heartbeat.should_continue is true', 'blocked wins by protocol — ensure the loop stops, and clear one of the two signals');
+  // Surface a hard stop: a blocked project needs a human before it resumes.
+  if (st.blocked === true) {
+    const reason = st.blocker_reason ? `: ${st.blocker_reason}` : ' (no blocker_reason recorded)';
+    warn(`project is blocked${reason}`, 'resolve the blocker and set state.blocked=false before resuming');
+    // blocked must win over should_continue.
+    if (hb.should_continue === true) {
+      warn('state.blocked is true while heartbeat.should_continue is true', 'blocked wins by protocol — ensure the loop stops, and clear one of the two signals');
+    }
   }
 }
 
@@ -176,7 +193,15 @@ if (lock) {
   const required = ['schema_version', 'lock_id', 'acquired_at', 'expires_at', 'ttl_seconds', 'status', 'protected_paths'];
   const missing = required.filter((f) => !Object.prototype.hasOwnProperty.call(lock, f));
   if (missing.length) warn(`lock.json missing fields: ${missing.join(', ')}`, 'restore the lock.json shape from templates/l00prite/lock.json');
-  if (lock.status === 'active' && typeof lock.expires_at === 'string' && Date.parse(lock.expires_at) <= Date.now()) {
+  // A malformed timestamp makes the expiry logic silently wrong — surface it rather than
+  // letting Date.parse return NaN and skip the expiry check.
+  for (const field of ['acquired_at', 'expires_at']) {
+    if (typeof lock[field] === 'string' && Number.isNaN(Date.parse(lock[field]))) {
+      fail(`lock.json ${field} is not a parseable ISO 8601 date: ${JSON.stringify(lock[field])}`,
+        `set ${field} to a valid ISO 8601 timestamp (e.g. 2026-07-04T09:00:00Z)`);
+    }
+  }
+  if (lock.status === 'active' && isParsableDate(lock.expires_at) && Date.parse(lock.expires_at) <= Date.now()) {
     warn('lock.json is "active" but expired', 'the next agent may reclaim it and log the reclamation per LOCKING.md');
   }
 }
@@ -184,7 +209,7 @@ if (lock) {
 // ---------------------------------------------------------------------------
 // 6. Event bookkeeping: pending file count vs state.pending_event_count (State Rot).
 // ---------------------------------------------------------------------------
-if (st && Object.prototype.hasOwnProperty.call(st, 'pending_event_count')) {
+if (st && pendingDirReadable && Object.prototype.hasOwnProperty.call(st, 'pending_event_count')) {
   if (st.pending_event_count !== pendingEventFiles.length) {
     warn(`state.pending_event_count=${st.pending_event_count} but events/pending/ holds ${pendingEventFiles.length} event file(s)`,
       'reconcile the counter with the files — a common State Rot signal');
