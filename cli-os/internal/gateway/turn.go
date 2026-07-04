@@ -138,19 +138,29 @@ func providerInfos(rows []ProviderRow) []ProviderInfo {
 	return out
 }
 
+// getProvider fetches a single provider row fully populated — including DisabledModels via the same
+// correlated subquery ListProviders uses — so a caller can never trip over a silently-nil selection set
+// (the subquery is one indexed lookup on the tiny provider_models table, negligible on the hot path).
 func getProvider(db *sql.DB, name string) *ProviderRow {
 	var (
 		adapter               string
 		baseURL, encKey       sql.NullString
 		enabled, isDef, verif int
+		disabled              sql.NullString
 	)
 	err := db.QueryRowContext(state.Ctx(),
-		`SELECT adapter, base_url, enc_key, enabled, is_default, verified FROM providers WHERE name = ?`, name).
-		Scan(&adapter, &baseURL, &encKey, &enabled, &isDef, &verif)
+		`SELECT adapter, base_url, enc_key, enabled, is_default, verified,
+		        (SELECT group_concat(model) FROM provider_models pm WHERE pm.provider = providers.name AND pm.enabled = 0)
+		   FROM providers WHERE name = ?`, name).
+		Scan(&adapter, &baseURL, &encKey, &enabled, &isDef, &verif, &disabled)
 	if err != nil {
 		return nil
 	}
-	return &ProviderRow{Name: name, Adapter: adapter, BaseURL: baseURL.String, EncKey: encKey.String, Enabled: enabled != 0, IsDefault: isDef != 0, Verified: verif != 0}
+	return &ProviderRow{
+		Name: name, Adapter: adapter, BaseURL: baseURL.String, EncKey: encKey.String,
+		Enabled: enabled != 0, IsDefault: isDef != 0, Verified: verif != 0,
+		DisabledModels: parseDisabledSet(disabled.String),
+	}
 }
 
 // markProviderVerified flips a provider to verified the first time a real routed request succeeds

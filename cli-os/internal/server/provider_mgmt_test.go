@@ -340,16 +340,16 @@ func TestProviderKeyNeverReturnedAndAudit(t *testing.T) {
 
 	// add.
 	_, m := doJSON(t, "POST", base+"/v1/providers", token, map[string]any{"name": "openai", "adapter": "openai-compat", "base_url": fake.URL, "api_key": "SECRET-ONE", "model": "gpt-x", "default": true})
-	assertNoSecret(t, "add", jstr(m))
+	assertNoSecret(t, "add", jstr(m), "SECRET-ONE")
 	// rotate.
 	_, m = doJSON(t, "POST", base+"/v1/providers/rotate", token, map[string]any{"name": "openai", "api_key": "SECRET-TWO", "model": "gpt-x"})
-	assertNoSecret(t, "rotate", jstr(m))
-	// validate a wrong key — the failure text must not echo the attempted key either.
+	assertNoSecret(t, "rotate", jstr(m), "SECRET-ONE", "SECRET-TWO")
+	// validate a wrong key — the failure text must not echo the ATTEMPTED key ("wrong-guess") either.
 	_, m = doJSON(t, "POST", base+"/v1/providers/test", token, map[string]any{"name": "openai", "adapter": "openai-compat", "base_url": fake.URL, "api_key": "wrong-guess", "model": "gpt-x"})
-	assertNoSecret(t, "test", jstr(m))
+	assertNoSecret(t, "test", jstr(m), "SECRET-ONE", "SECRET-TWO", "wrong-guess")
 	// dashboard summary never leaks the key and reports has_key/verified only.
 	_, sum := doJSON(t, "GET", base+"/v1/dashboard/summary", token, nil)
-	assertNoSecret(t, "summary", jstr(sum))
+	assertNoSecret(t, "summary", jstr(sum), "SECRET-ONE", "SECRET-TWO")
 	if !strings.Contains(jstr(sum), `"has_key":true`) {
 		t.Fatalf("summary must report has_key for the configured provider")
 	}
@@ -475,10 +475,15 @@ func containsAnySecret(s string) bool {
 	return false
 }
 
-func assertNoSecret(t *testing.T, where, body string) {
+// assertNoSecret fails if any of the given key values appears in body. Callers pass every key that
+// endpoint touched — including a REJECTED key on the validation path — so the test actually proves the
+// attempted key isn't echoed back, not just the stored ones.
+func assertNoSecret(t *testing.T, where, body string, keys ...string) {
 	t.Helper()
-	if containsAnySecret(body) {
-		t.Fatalf("%s response leaked key material: %s", where, body)
+	for _, k := range keys {
+		if k != "" && strings.Contains(body, k) {
+			t.Fatalf("%s response leaked key material (%q): %s", where, k, body)
+		}
 	}
 }
 

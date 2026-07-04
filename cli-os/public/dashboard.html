@@ -621,7 +621,17 @@
     try{ data = await res.json(); }catch(e){}
     return {res, data};
   }
-  function mErr(data, fallback){ if(data&&data.error&&data.error.message) return data.error.message; if(data&&data.detail) return data.detail; return fallback||"Something went wrong."; }
+  // Normalize every error shape the API returns into a human string: /v1/providers/test replies with a
+  // plain-string `error`, the OpenAI-style endpoints reply with `{error:{message}}` (an object), and
+  // validation failures carry a `detail`. Without this, an object `error` would render "[object Object]".
+  function mErr(data, fallback){
+    if(data){
+      if(typeof data.error==="string" && data.error) return data.error;
+      if(data.error && data.error.message) return data.error.message;
+      if(data.detail) return data.detail;
+    }
+    return fallback||"Something went wrong.";
+  }
   function findProvider(name){ return ((S.summary&&S.summary.providers)||[]).find(p=>p.name===name); }
   function openModal(html){ $("modal-body").innerHTML=html; $("modal").classList.remove("hidden"); }
   function closeModal(){ $("modal").classList.add("hidden"); $("modal-body").innerHTML=""; }
@@ -684,7 +694,7 @@
       const {res,data}=await api("POST","/v1/providers/test",b);
       unbusy(validateBtn,"Validate key"); if(my!==epoch) return;
       if(res.ok && data && data.ok){ addBtn.disabled=false; note.innerHTML=`<div class="note ok"><b>Key works.</b>${data.model_used?` Model <span class="mono">${esc(data.model_used)}</span>.`:""}</div>`; }
-      else { addBtn.disabled=true; note.innerHTML=`<div class="note err"><b>Validation failed:</b> ${esc((data&&data.error)||mErr(data,"the provider rejected the call"))}</div>`; }
+      else { addBtn.disabled=true; note.innerHTML=`<div class="note err"><b>Validation failed:</b> ${esc(mErr(data,"the provider rejected the call"))}</div>`; }
     };
     addBtn.onclick=async()=>{
       const b=body(); b.default=g("m-default").checked; b.skip_validation=skip.checked;
@@ -722,7 +732,7 @@
       const {res,data}=await api("POST","/v1/providers/test",{name, adapter:p.adapter, base_url:p.base_url, api_key:keyIn.value, model:modelIn.value.trim()});
       unbusy(vBtn,"Validate key"); if(my!==epoch) return;
       if(res.ok && data && data.ok){ note.innerHTML=`<div class="note ok"><b>Key works.</b>${data.model_used?` Model <span class="mono">${esc(data.model_used)}</span>.`:""}</div>`; }
-      else note.innerHTML=`<div class="note err"><b>Validation failed:</b> ${esc((data&&data.error)||mErr(data,"the provider rejected the call"))}</div>`;
+      else note.innerHTML=`<div class="note err"><b>Validation failed:</b> ${esc(mErr(data,"the provider rejected the call"))}</div>`;
     };
     rBtn.onclick=async()=>{
       if(!keyIn.value){ note.innerHTML=`<div class="note err">Enter a new API key.</div>`; return; }

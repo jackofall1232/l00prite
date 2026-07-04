@@ -118,13 +118,24 @@ func (app *App) storeProvider(p providerParams) (*providerStoreResult, *apierr.E
 	if baseURL != "" {
 		baseVal = baseURL
 	}
-	if _, err := app.DB.ExecContext(state.Ctx(),
-		`INSERT OR REPLACE INTO providers(name,adapter,base_url,enc_key,enabled,is_default,verified,created_at) VALUES(?,?,?,?,1,?,0,?)`,
-		name, adapterKind, baseVal, encVal, isDef, util.NowISO()); err != nil {
+	// Insert the row AND (when it's the new default) clear every other provider's default flag as ONE
+	// atomic unit, so a concurrent reader or a crash between the two statements can never observe/persist
+	// two default providers. The network validation + encryption above deliberately stay OUTSIDE the
+	// transaction — a BEGIN IMMEDIATE lock must not be held across an upstream round-trip.
+	if _, err := state.Tx(app.DB, func(q state.Querier) (any, error) {
+		if _, err := q.ExecContext(state.Ctx(),
+			`INSERT OR REPLACE INTO providers(name,adapter,base_url,enc_key,enabled,is_default,verified,created_at) VALUES(?,?,?,?,1,?,0,?)`,
+			name, adapterKind, baseVal, encVal, isDef, util.NowISO()); err != nil {
+			return nil, err
+		}
+		if p.Default {
+			if _, err := q.ExecContext(state.Ctx(), `UPDATE providers SET is_default = CASE WHEN name = ? THEN 1 ELSE 0 END`, name); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	}); err != nil {
 		return nil, apierr.New(500, "Failed to store provider: "+err.Error(), "configuration_error")
-	}
-	if p.Default {
-		_, _ = app.DB.ExecContext(state.Ctx(), `UPDATE providers SET is_default = CASE WHEN name = ? THEN 1 ELSE 0 END`, name)
 	}
 	return &providerStoreResult{
 		Name: name, Adapter: adapterKind, BaseURL: baseURL, HasKey: encVal != nil,
