@@ -9,10 +9,14 @@
 //     message instead of surfacing later as a silent "no memory" on every request.
 //   - Registration stores a path + project mapping only; nothing inside the repo is read here
 //     beyond an os.Stat freshness snapshot (memory content stays untrusted input at request time).
+//   - A repo can only be registered into the ACTING token's own project (explicit mismatch → 403),
+//     so this endpoint can never be used to re-home a directory across the request-time
+//     project-scope gate; cross-project registration remains a CLI (gateway-host) operation.
 //   - Every register/remove is audit-logged with the acting token id.
 package gateway
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -70,19 +74,39 @@ func (app *App) HandleRepoRegister(w http.ResponseWriter, r *http.Request) {
 		oaiError(w, 400, `"`+absRoot+`" is not a directory on the machine running this gateway. The root must be a local path on the gateway host — a git URL or a path from another machine won't work.`, "invalid_request_error", "repo_root_not_found")
 		return
 	}
-	var existing int
-	_ = app.DB.QueryRowContext(state.Ctx(), `SELECT COUNT(*) FROM repos WHERE id = ?`, id).Scan(&existing)
-	if existing > 0 {
-		oaiError(w, 409, `A repo named "`+id+`" is already registered. Remove it first to point the id somewhere else.`, "invalid_request_error", "repo_exists")
-		return
-	}
+	// Project scoping: the repo lands in the ACTING TOKEN's project (which is also what makes it
+	// usable by that token — /v1/chat/completions rejects a repo whose project differs from the
+	// token's). An explicit different project is refused: otherwise any token could re-home a
+	// directory into its own project (or park one in another project) and sidestep that gate.
+	// Cross-project registration stays a CLI (gateway-host) operation.
 	project := strings.TrimSpace(body.Project)
 	if project == "" {
-		project = "default"
+		project = principal.Project
 	}
-	if _, err := app.DB.ExecContext(state.Ctx(),
-		`INSERT INTO repos(id,root,project,created_at) VALUES(?,?,?,?)`,
-		id, absRoot, project, util.NowISO()); err != nil {
+	if project != principal.Project {
+		oaiError(w, 403, `This token belongs to project "`+principal.Project+`", so it can only register repos into that project. Use the CLI on the gateway host to register a repo under a different project.`, "permission_error", "project_mismatch")
+		return
+	}
+	// Duplicate check + insert as ONE transaction so two concurrent registers of the same id
+	// can't both pass the pre-check — the loser sees the row and gets the same 409 as a plain
+	// duplicate, never a 500 from the PRIMARY KEY constraint.
+	errRepoExists := errors.New("repo_exists")
+	if _, err := state.Tx(app.DB, func(q state.Querier) (any, error) {
+		var existing int
+		if err := q.QueryRowContext(state.Ctx(), `SELECT COUNT(*) FROM repos WHERE id = ?`, id).Scan(&existing); err != nil {
+			return nil, err
+		}
+		if existing > 0 {
+			return nil, errRepoExists
+		}
+		_, err := q.ExecContext(state.Ctx(), `INSERT INTO repos(id,root,project,created_at) VALUES(?,?,?,?)`,
+			id, absRoot, project, util.NowISO())
+		return nil, err
+	}); err != nil {
+		if errors.Is(err, errRepoExists) || strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			oaiError(w, 409, `A repo named "`+id+`" is already registered. Remove it first to point the id somewhere else.`, "invalid_request_error", "repo_exists")
+			return
+		}
 		oaiError(w, 500, "Failed to register repo: "+err.Error(), "configuration_error", "")
 		return
 	}
@@ -118,14 +142,26 @@ func (app *App) HandleRepoRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.TrimSpace(body.ID)
+	if id == "" {
+		oaiError(w, 400, "A repo id is required.", "invalid_request_error", "")
+		return
+	}
+	// A DB error here must not masquerade as "repo not found" (or as "0 scoped tokens") — report
+	// it as the server fault it is.
 	var existing int
-	_ = app.DB.QueryRowContext(state.Ctx(), `SELECT COUNT(*) FROM repos WHERE id = ?`, id).Scan(&existing)
+	if err := app.DB.QueryRowContext(state.Ctx(), `SELECT COUNT(*) FROM repos WHERE id = ?`, id).Scan(&existing); err != nil {
+		oaiError(w, 500, "Database error: "+err.Error(), "api_error", "")
+		return
+	}
 	if existing == 0 {
 		oaiError(w, 404, `No repo named "`+id+`".`, "invalid_request_error", "repo_not_found")
 		return
 	}
 	var scopedTokens int
-	_ = app.DB.QueryRowContext(state.Ctx(), `SELECT COUNT(*) FROM tokens WHERE repo = ? AND revoked = 0`, id).Scan(&scopedTokens)
+	if err := app.DB.QueryRowContext(state.Ctx(), `SELECT COUNT(*) FROM tokens WHERE repo = ? AND revoked = 0`, id).Scan(&scopedTokens); err != nil {
+		oaiError(w, 500, "Database error: "+err.Error(), "api_error", "")
+		return
+	}
 	if _, err := app.DB.ExecContext(state.Ctx(), `DELETE FROM repos WHERE id = ?`, id); err != nil {
 		oaiError(w, 500, "Failed to remove repo: "+err.Error(), "configuration_error", "")
 		return

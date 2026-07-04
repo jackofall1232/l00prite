@@ -34,11 +34,12 @@ func TestRepoMgmtAuthRequired(t *testing.T) {
 }
 
 // TestRepoRegisterValidatesAndStores: a real directory registers (row identical in shape to CLI
-// `repo register`, project defaulted), the response reports a real memory-freshness snapshot, and
-// bad input — missing id/root, unsafe id charset, a path that doesn't exist on the gateway host —
-// is rejected with the row stored nowhere.
+// `repo register`, project defaulted to the ACTING TOKEN's project so the registering token can
+// actually use the repo), the response reports a real memory-freshness snapshot, and bad input —
+// missing id/root, unsafe id charset, a path that doesn't exist on the gateway host, a project
+// other than the token's — is rejected with the row stored nowhere.
 func TestRepoRegisterValidatesAndStores(t *testing.T) {
-	srv, _, db, tokID, token := configured(t)
+	srv, _, db, tokID, token := configured(t) // token project is "ops"
 	base := srv.URL
 
 	repoDir := t.TempDir()
@@ -49,27 +50,42 @@ func TestRepoRegisterValidatesAndStores(t *testing.T) {
 		t.Fatalf("write memory file: %v", err)
 	}
 
-	// happy path: registered, project defaulted, memory snapshot sees the file.
+	// happy path: registered, project defaulted to the token's own project, memory snapshot sees
+	// the file.
 	resp, body := doJSON(t, "POST", base+"/v1/repos", token, map[string]any{"id": "myrepo", "root": repoDir})
 	if resp.StatusCode != 200 {
 		t.Fatalf("register must be 200, got %d (%v)", resp.StatusCode, body)
 	}
 	repo := body["repo"].(map[string]any)
-	if repo["project"] != "default" {
-		t.Fatalf("project must default to \"default\", got %v", repo["project"])
+	if repo["project"] != "ops" {
+		t.Fatalf("project must default to the acting token's project (\"ops\"), got %v", repo["project"])
 	}
 	mem := body["memory"].(map[string]any)
 	if mem["present_count"].(float64) < 1 {
 		t.Fatalf("freshness snapshot must see the memory file, got %v", mem)
 	}
-	if root, project, found := repoRow(t, db, "myrepo"); !found || root != repoDir || project != "default" {
+	if root, project, found := repoRow(t, db, "myrepo"); !found || root != repoDir || project != "ops" {
 		t.Fatalf("stored row mismatch: root=%q project=%q found=%v", root, project, found)
 	}
 
-	// the register is audit-logged with the acting token id.
+	// a project OTHER than the token's is refused (403) — the register endpoint must not be able
+	// to re-home a directory across the request-time project-scope gate.
+	if resp, _ := doJSON(t, "POST", base+"/v1/repos", token, map[string]any{"id": "other", "root": repoDir, "project": "someone-else"}); resp.StatusCode != 403 {
+		t.Fatalf("cross-project register must be 403, got %d", resp.StatusCode)
+	}
+	if _, _, found := repoRow(t, db, "other"); found {
+		t.Fatal("a 403 cross-project register must store nothing")
+	}
+	// the register is audit-logged with the acting token id (and the rejected cross-project
+	// attempt above was not).
 	var auditN int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM audit WHERE action='repo.register' AND actor=?`, tokID).Scan(&auditN); err != nil || auditN != 1 {
 		t.Fatalf("register must be audited by token id (n=%d, err=%v)", auditN, err)
+	}
+
+	// ... while explicitly naming the token's own project is fine.
+	if resp, _ := doJSON(t, "POST", base+"/v1/repos", token, map[string]any{"id": "explicit", "root": repoDir, "project": "ops"}); resp.StatusCode != 200 {
+		t.Fatalf("same-project explicit register must be 200, got %d", resp.StatusCode)
 	}
 
 	// duplicate id → 409, row untouched.
@@ -104,11 +120,15 @@ func TestRepoRemove(t *testing.T) {
 	base := srv.URL
 	repoDir := t.TempDir()
 
-	if resp, _ := doJSON(t, "POST", base+"/v1/repos", token, map[string]any{"id": "gone", "root": repoDir, "project": "p1"}); resp.StatusCode != 200 {
+	if resp, _ := doJSON(t, "POST", base+"/v1/repos", token, map[string]any{"id": "gone", "root": repoDir, "project": "ops"}); resp.StatusCode != 200 {
 		t.Fatalf("register failed: %d", resp.StatusCode)
 	}
 	if resp, _ := doJSON(t, "POST", base+"/v1/repos/remove", token, map[string]any{"id": "nope"}); resp.StatusCode != 404 {
 		t.Fatalf("unknown id must be 404, got %d", resp.StatusCode)
+	}
+	// malformed input (blank id) is a 400, not a confusing `404 No repo named ""`.
+	if resp, _ := doJSON(t, "POST", base+"/v1/repos/remove", token, map[string]any{"id": "  "}); resp.StatusCode != 400 {
+		t.Fatalf("blank id must be 400, got %d", resp.StatusCode)
 	}
 	resp, body := doJSON(t, "POST", base+"/v1/repos/remove", token, map[string]any{"id": "gone"})
 	if resp.StatusCode != 200 || body["removed"] != true {
