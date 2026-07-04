@@ -114,10 +114,20 @@ function toolResult(id, content) {
 }
 
 // Trusted, gateway-authored structured results (our own text — no untrusted envelope needed).
+// NB: these must NOT embed raw upstream response bodies — that text is authored by (or echoed
+// through) the delegate provider and is untrusted; only status codes / gateway-authored reasons go
+// here. Raw error bodies are dropped rather than laundered into the primary's context.
 const capReached = (maxHops) => JSON.stringify({ status: 'error', error: 'bridge_hop_cap_reached', max_hops: maxHops, note: 'The delegation budget for this request is used up. Do not request more delegations; answer using what you already have.' });
 const budgetExhausted = (denial) => JSON.stringify({ status: 'error', error: 'budget_exhausted', code: denial.code, note: 'The delegated sub-call was denied by the daily cost cap. Answer with what you have; do not retry the delegation.' });
-const delegateError = (msg) => JSON.stringify({ status: 'error', error: 'delegate_failed', detail: String(msg).slice(0, 300), note: 'The delegated model could not be reached or failed. Proceed without it, or try a different target.' });
-const deferredClientTool = (tc) => JSON.stringify({ status: 'deferred', tool: tc.function?.name || 'unknown', note: 'This tool is executed by the client, not inside gateway bridge mode. It was NOT run. Provide your final answer, or the client will execute it after this response.' });
+const delegateError = (info) => JSON.stringify({
+  status: 'error', error: 'delegate_failed',
+  ...(info?.http_status ? { http_status: info.http_status } : {}),
+  ...(info?.reason ? { reason: info.reason } : {}),
+  note: 'The delegated model could not be reached or returned an error. Proceed without it, or try a different target.',
+});
+// A mixed turn (bridge call + client tool call) can't run the client's tool, and this intermediate
+// turn is NOT delivered to the client — so the note must NOT claim the client will run it later.
+const deferredClientTool = (tc) => JSON.stringify({ status: 'not_executed', tool: tc.function?.name || 'unknown', note: 'This tool was NOT executed: the gateway does not run client-side tools during bridging, and this intermediate turn is not delivered to the client. If you still need it, RE-EMIT this tool call in your FINAL message so the client can run it — do not assume it has run.' });
 
 // Delegated output IS untrusted — wrap it, and neutralize any closing-tag breakout in the body.
 function wrapDelegated({ provider, model, hop, text, proposedToolCalls }) {
@@ -149,7 +159,7 @@ async function executeBridge(ctx, { toolCall, primaryReq, providers, project, re
   let args = {};
   try { args = JSON.parse(toolCall.function?.arguments || '{}'); } catch { args = {}; }
   const task = String(args.task || '').trim();
-  if (!task) return { error: 'empty task: the bridge call needs a self-contained "task" string' };
+  if (!task) return { error: { reason: 'empty task: the bridge call needs a self-contained "task" string' } };
   const subModel = resolveTargetModel(args.target, providers);
   const subReq = {
     model: subModel,
@@ -171,20 +181,23 @@ async function executeBridge(ctx, { toolCall, primaryReq, providers, project, re
     });
     if (!sub.ok) return { denied: sub.denial };
     const m = sub.openaiResponse.choices?.[0]?.message || {};
-    return { text: m.content || '', proposedToolCalls: Array.isArray(m.tool_calls) ? m.tool_calls : null, cost: sub.cost, route: sub.route };
+    return { text: m.content || '', proposedToolCalls: Array.isArray(m.tool_calls) ? m.tool_calls : null, cost: sub.cost, route: sub.route, usage: sub.usage };
   } catch (e) {
-    return { error: `${e.status || 502}: ${e.message || 'delegate call failed'}` };
+    // Drop the upstream body (untrusted, could carry an injected instruction); keep only the status.
+    return { error: { http_status: e.status || 502 } };
   }
 }
 
 // Run the bounded bridge loop. Returns:
 //   { response, subCalls, totalCostUsd, hops }              — final OpenAI response
 //   { denied, subCalls, totalCostUsd, hops, primaryTurn }   — a primary turn was cap-denied (402)
-export async function runBridge(ctx, { requestId, project, repoId, repoRoot, openaiReq, routeHeader, clientSignal, maxHops }) {
+export async function runBridge(ctx, { requestId, project, repoId, repoRoot, openaiReq, routeHeader, clientSignal, maxHops, paths = [] }) {
   const providers = listProviders(ctx.db);
   let convo = { ...openaiReq, tools: [...(openaiReq.tools || []), BRIDGE_TOOL] };
   let subCalls = 0;
   let totalCost = 0;
+  const totalUsage = { prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 };
+  const addUsage = (u) => { if (!u) return; totalUsage.prompt_tokens += u.prompt_tokens || 0; totalUsage.completion_tokens += u.completion_tokens || 0; totalUsage.cache_read_tokens += u.cache_read_tokens || 0; totalUsage.cache_write_tokens += u.cache_write_tokens || 0; };
   const hops = [];
   let last = null;
   const MAX_TURNS = maxHops + 2; // backstop; forcedFinal already guarantees termination
@@ -193,14 +206,15 @@ export async function runBridge(ctx, { requestId, project, repoId, repoRoot, ope
     const forcedFinal = subCalls >= maxHops;
     const turnReq = forcedFinal ? stripBridgeTool(convo) : convo;
     const turn = await runTurn(ctx, {
-      project, repoId, repoRoot, openaiReq: turnReq, routeHeader, clientSignal, requestId,
+      project, repoId, repoRoot, openaiReq: turnReq, routeHeader, clientSignal, requestId, paths,
       depth: 0, injectMemory: turnNo === 0,
       meta: { kind: 'bridge_primary', turn: turnNo, sub_calls_used: subCalls },
     });
     if (!turn.ok) {
-      return { denied: turn.denial, subCalls, totalCostUsd: totalCost, hops, primaryTurn: turnNo };
+      return { denied: turn.denial, subCalls, totalCostUsd: totalCost, totalUsage, hops, primaryTurn: turnNo };
     }
     totalCost += turn.cost?.usd || 0;
+    addUsage(turn.usage);
     last = turn.openaiResponse;
     hops.push({ kind: 'primary', turn: turnNo, provider: turn.route.provider, model: turn.route.model, cost_usd: turn.cost?.usd || 0 });
 
@@ -211,7 +225,7 @@ export async function runBridge(ctx, { requestId, project, repoId, repoRoot, ope
     // Done when the model produced no bridge call (it either finished, or emitted only client
     // tool_calls for the client to run), or when this was the forced bridge-free final turn.
     if (forcedFinal || bridgeCalls.length === 0) {
-      return { response: turn.openaiResponse, subCalls, totalCostUsd: totalCost, hops };
+      return { response: turn.openaiResponse, subCalls, totalCostUsd: totalCost, totalUsage, hops };
     }
 
     // Continue: append the assistant turn and answer EVERY tool_call_id (bridge + any client tool)
@@ -230,11 +244,12 @@ export async function runBridge(ctx, { requestId, project, repoId, repoRoot, ope
         nextMessages.push(toolResult(tc.id, delegateError(sub.error)));
       } else {
         totalCost += sub.cost?.usd || 0;
+        addUsage(sub.usage);
         hops.push({ kind: 'delegate', hop: subCalls, provider: sub.route.provider, model: sub.route.model, cost_usd: sub.cost?.usd || 0 });
         nextMessages.push(toolResult(tc.id, wrapDelegated({ provider: sub.route.provider, model: sub.route.model, hop: subCalls, text: sub.text, proposedToolCalls: sub.proposedToolCalls })));
       }
     }
     convo = { ...convo, messages: nextMessages };
   }
-  return { response: last, subCalls, totalCostUsd: totalCost, hops, exhausted: true };
+  return { response: last, subCalls, totalCostUsd: totalCost, totalUsage, hops, exhausted: true };
 }

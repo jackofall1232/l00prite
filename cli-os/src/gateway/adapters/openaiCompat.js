@@ -12,7 +12,10 @@ export function buildRequest({ model, openaiReq, stream }) {
     body.stream = true;
     body.stream_options = { ...(body.stream_options || {}), include_usage: true };
   } else {
+    // `stream_options` is only valid alongside `stream:true`; leaving it on a non-stream request
+    // makes strict providers (OpenAI) 400. Drop both.
     delete body.stream;
+    delete body.stream_options;
   }
   return body;
 }

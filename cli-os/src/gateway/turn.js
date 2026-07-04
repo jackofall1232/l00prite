@@ -60,7 +60,11 @@ export async function runTurn(ctx, opts) {
     ? memory.query({ repoRoot, requestDigest: digestFrom(openaiReq, paths), budgets: { contextTokens: cfg.memory.contextTokens, maxFileBytes: cfg.memory.maxFileBytes }, options: {} })
     : { status: doMemory ? 'empty' : 'skipped', blocks: [] };
   const maxOut = openaiReq.max_tokens || openaiReq.max_completion_tokens || cfg.defaultMaxTokens;
-  const finalReq = { ...injectMemory(openaiReq, mem), max_tokens: maxOut };
+  // runTurn is the NON-streaming primitive; never forward client transport flags. A bridge buffers
+  // a client's `stream:true`+`stream_options` request through here, and those fields on a
+  // non-stream upstream call are a 400 on strict providers.
+  const { stream: _s, stream_options: _so, ...cleanReq } = openaiReq;
+  const finalReq = { ...injectMemory(cleanReq, mem), max_tokens: maxOut };
 
   // Reserve THIS hop's ceiling (recomputed from this hop's actual request — never reuse an earlier
   // hop's ceiling). The reservation is the spend ceiling for exactly one upstream call.

@@ -58,6 +58,18 @@ for you or your client to execute.
   into SSE. No tool-call deltas from the internal loop reach the client.
 - **Answer every tool call.** Parallel tool calls are all serviced or answered with a structured
   result, so the next continuation is well-formed; the hop cap counts **sub-calls**, not turns.
+- **Delegate errors stay untrusted too.** A failed delegation returns only a status code — the raw
+  upstream error body (which can echo attacker-influenced input) is dropped, never laundered into
+  the primary's context as a gateway message.
+
+### Known limitation: mixed bridge + client tool calls in one turn
+
+If a primary turn emits **both** a bridge call and a *client-side* tool call, the gateway services
+the bridge call but cannot run the client tool (it doesn't have the client). It answers that call
+with a `not_executed` result instructing the model to **re-emit** the client tool call in its final
+message so the client can run it. A turn containing **only** client tool calls is returned to the
+client intact (standard OpenAI flow). Prefer not mixing a delegation with client tools in the same
+turn.
 
 ## Arming it
 

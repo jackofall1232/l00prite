@@ -142,3 +142,42 @@ test('no routing config -> auto is inert (model treated literally, no auto tier)
   const r = router.pick({ providers: PROVIDERS, aliases: {}, openaiReq: mk('auto:cheap') });
   assert.notEqual(r.decision.rule_id, 'auto_select');
 });
+
+// ---- regression tests for verified review findings ----
+
+test('auto:cheap refuses to route to an UNPRICED model (400 no_priced_model, no unmetered spend)', async () => {
+  cfgWith();
+  const { loadConfig } = await import('../src/config.js');
+  const router = await import('../src/gateway/router.js');
+  // zhipu only + a vision request => only glm-5v-turbo is capable, and it is unpriced (tier 2).
+  // The cost profile must refuse rather than pick an unpriceable model whose calls commit $0.
+  const req = { model: 'auto:cheap', messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,AA' } }] }] };
+  try {
+    router.pick({ providers: [{ name: 'zhipu', enabled: 1, is_default: 1 }], aliases: {}, openaiReq: req, cfg: loadConfig() });
+    assert.fail('should have refused');
+  } catch (e) {
+    assert.equal(e.status, 400);
+    assert.equal(e.code, 'no_priced_model');
+  }
+});
+
+test('capability filter rejects a model whose max_output is below the requested max_tokens', async () => {
+  cfgWith();
+  const { loadConfig } = await import('../src/config.js');
+  const router = await import('../src/gateway/router.js');
+  // haiku max_output is 64000; sonnet/opus/fable are 128000. Requesting 100000 must drop haiku.
+  const r = router.pick({ providers: [{ name: 'anthropic', enabled: 1, is_default: 1 }], aliases: {}, openaiReq: { model: 'auto:cheap', max_tokens: 100000, messages: [{ role: 'user', content: 'hi' }] }, cfg: loadConfig() });
+  assert.notEqual(r.model, 'claude-haiku-4-5', 'haiku cannot emit 100000 output tokens');
+  assert.equal(r.model, 'claude-sonnet-5', 'cheapest of the 128k-output models');
+  assert.ok(r.decision.rejected.some((x) => x.target === 'anthropic/claude-haiku-4-5' && /max_output/.test(x.reasons.join(''))));
+});
+
+test('a base64 image is not counted as prompt text (no context inflation)', async () => {
+  cfgWith();
+  const { deriveRequirements } = await import('../src/gateway/router-auto.js');
+  const bigB64 = 'A'.repeat(200000); // a ~200k-char data URI
+  const req = { messages: [{ role: 'user', content: [{ type: 'text', text: 'what is this' }, { type: 'image_url', image_url: { url: `data:image/png;base64,${bigB64}` } }] }] };
+  const r = deriveRequirements(req, 4096);
+  // Old behavior counted ~200000/3.5 ≈ 57000 prompt tokens; text-only + per-image constant is tiny.
+  assert.ok(r.promptTokens < 4000, `image bytes must not inflate promptTokens, got ${r.promptTokens}`);
+});

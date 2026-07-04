@@ -42,7 +42,13 @@ export function reserve(db, { project, amountUsd, defaultCap }) {
   });
 }
 
-// Reconcile a reservation with the real cost.
+// Reconcile a reservation with the real cost. NOTE: this is admission control, not a hard
+// post-hoc ceiling — reserve() gates on the pre-flight ESTIMATE (reservationCeiling), and commit()
+// records the provider-reported ACTUAL, which can exceed the estimate (e.g. dense CJK/code that the
+// chars/3.5 heuristic under-counts, or cache-write tokens the ceiling omits). Overshoot is bounded
+// to a single call's estimation error (the next reserve sees the inflated committed total and
+// denies), but a request already in flight is never killed mid-call. Tightening this to a true hard
+// cap requires a conservative worst-case ceiling; tracked as a follow-up.
 export function commit(db, reservationId, actualUsd) {
   return tx(db, () => {
     const r = db.prepare(`SELECT * FROM reservations WHERE id = ?`).get(reservationId);

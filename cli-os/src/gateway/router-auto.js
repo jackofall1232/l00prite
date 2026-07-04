@@ -16,7 +16,27 @@ import { isTripped, httpError } from './router.js';
 import { estimateTokensFromChars } from '../util.js';
 
 const NEUTRAL_QUALITY = 50; // rank for a model the operator hasn't ranked
+const IMAGE_TOKENS = 1600;  // coarse fixed token cost per image part (real vision tokenization is
+                            // nowhere near chars/3.5 of the base64 — counting the bytes as text
+                            // inflates the estimate by orders of magnitude and misroutes)
 const key = (c) => `${c.provider}/${c.model}`;
+
+// Estimate prompt tokens from TEXT only, plus a fixed cost per image — never the base64 bytes.
+function estimatePromptTokens(messages) {
+  let chars = 0, images = 0;
+  for (const m of messages) {
+    if (typeof m.content === 'string') chars += m.content.length;
+    else if (Array.isArray(m.content)) {
+      for (const part of m.content) {
+        if (part?.type === 'text') chars += (part.text || '').length;
+        else if (part?.type === 'image_url') images += 1;
+        else chars += JSON.stringify(part ?? '').length;
+      }
+    }
+    if (Array.isArray(m.tool_calls)) chars += JSON.stringify(m.tool_calls).length;
+  }
+  return estimateTokensFromChars(chars) + images * IMAGE_TOKENS;
+}
 
 // ---- requirements (deterministic projection of the request) ----
 export function deriveRequirements(openaiReq, defaultMaxTokens = 1024) {
@@ -26,7 +46,7 @@ export function deriveRequirements(openaiReq, defaultMaxTokens = 1024) {
     && m.content.some((part) => part && part.type === 'image_url'));
   const needs_streaming_usage = openaiReq.stream === true && !!openaiReq.stream_options?.include_usage;
   const maxOut = openaiReq.max_tokens || openaiReq.max_completion_tokens || defaultMaxTokens;
-  const promptTokens = estimateTokensFromChars(JSON.stringify(messages).length);
+  const promptTokens = estimatePromptTokens(messages);
   const min_context_tokens = promptTokens + maxOut;
   return { needs_tools, needs_vision, needs_streaming_usage, min_context_tokens, promptTokens, maxOut };
 }
@@ -74,6 +94,12 @@ function filterByCapability(cand, req, profile) {
       }
     } else {
       context_unverified = true; // undeclared context: pass, but flag it
+    }
+    // Requested output must fit the model's max_output (a declared number; null = unverified,
+    // passes). Anthropic hard-rejects max_tokens above the per-model limit, and that failed call
+    // would also trip the provider's circuit breaker for the models that COULD have served it.
+    if (typeof c.maxOutput === 'number' && c.maxOutput < req.maxOut) {
+      reasons.push(`needs ${req.maxOut} output tokens; model max_output is ${c.maxOutput}`);
     }
     if (reasons.length) rejected.push({ target: key(c), reasons });
     else capable.push({ ...c, context_unverified });
@@ -156,7 +182,22 @@ export function selectAuto({ providers, routing, openaiReq, signal, defaultMaxTo
     throw e;
   }
 
-  const scored = scoreCandidates(healthy, { preference: profile.preference, req, qualityRanks: routing.qualityRanks });
+  // The `cost` preference must never route to an UNPRICED (tier-2) model: its cost can't be
+  // computed, so it can't honestly be "cheapest", and it would commit $0 through the meter —
+  // unmetered spend that never binds the daily cap. Exclude tier-2 for cost; a priced-but-
+  // unconfirmed (tier-1) winner is allowed (it IS metered) and flagged in the reason.
+  let pool = healthy;
+  if (profile.preference === 'cost') {
+    pool = healthy.filter((c) => c.priceTier <= 1);
+    if (!pool.length) {
+      const e = httpError(400, `auto:${profile.name} needs a model with a known price, but none of the capable models are priced (${healthy.map(key).join(', ')}). Pin a model, add pricing to its manifest, or use auto:quality / auto:balanced.`, 'invalid_request_error');
+      e.code = 'no_priced_model';
+      e.decision = { rule_id: 'auto_no_priced', profile: profile.name, requirements: req, unpriced: healthy.map(key) };
+      throw e;
+    }
+  }
+
+  const scored = scoreCandidates(pool, { preference: profile.preference, req, qualityRanks: routing.qualityRanks });
   const winner = scored[0];
   const decision = {
     rule_id: 'auto_select',

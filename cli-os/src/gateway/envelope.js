@@ -24,10 +24,17 @@ export function neutralizeClosers(text, tagNames) {
   return out;
 }
 
+// Attribute values are untrusted too (e.g. a delegated response's `model` can echo an
+// attacker-influenced pinned model id). Fully entity-escape them so a value can never carry a live
+// `></tag>` that would close the wrapper's own opening tag early. Escape `&` first.
+function escapeAttr(v) {
+  return String(v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 function attrString(attrs) {
   return Object.entries(attrs)
     .filter(([, v]) => v != null)
-    .map(([k, v]) => ` ${k}="${String(v).replace(/"/g, '&quot;')}"`)
+    .map(([k, v]) => ` ${k}="${escapeAttr(v)}"`)
     .join('');
 }
 

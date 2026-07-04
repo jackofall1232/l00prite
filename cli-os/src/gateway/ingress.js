@@ -14,7 +14,7 @@ import * as meter from './meter.js';
 import * as memory from '../memory/memory.js';
 import { injectMemory } from './inject.js';
 import { adapterFor, modelsFor } from './adapters/registry.js';
-import { cmplId, openaiChunk } from './adapters/base.js';
+import { cmplId, openaiChunk, created } from './adapters/base.js';
 import * as ledger from '../ledger/ledger.js';
 import { rid } from '../util.js';
 import { providerFetch, parseSSE, sleep, isRetryable } from './upstream.js';
@@ -132,7 +132,7 @@ async function streamResponse(res, adapter, { provider, model, openaiReq, apiKey
 // Synthesize a client-facing SSE stream from an already-complete (buffered) response. Used by the
 // bridge path when the client asked for streaming: intermediate delegation turns are NEVER leaked;
 // only the final answer is streamed.
-function synthesizeStream(res, finalResponse) {
+function synthesizeStream(res, finalResponse, { includeUsage = false, usage = null } = {}) {
   res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-transform', connection: 'keep-alive' });
   const choice = finalResponse.choices?.[0] || {};
   const msg = choice.message || {};
@@ -145,6 +145,13 @@ function synthesizeStream(res, finalResponse) {
     msg.tool_calls.forEach((tc, i) => write(openaiChunk({ id, model, delta: { tool_calls: [{ index: i, id: tc.id, type: 'function', function: { name: tc.function?.name, arguments: tc.function?.arguments || '' } }] } })));
   }
   write(openaiChunk({ id, model, delta: {}, finishReason: choice.finish_reason || 'stop' }));
+  // Honor stream_options.include_usage: OpenAI emits a final chunk with empty choices carrying the
+  // aggregate usage (summed across every bridge hop) before [DONE].
+  if (includeUsage && usage) {
+    const u = { prompt_tokens: usage.prompt_tokens || 0, completion_tokens: usage.completion_tokens || 0, total_tokens: (usage.prompt_tokens || 0) + (usage.completion_tokens || 0) };
+    if (usage.cache_read_tokens) u.prompt_tokens_details = { cached_tokens: usage.cache_read_tokens };
+    write({ id, object: 'chat.completion.chunk', created: created(), model, choices: [], usage: u });
+  }
   res.write('data: [DONE]\n\n'); res.end();
 }
 
@@ -210,7 +217,7 @@ export async function handleChatCompletion(ctx, req, res) {
     const maxHops = bridgeMaxHops(req.headers, cfg);
     let result;
     try {
-      result = await runBridge(ctx, { requestId, project, repoId, repoRoot, openaiReq, routeHeader, clientSignal, maxHops });
+      result = await runBridge(ctx, { requestId, project, repoId, repoRoot, openaiReq, routeHeader, clientSignal, maxHops, paths });
     } catch (e) {
       logRouteError(ctx, { requestId, project, repoId, e });
       return oaiError(res, e.status || 502, e.message || 'Bridge error', e.type || 'upstream_error', e.code);
@@ -226,7 +233,7 @@ export async function handleChatCompletion(ctx, req, res) {
     res.setHeader('x-l00prite-cost-usd', result.totalCostUsd.toFixed(6));
     const primary = result.hops.find((h) => h.kind === 'primary');
     if (primary) res.setHeader('x-l00prite-provider', primary.provider);
-    if (stream) return synthesizeStream(res, result.response);
+    if (stream) return synthesizeStream(res, result.response, { includeUsage: !!openaiReq.stream_options?.include_usage, usage: result.totalUsage });
     return sendJson(res, 200, result.response);
   }
 

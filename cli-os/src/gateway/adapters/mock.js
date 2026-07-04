@@ -24,6 +24,12 @@ function hasBridgeTool(openaiReq) {
 function hasToolResult(openaiReq) {
   return (openaiReq.messages || []).some((m) => m.role === 'tool');
 }
+// A bridge finalization only applies when a prior ASSISTANT turn actually called the bridge tool.
+// (On the forced-final turn the bridge tool is stripped from the request, but that prior assistant
+// tool_call remains — so we check the message history, not the current tools array.)
+function hadBridgeCall(openaiReq) {
+  return (openaiReq.messages || []).some((m) => m.role === 'assistant' && (m.tool_calls || []).some((tc) => tc.function?.name === BRIDGE_TOOL_NAME));
+}
 function bridgeDirective(openaiReq) {
   const m = /^\/(bridge|bridgeloop)\s+(\S+)\s*::\s*([\s\S]+)$/.exec(lastUserText(openaiReq).trim());
   return m ? { loop: m[1] === 'bridgeloop', target: m[2], task: m[3].trim() } : null;
@@ -57,8 +63,9 @@ export function directFull(openaiReq, model) {
     return { openaiResponse: openaiResponse({ id: cmplId(), model, message, finishReason: 'tool_calls', usage: u }), usage: u };
   }
 
-  // Finalization turn: incorporate whatever delegate result(s) came back.
-  if (hasToolResult(openaiReq)) {
+  // Finalization turn: incorporate whatever delegate result(s) came back — but ONLY when this
+  // conversation actually went through a bridge delegation (not a plain client-side tool loop).
+  if (hasToolResult(openaiReq) && hadBridgeCall(openaiReq)) {
     const toolMsg = [...(openaiReq.messages || [])].reverse().find((m) => m.role === 'tool');
     const excerpt = String(toolMsg?.content || '').replace(/\s+/g, ' ').slice(0, 120);
     const text = `Mock final answer, composed after delegating. Delegate said: ${excerpt}`;

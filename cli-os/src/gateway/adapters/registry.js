@@ -94,6 +94,12 @@ export function contextFor(providerName, model) {
   return typeof c === 'number' ? c : null;
 }
 
+// Declared max output tokens, or null when unverified (same posture as context).
+export function maxOutputFor(providerName, model) {
+  const c = modelRow(providerName, model)?.max_output;
+  return typeof c === 'number' ? c : null;
+}
+
 // Price confidence tier for ranking. 0 = priced and first-party-confident, 1 = priced but the
 // number is third-party/unconfirmed, 2 = unpriced. The cost preference must sort tier-2 last so a
 // $0 "unknown price" can never masquerade as the cheapest option (meter.js keeps the same honesty
@@ -115,6 +121,7 @@ export function catalog(providerNames) {
         model,
         capabilities: capabilitiesFor(name, model),
         context: contextFor(name, model),
+        maxOutput: maxOutputFor(name, model),
         price: priceFor(name, model),
         priceTier: priceTierFor(name, model),
       });

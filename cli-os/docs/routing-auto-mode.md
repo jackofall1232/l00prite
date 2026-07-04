@@ -29,10 +29,12 @@ A bare `auto` uses the configured default profile (`routing.autoDefaultProfile`,
    - `needs_streaming_usage` — `stream:true` + `stream_options.include_usage`.
    - `min_context_tokens` — a coarse estimate of prompt + requested max output.
 2. **Capability filter (Rule 3)** — drop any `(provider, model)` whose manifest can't serve the
-   requirements. Absent boolean capabilities read as **false** (fail-closed — manifests declare
-   capabilities explicitly). A model with an **undeclared** (`null`) context window **passes** with
-   a `context_unverified` caveat rather than being banned on missing data. If nothing survives →
-   a typed error, never a silent downgrade (see **Errors**).
+   requirements: tools, vision, streaming-usage, a `min_context_tokens` that exceeds the model's
+   window, or a requested `max_tokens` above the model's `max_output`. Absent boolean capabilities
+   read as **false** (fail-closed). A model with an **undeclared** (`null`) context/max-output
+   **passes** with a caveat rather than being banned on missing data. `min_context_tokens` is
+   estimated from **text only** plus a fixed per-image constant — base64 image bytes are never
+   counted as prompt text. If nothing survives → a typed error, never a silent downgrade.
 3. **Preference scoring (Rule 4)** — order survivors by the profile's preference:
    - `cost` — cheapest by a blended estimate `prompt_tokens·input + max_out·output` from the
      manifest price map.
@@ -51,10 +53,13 @@ Cost sorting keys on the tuple **`(price_tier, blended_usd, name)`** where the t
 | 1 | priced but the number is third-party/unconfirmed |
 | 2 | unpriced (`price_per_mtok` null) |
 
-Tier leads the sort, so a tier-2 model (whose blended cost would compute to `$0`) or a tier-1 model
-(a cheaper-but-unconfirmed number) can **never** masquerade as the cheapest option and vacuum up
-traffic. `auto:cheap` picks the cheapest **confirmed** price first; it only reaches an unconfirmed
-model when no confirmed one qualifies, and the decision reason says so.
+Tier leads the sort, so a tier-1 model (a cheaper-but-unconfirmed number) can **never** masquerade
+as cheaper than a confirmed one. Additionally, the **`cost` preference excludes tier-2 (unpriced)
+models entirely** — an unpriceable model can't honestly be "cheapest" and would commit `$0` through
+the meter (unmetered spend that never binds the daily cap). If no priced model can serve the
+request, `auto:cheap` returns `400 no_priced_model` rather than route blind on price. `auto:cheap`
+picks the cheapest **confirmed** price first; it reaches an unconfirmed (tier-1) model only when no
+confirmed one qualifies, and the decision reason says so.
 
 ## Profiles (data, not code)
 
@@ -88,6 +93,7 @@ does the per-task work.
 
 - **No capable model** → `400` `no_capable_model` (deterministic — retrying elsewhere is futile),
   with a per-candidate rejection list (`"zhipu/glm-5.2: needs vision; model is not multimodal"`).
+- **`auto:cheap` but no capable model is priced** → `400` `no_priced_model`.
 - **Capable models exist but all are circuit-tripped** → `503` `service_unavailable` (transient).
 - **Unknown profile** → `400`.
 
