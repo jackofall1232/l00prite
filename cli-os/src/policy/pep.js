@@ -66,6 +66,25 @@ export function refund(db, reservationId) {
   });
 }
 
+// Reap orphaned reservations. A handler that crashes between reserve() and commit()/refund()
+// strands a `reserved` row, which counts against the daily cap until the UTC-day rollover. A
+// multi-hop bridge request multiplies that exposure (N reservations per request), so recovery must
+// not wait for restart alone. Refund any reservation still `reserved` after maxAgeMs — far longer
+// than a legitimate call (retry.maxAttempts * requestTimeoutMs) so an in-flight request is never
+// reaped out from under itself. Returns the count reclaimed.
+export function reapStaleReservations(db, maxAgeMs) {
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  return tx(db, () => {
+    const stale = db.prepare(`SELECT * FROM reservations WHERE state = 'reserved' AND created_at < ?`).all(cutoff);
+    for (const r of stale) {
+      db.prepare(`UPDATE spend SET reserved_usd = MAX(0, reserved_usd - ?) WHERE project = ? AND day = ?`)
+        .run(r.amount_usd, r.project, r.day);
+      db.prepare(`UPDATE reservations SET state = 'refunded' WHERE id = ?`).run(r.id);
+    }
+    return stale.length;
+  });
+}
+
 export function getSpend(db, project, defaultCap) {
   const day = utcDay();
   const s = spendRow(db, project, day);

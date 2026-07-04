@@ -23,7 +23,49 @@ const DEFAULTS = {
   retry: { maxAttempts: 3, baseMs: 250, maxMs: 4000 },
   memory: { latencyMs: 150, contextTokens: 8000, maxFileBytes: 262144 },
   requestTimeoutMs: 120000,
+  // Routing OPINIONS (facts — capabilities, prices, context — live in the provider manifests).
+  // All fields here are operator-editable via config.json's `routing` block; these are only
+  // sensible defaults so the auto-router works zero-config. See docs/routing-auto-mode.md.
+  routing: {
+    autoDefaultProfile: 'balanced', // profile used for a bare `auto` with no `:profile` suffix
+    // Built-in task/preference profiles. `preference` is one of cost | quality | balanced.
+    // `require` (optional) forces capabilities regardless of what the request implies. Operators
+    // add their own profiles here (e.g. { vision: { require: ['vision'], preference: 'quality' } }).
+    profiles: {
+      cheap: { preference: 'cost' }, // "most efficient" mode: cheapest sufficient model
+      quality: { preference: 'quality' }, // best model for the task by operator rank
+      balanced: { preference: 'balanced' }, // blend of cost and quality
+    },
+    // Operator-assigned static quality rank per `provider/model` (0-100, higher = better). This is
+    // the explainable "quality" signal — NO inference/ML (see routing-rules-v1.md Q2). Ships with
+    // defaults; override per install. Unranked models get a neutral default at scoring time.
+    qualityRanks: {
+      'anthropic/claude-opus-4-8': 96,
+      'anthropic/claude-fable-5': 93,
+      'anthropic/claude-sonnet-5': 88,
+      'anthropic/claude-haiku-4-5': 74,
+      'zhipu/glm-5.2': 82,
+      'zhipu/glm-5.1': 78,
+      'zhipu/glm-5v-turbo': 70,
+    },
+    // Cross-provider bridging is OFF by default (safe-by-default: no silent cross-provider spend).
+    // maxHops is the hard cap on delegated sub-calls per request; a request header may only LOWER
+    // it, never raise it (self-modification guard, mirroring Execution Mode).
+    bridge: { enabled: false, maxHops: 3 },
+  },
 };
+
+// Facts vs opinions: deep-merge the `routing` block so a config.json override tweaks individual
+// profiles / ranks instead of wholesale-replacing the defaults (a shallow spread would drop every
+// built-in the moment an operator sets one field).
+function mergeRouting(base, override = {}) {
+  return {
+    autoDefaultProfile: override.autoDefaultProfile || base.autoDefaultProfile,
+    profiles: { ...base.profiles, ...(override.profiles || {}) },
+    qualityRanks: { ...base.qualityRanks, ...(override.qualityRanks || {}) },
+    bridge: { ...base.bridge, ...(override.bridge || {}) },
+  };
+}
 
 function finiteOr(v, fallback) {
   const n = Number(v);
@@ -62,6 +104,13 @@ export function loadConfig() {
   if (process.env.LOOPRITE_TLS_CERT && process.env.LOOPRITE_TLS_KEY) {
     cfg.tls = { certPath: process.env.LOOPRITE_TLS_CERT, keyPath: process.env.LOOPRITE_TLS_KEY };
   }
+  // Deep-merge routing opinions, then apply env overrides for the operational bridge switches.
+  cfg.routing = mergeRouting(DEFAULTS.routing, fileCfg.routing);
+  if (process.env.LOOPRITE_BRIDGE_ENABLED != null) {
+    cfg.routing.bridge.enabled = process.env.LOOPRITE_BRIDGE_ENABLED === '1';
+  }
+  const envHops = Number(process.env.LOOPRITE_BRIDGE_MAX_HOPS);
+  if (Number.isFinite(envHops) && envHops >= 0) cfg.routing.bridge.maxHops = Math.floor(envHops);
   return cfg;
 }
 

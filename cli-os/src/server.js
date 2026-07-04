@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, validateForServe } from './config.js';
 import { openDb } from './state/db.js';
+import { reapStaleReservations } from './policy/pep.js';
 import { handleChatCompletion, handleModels, handleHealth } from './gateway/ingress.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -55,6 +56,10 @@ export function startServer(overrides = {}) {
     process.exit(1);
   }
   const db = openDb(cfg.dbPath);
+  // Recover any reservations stranded by a crash (a bridge request fans into several, multiplying
+  // the exposure). Refund anything left `reserved` far longer than a legitimate call could run.
+  const staleAfterMs = Math.max(10 * 60_000, cfg.retry.maxAttempts * cfg.requestTimeoutMs + 60_000);
+  try { const n = reapStaleReservations(db, staleAfterMs); if (n) console.log(`  • reaped ${n} stale reservation(s)`); } catch { /* non-fatal */ }
   const ctx = { db, cfg, aliases: cfg.aliases || {} };
   const server = buildServer(ctx);
   server.listen(cfg.port, cfg.host, () => {
