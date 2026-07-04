@@ -1,0 +1,22 @@
+{
+  "name": "l00prite-cli-os",
+  "version": "1.0.0",
+  "description": "Self-hostable control plane for AI coding: OpenAI-compatible gateway across multiple LLM providers with repo-aware memory, real cost tracking, explainable routing, and enforced safety limits.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "l00prite": "bin/cli.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning bin/cli.js serve",
+    "serve": "node --no-warnings=ExperimentalWarning bin/cli.js serve",
+    "cli": "node --no-warnings=ExperimentalWarning bin/cli.js",
+    "test": "node --no-warnings=ExperimentalWarning --test test/*.test.js"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "keywords": ["llm", "gateway", "openai-compatible", "ai-coding", "self-hosted", "l00prite"]
+}
