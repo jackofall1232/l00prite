@@ -105,7 +105,7 @@ func mockReply(req map[string]any) string {
 		q = "your request"
 	}
 	return `Mock provider response. I received "` + truncate(q, 120) + `". ` +
-		`This is the l00prite CLI-OS demo upstream — configure a real provider key to route to Anthropic, OpenAI, GLM, and others.`
+		`This is the l00prite CLI-OS mock upstream (offline testing) — configure a real provider key to route to Anthropic, OpenAI, GLM, and others.`
 }
 
 func mockUsage(promptChars int, text string) oai.Usage {

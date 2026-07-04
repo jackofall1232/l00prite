@@ -17,26 +17,27 @@ CGO_ENABLED=0 go build -ldflags='-s -w' -o ./l00prite ./cmd/l00prite
 
 cat <<'EOF'
 
-Installed ./l00prite. Next steps:
+Installed ./l00prite. One step left:
 
-  # 1) Add a provider key (or the zero-key demo upstream)
-  ./l00prite provider add mock --adapter mock --default
-  # real example:
-  #   ./l00prite provider add anthropic --key sk-ant-... --default
-  #   ./l00prite provider add openai    --key sk-...     --adapter openai-compat
-
-  # 2) (optional) Register a repo so its .l00prite/ memory is injected
-  ./l00prite repo register myrepo --root /path/to/repo --project default
-
-  # 3) Mint a gateway token for your coding tool (shown once)
-  ./l00prite token mint --project default --repo myrepo
-
-  # 4) Start the server (endpoint + dashboard on http://127.0.0.1:8787)
   ./l00prite serve
 
-  # 5) Point your tool at it, e.g. Codex/Aider/OpenAI SDK:
-  #   OPENAI_BASE_URL=http://127.0.0.1:8787/v1
-  #   OPENAI_API_KEY=<the l00prite token>
+then open  http://127.0.0.1:8787/  in your browser. The first-run wizard walks you
+through adding a provider (your API key is validated with a real call, then stored
+encrypted) and minting the gateway token your coding tools will use. After setup the
+same URL is the dashboard: add providers, register repos, and prompt your models
+from the Playground — no terminal needed.
+
+Prefer to stay in the terminal? The CLI does everything the wizard does:
+
+  ./l00prite provider add anthropic --key sk-ant-... --default
+  ./l00prite provider add openai    --key sk-...     --adapter openai-compat
+  ./l00prite repo register myrepo --root /path/to/repo   # optional: inject .l00prite memory
+  ./l00prite token mint --project default
+  ./l00prite serve
+
+Point any OpenAI-compatible tool (Claude Code, Codex, Aider, an SDK) at it:
+  OPENAI_BASE_URL=http://127.0.0.1:8787/v1
+  OPENAI_API_KEY=<the l00prite token>
 
 Optionally put the binary on your PATH:
   sudo install -m 0755 ./l00prite /usr/local/bin/l00prite
