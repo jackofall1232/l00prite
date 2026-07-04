@@ -25,6 +25,9 @@
     "max_iterations": 25,
     "current_iteration": 0,
     "last_run_boundary": null,
+    "iterations_since_progress": 0,
+    "last_progress_iteration": null,
+    "no_progress_threshold": 3,
     "run_boundaries": [
       "definition_of_done_met",
       "iteration_limit_reached",

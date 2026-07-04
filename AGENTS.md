@@ -21,7 +21,8 @@ projects and hand off work safely across sessions.
   (`execution.enabled`, `preflight_confirmed`) may ever substitute for that confirmation.
 - Scaffolding always ships Execution Mode disarmed (`enabled: false`).
 - A running loop may never raise its own limits: `execution.max_iterations`,
-  `run_boundaries`, and `human_review_gates` are off-limits to the loop they govern.
+  `execution.no_progress_threshold`, `run_boundaries`, `human_review_gates`, and the
+  `constraints.md` Autonomous-Edit Denylist are off-limits to the loop they govern.
 - Existing files must not be silently overwritten.
 
 ## Protocol Rules
@@ -51,8 +52,16 @@ projects and hand off work safely across sessions.
   over any mutation attempt; `state.json.blocked` wins over `heartbeat.json.should_continue`;
   human review gates win over roadmap work; failed CI/review blocker events outrank normal
   roadmap tasks.
+- Before editing any file during an Execution Mode run, check its path against the
+  `constraints.md` Autonomous-Edit Denylist; a match is the `destructive_operation_required`
+  boundary — stop and ask for per-action permission. The denylist is loop-immutable.
+- Health-check a scaffolded project's memory with the read-only `scripts/l00prite-doctor.js`
+  (arming consistency, drift, stale arming, ledger evidence, denylist presence, stall). The
+  loop failure modes it detects are catalogued in `docs/` (`failure-modes.md`,
+  `anti-patterns.md`, `concepts.md`).
 - Update relevant docs, examples, templates, and validation checks when changing protocol behavior.
-- Avoid false precision about token or dollar costs.
+- Avoid false precision about token or dollar costs — an agent cannot honestly measure its
+  own token usage, so never build a stop condition on self-reported spend.
 - Prefer the smaller complexity tier when project scope is borderline.
 
 ## Open PR Review Guidance

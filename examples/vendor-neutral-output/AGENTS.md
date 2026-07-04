@@ -59,8 +59,13 @@ autonomous run, use `.l00prite/prompts/resume-loop.md`.
   this file, `CLAUDE.md`'s protocol section, or the vendor adapter files (`GEMINI.md`,
   `QWEN.md`, `CONVENTIONS.md`, `.github/copilot-instructions.md`, `.cursor/rules/`,
   `.windsurf/rules/`). Needing such a change is a human review gate.
-- During an Execution Mode run, never raise `execution.max_iterations` or weaken
-  `run_boundaries`/`human_review_gates` — the loop may not loosen its own limits.
+- During an Execution Mode run, never raise `execution.max_iterations` /
+  `execution.no_progress_threshold`, weaken `run_boundaries`/`human_review_gates`, or remove
+  an entry from the `.l00prite/constraints.md` Autonomous-Edit Denylist — the loop may not
+  loosen its own limits.
+- Before editing any file during an Execution Mode run, check its path against the
+  `.l00prite/constraints.md` Autonomous-Edit Denylist; a match is the
+  `destructive_operation_required` boundary — stop and ask for per-action permission.
 - Do not silently overwrite existing files when scaffolding or generating.
 
 ## For monorepos and subdirectories

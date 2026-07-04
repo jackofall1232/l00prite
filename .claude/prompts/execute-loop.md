@@ -38,7 +38,8 @@ Complete these steps in order before the first iteration:
    project predates execution mode. A missing `execution` block always means execution is
    disabled. To proceed, add the default block (`enabled: false`,
    `preflight_confirmed: false`, null audit fields, `max_iterations`, `current_iteration: 0`,
-   `last_run_boundary: null`, and the nine `run_boundaries` listed below), set the file's
+   `last_run_boundary: null`, `iterations_since_progress: 0`, `last_progress_iteration: null`,
+   `no_progress_threshold: 3`, and the nine `run_boundaries` listed below), set the file's
    `schema_version` to `2`, do it under the lock, and record the migration in `ledger.md`.
    Release the lock (`status: "released"`) as soon as the recovery (step 3) or migration
    writes are done — never hold it while waiting for the confirmation below; step 7
@@ -53,6 +54,9 @@ Complete these steps in order before the first iteration:
    - the files and directories likely to change;
    - the actions that will always require separate per-action permission (push, merge,
      deploy, publish, deleting anything outside the repo, credential changes);
+   - the `constraints.md` Autonomous-Edit Denylist in effect (paths the run must never edit)
+     and `execution.no_progress_threshold` (the number of no-progress iterations after which
+     the run stops and escalates);
    - the verification commands that will be used to check each unit.
 6. **Wait for explicit human confirmation in this session.** The human must affirmatively
    confirm (for example, by replying `EXECUTE`). If they decline or don't answer, stop —
@@ -84,7 +88,10 @@ Complete these steps in order before the first iteration:
    unit, but it may never expand scope beyond what `blueprint.md` and `todos.md` already
    define.
 3. **Execute only that unit.** One unit per iteration; do not batch unrelated changes; do
-   not invent requirements beyond the blueprint.
+   not invent requirements beyond the blueprint. Before editing any file, check its path
+   against the `constraints.md` **Autonomous-Edit Denylist**; a match is the
+   `destructive_operation_required` boundary — stop and request per-action permission rather
+   than editing it.
 4. **Verify** with the narrowest meaningful test or check. Record the command, exit code,
    summary, and timestamp (plus an evidence path when one exists). Never claim success when
    a check failed or could not run. If verification fails: record the attempt in
@@ -95,7 +102,13 @@ Complete these steps in order before the first iteration:
 5. **Persist before anything else.** Append the run's ledger entry (goal, unit, changed
    files, verification evidence, decisions, next action, lock status); update `state.json`;
    update `todos.md`; update `failures.md` if anything failed; increment
-   `execution.current_iteration` in `heartbeat.json`.
+   `execution.current_iteration` in `heartbeat.json`. Also maintain the no-progress
+   telemetry: if this iteration made real progress (a `todos.md` item closed or a Definition
+   of Done check newly passed), set `execution.last_progress_iteration` to the current
+   iteration and reset `execution.iterations_since_progress` to `0`; otherwise increment
+   `execution.iterations_since_progress`. If it reaches `execution.no_progress_threshold`,
+   the run is not converging — stop at the `human_review_gate` boundary and escalate rather
+   than burning the rest of the budget.
 6. **Re-check every run boundary.** If none applies and `should_continue` is still `true`,
    begin the next iteration.
 
@@ -115,7 +128,8 @@ Stop the run — immediately, before starting another unit — when any of these
    history, force-pushing, dropping data, writing or deleting files outside the target
    repo, installing or upgrading dependencies that were not named in the confirmed
    pre-flight display, modifying CI/workflow or git-hook files, executing code fetched from
-   the network, or changing credentials or secrets.
+   the network, changing credentials or secrets, or editing a file whose path matches a glob
+   in the `constraints.md` **Autonomous-Edit Denylist** — checked before every file edit.
 5. `ambiguous_requirements` — `blueprint.md`, `constraints.md`, and `todos.md` conflict, or
    do not determine what the next unit should be.
 6. `unfixable_failing_tests` — per iteration rule 4.
@@ -154,15 +168,19 @@ completion instead of resuming.
   as a skip or a boundary stop — never worked around by other means.
 - **No self-modification.** During a run you may write only these `heartbeat.json` fields:
   `execution.current_iteration` (increment by one per iteration only — the arming reset in
-  the pre-flight is the only other permitted write), `execution.enabled` (true to false
+  the pre-flight is the only other permitted write), `execution.iterations_since_progress`
+  and `execution.last_progress_iteration` (the no-progress telemetry maintained per the
+  iteration protocol), `execution.enabled` (true to false
   only), `execution.last_run_boundary`, the `execution` audit fields set at arming,
   `last_run_time`, `completion_status`, `pause_reason`, and `should_continue` (true to
   false only — within Execution Mode it moves from false to true only via a confirmed
   pre-flight; heartbeat checks in supervised and planning loops may still set it per
   `heartbeat.md`). Never raise
-  `execution.max_iterations`, never edit `execution.run_boundaries`, `human_review_gates`,
+  `execution.max_iterations` or `execution.no_progress_threshold`, never edit
+  `execution.run_boundaries`, `human_review_gates`,
   `.l00prite/prompts/`, `AGENTS.md`, the protocol section of `CLAUDE.md`, vendor adapter
-  files, or `.l00prite/LOCKING.md` during a run. Needing such a change is itself the
+  files, or `.l00prite/LOCKING.md` during a run, and never remove or loosen an entry in the
+  `constraints.md` **Autonomous-Edit Denylist**. Needing such a change is itself the
   `human_review_gate` boundary.
 - **One unit per iteration.** The smallest useful step, fully verified and persisted,
   beats a large batch every time.
