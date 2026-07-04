@@ -29,6 +29,11 @@
 **An operating system for autonomous software engineering — persistent loop memory and a
 deterministic execution protocol for AI coding agents.**
 
+> **🚀 New here? Start with [GETTING_STARTED.md](GETTING_STARTED.md).** Three commands get you a
+> running gateway with a browser setup wizard, a dashboard, and a Playground to prompt your
+> models — `cd cli-os && ./install/install.sh && ./l00prite serve`, then open
+> <http://127.0.0.1:8787/>. The rest of this README describes the agent-memory protocol.
+
 ## What is l00prite?
 
 l00prite is a **vendor-neutral protocol that lets AI coding agents build software across
@@ -157,6 +162,8 @@ validator, so vendor parity can't silently drift.
 ## Repository layout
 
 ```text
+cli-os/                  The l00prite CLI-OS: self-hosted gateway server + dashboard + Playground
+                         (see GETTING_STARTED.md — start here if you're new)
 .claude/                 Claude Code slash commands (build-loop, execute-loop) and prompt mirrors
 .codex/                  Codex/CLI-agent prompt mirrors
 .l00prite/               This repo's own protocol instance (dogfooded)
@@ -323,7 +330,11 @@ The same prompts, no special tooling — paste into any session from
 
 ## Install / setup
 
-l00prite is not packaged as an installable CLI or extension yet. Setup today is manual:
+**The CLI-OS gateway** (a place to prompt models and point your coding tools at) installs in three
+commands — see [GETTING_STARTED.md](GETTING_STARTED.md): `cd cli-os && ./install/install.sh &&
+./l00prite serve`, then finish setup in the browser wizard at `http://127.0.0.1:8787/`.
+
+**The protocol side** is not packaged as an installable CLI or extension yet. Setup today is manual:
 
 1. Clone this repo.
 2. For Claude Code: run Claude Code from this repo directly, or copy `.claude/` into your
