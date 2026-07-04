@@ -18,6 +18,10 @@ server + CLI control surface + dashboard.
 > [`docs/node-to-go-port-notes.md`](docs/node-to-go-port-notes.md) for what is proven vs. what still
 > needs a networked validation pass (live-provider round-trips, OpenAI/GLM pricing confirmation).
 
+> **Setting up from scratch?** [`INSTALL.md`](INSTALL.md) is the full, verified end-to-end guide —
+> prerequisites → build → `init` → network binding → systemd service → the browser wizard → connecting a
+> coding tool → troubleshooting. The quickstarts below are the condensed version.
+
 ## Quickstart (browser — zero config)
 
 Install the binary and start it with no config at all — the dashboard becomes a first-run
