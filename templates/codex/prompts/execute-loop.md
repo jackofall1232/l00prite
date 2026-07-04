@@ -30,10 +30,15 @@ Complete these steps in order before the first iteration:
    pre-flight audit fields below. If `status` is `active`, unexpired, and owned by a
    different agent or session, report the lock (owner, purpose, expiry) as a blocker and
    stop. Write nothing. Full rules in `.l00prite/LOCKING.md`.
-3. **Recover a stale execution run.** If `state.json.execution_active` is `true` but no
-   active, unexpired lock belongs to that run, the previous run crashed or was interrupted:
-   treat the flag as stale, set `execution_active: false`, and record the reclamation in
-   `ledger.md` (under your own lock) before continuing.
+3. **Recover a stale execution run.** If `state.json.execution_active` is `true` **or**
+   `heartbeat.json.execution.enabled` is `true`, but no active, unexpired lock belongs to that
+   run, the previous run crashed or was interrupted. Treat the arming as stale and, under your
+   own lock, disarm **both** sides before continuing: set `state.json.execution_active: false`
+   and restore the disarmed heartbeat shape (`execution.enabled: false`,
+   `execution.preflight_confirmed: false`, `should_continue: false`). Record the reclamation in
+   `ledger.md`. Clearing both matters: the human may decline at step 6, and a lone
+   `execution.enabled: true` with no live lock would otherwise linger as stale arming that the
+   next pre-flight (which keys off `execution_active`) and `l00prite-doctor` would flag.
 4. **Migrate the schema if needed.** If `heartbeat.json` has no `execution` block, the
    project predates execution mode. A missing `execution` block always means execution is
    disabled. To proceed, add the default block (`enabled: false`,
@@ -41,8 +46,12 @@ Complete these steps in order before the first iteration:
    `last_run_boundary: null`, `iterations_since_progress: 0`, `last_progress_iteration: null`,
    `no_progress_threshold: 3`, and the nine `run_boundaries` listed below), set the file's
    `schema_version` to `2`, do it under the lock, and record the migration in `ledger.md`.
-   Release the lock (`status: "released"`) as soon as the recovery (step 3) or migration
-   writes are done — never hold it while waiting for the confirmation below; step 7
+   If the `execution` block already exists but is missing the no-progress telemetry fields
+   (`iterations_since_progress`, `last_progress_iteration`, `no_progress_threshold`) — a
+   project scaffolded before they were added — backfill just those fields with their defaults
+   (`0`, `null`, `3`) under the lock, so the pre-flight and persist steps never read an absent
+   setting. Release the lock (`status: "released"`) as soon as the recovery (step 3) or
+   migration writes are done — never hold it while waiting for the confirmation below; step 7
    re-acquires it for the confirmed run.
 5. **Display the pre-flight summary** in the session:
    - the goal of this run and the Definition of Done it is working toward;
@@ -68,9 +77,12 @@ Complete these steps in order before the first iteration:
      scheduled, or fire-and-forget agent) — you cannot satisfy this gate. Do not enter
      Execution Mode; record why in the session output and stop.
 7. **Arm the run.** Only after confirmation: acquire the lock (`purpose:
-   "execute-loop run"`), then set `execution.current_iteration: 0` (each confirmed run
-   gets a fresh iteration budget — this arming reset is the only non-increment write the
-   counter ever receives), `execution.enabled: true`,
+   "execute-loop run"`), then set `execution.current_iteration: 0` and reset the no-progress
+   telemetry (`execution.iterations_since_progress: 0`, `execution.last_progress_iteration:
+   null`) so each confirmed run gets a fresh iteration budget *and* a fresh stall counter —
+   these arming resets are the only non-increment writes those counters ever receive.
+   Otherwise a run that stopped at the no-progress threshold would start the next run already
+   at the threshold. Then set `execution.enabled: true`,
    `execution.preflight_confirmed: true`, `execution.preflight_confirmed_at` (now),
    `execution.preflight_confirmed_by` (who confirmed), `should_continue: true`, and
    `state.json.execution_active: true`. These fields describe **this** confirmed run only;

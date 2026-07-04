@@ -339,3 +339,43 @@ Append one entry per agent run. Do not overwrite prior runs.
   Do not add token-spend fields that pretend an agent can measure its own usage.
 - **Lock:** none acquired — single-agent session with no concurrent writer; `lock.json`
   remains `released`. Next multi-agent run should acquire before writing protected paths.
+
+### Run 2026-07-04T11:30:00Z — Claude (Opus 4.8), branch claude/l00prite-gaps-analysis-hbv4ej
+- **Goal:** Address the PR #16 review from gemini-code-assist, Copilot, and Codex — all
+  bot reviewers — without touching either review-gated file.
+- **Triggering event:** GitHub PR review events on #16 (webhook subscription).
+- **Reviewer/comment reference:** PR #16 review comments from gemini-code-assist[bot],
+  Copilot, and chatgpt-codex-connector[bot].
+- **Decision:** Valid findings, fixed. Evaluated each against the actual code; all were real
+  correctness/robustness gaps, well-scoped, aligned with the protocol's own principles.
+- **Completed work / Fix implemented:** Doctor hardening — reject non-object control JSON;
+  guard `events/pending` against being a file/unreadable (report, don't crash); validate
+  `lock.json` `acquired_at`/`expires_at` as ISO dates; surface `state.blocked`+`blocker_reason`
+  and any active unexpired (foreign) lock; ignore the ledger entry-template when checking
+  verification evidence (require a real `exit_code`/`evidence_path`, not the field label);
+  fail on missing loop-prompt files once a mirror dir exists; validate the denylist's fenced
+  block + critical patterns, not just its heading. Execute-loop protocol — stale-run recovery
+  now disarms *both* sides (state + heartbeat, incl. `should_continue`); the pre-flight
+  backfills no-progress telemetry into an existing older-v2 `execution` block; arming resets
+  the no-progress counters so each run starts fresh. Doc: corrected a `failure-modes.md`
+  claim about the doctor.
+- **Changed files:** `scripts/l00prite-doctor.js`; `docs/failure-modes.md`;
+  `templates/l00prite/prompts/execute-loop.md` re-mirrored byte-identically to all 7 copies.
+  Zero-line diff to `.claude/commands/build-loop.md` and `scripts/validate-l00prite.js` held.
+- **Tests run / Verification:**
+  - `command: node scripts/validate-l00prite.js` · `exit_code: 0` · `summary: 519 PASS, 0 FAIL`
+    · `timestamp: 2026-07-04T11:30:00Z`.
+  - `command: node scripts/l00prite-doctor.js .` · `exit_code: 0` · `summary: HEALTHY (25/0/0)`.
+  - `command: node scripts/l00prite-doctor.js examples/vendor-neutral-output` · `exit_code: 0`
+    · `summary: HEALTHY (24/0/0)`.
+  - `command: cmp across 7 execute-loop copies` · `exit_code: 0` · `summary: single md5`.
+  - Negative tests: null heartbeat, pending-as-file, invalid lock dates, foreign active lock,
+    gutted denylist, missing prompt mirror, evidence-free ledger run → each reported FAIL/WARN,
+    exit 1, no crash.
+- **Response drafted/sent:** none posted on GitHub (fixes pushed; commit maps to comments).
+- **Event status:** completed for this review round; subscription remains active until merge/close.
+- **Failures:** First evidence-regex attempt matched the "Tests run" field label — tightened
+  to require `exit_code`/`evidence_path`.
+- **Confidence:** High — validator clean, doctor self-tests green, each fix has a negative test.
+- **Next action:** Await further review or merge; keep the ~1h self check-in armed.
+- **Lock:** none acquired — single-agent session; `lock.json` remains `released`.

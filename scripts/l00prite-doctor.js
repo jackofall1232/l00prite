@@ -33,8 +33,13 @@ function fail(msg, fix) { findings.push({ level: 'fail', msg, fix }); }
 function existsL(rel) { return fs.existsSync(path.join(root, rel)); }
 function readL(rel) { return fs.readFileSync(path.join(root, rel), 'utf8'); }
 function readJSON(rel) {
-  try { return { ok: true, data: JSON.parse(readL(rel)) }; }
-  catch (e) { return { ok: false, err: e.message }; }
+  try {
+    const data = JSON.parse(readL(rel));
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+      return { ok: false, err: 'parsed value is not a JSON object' };
+    }
+    return { ok: true, data };
+  } catch (e) { return { ok: false, err: e.message }; }
 }
 function isParsableDate(s) { return typeof s === 'string' && !Number.isNaN(Date.parse(s)); }
 
@@ -96,8 +101,8 @@ const hbR = existsL('.l00prite/heartbeat.json') ? readJSON('.l00prite/heartbeat.
 const stR = existsL('.l00prite/state.json') ? readJSON('.l00prite/state.json') : { ok: false, err: 'absent' };
 const lkR = existsL('.l00prite/lock.json') ? readJSON('.l00prite/lock.json') : { ok: false, err: 'absent' };
 for (const [label, r] of [['heartbeat.json', hbR], ['state.json', stR], ['lock.json', lkR]]) {
-  if (r.ok) ok(`${label} is valid JSON`);
-  else fail(`${label} does not parse: ${r.err}`, `fix the JSON syntax in .l00prite/${label}`);
+  if (r.ok) ok(`${label} is a valid JSON object`);
+  else fail(`${label} is not a valid JSON object: ${r.err}`, `${label} must be a JSON object with the expected fields`);
 }
 const hb = hbR.ok ? hbR.data : null;
 const st = stR.ok ? stR.data : null;
@@ -144,6 +149,7 @@ if (hb && !exec) {
   }
 }
 
+let armedMidRun = false; // an active, unexpired lock that legitimately backs a running execution
 if (hb && st) {
   const enabled = exec ? exec.enabled === true : false;
   const active = st.execution_active === true;
@@ -161,6 +167,7 @@ if (hb && st) {
       'set both to false and record the reconciliation in ledger.md, or re-run execute-loop pre-flight');
   } else if (enabled || active) {
     if (lockActiveExecute) {
+      armedMidRun = true;
       ok('Execution Mode is armed under a matching active execute-loop lock (mid-run)');
     } else {
       fail('Execution Mode is armed but no active, unexpired execute-loop lock backs it — a crashed run left arming state committed',
@@ -201,8 +208,14 @@ if (lock) {
         `set ${field} to a valid ISO 8601 timestamp (e.g. 2026-07-04T09:00:00Z)`);
     }
   }
-  if (lock.status === 'active' && isParsableDate(lock.expires_at) && Date.parse(lock.expires_at) <= Date.now()) {
+  const active = lock.status === 'active' && isParsableDate(lock.expires_at);
+  if (active && Date.parse(lock.expires_at) <= Date.now()) {
     warn('lock.json is "active" but expired', 'the next agent may reclaim it and log the reclamation per LOCKING.md');
+  } else if (active && Date.parse(lock.expires_at) > Date.now() && !armedMidRun) {
+    // A live lock held by someone else: protected memory is in use — do not resume or arm.
+    const owner = lock.owner_agent || lock.owner_session || 'unknown';
+    warn(`an active, unexpired lock is held (owner=${owner}, purpose=${lock.purpose || 'unspecified'}, expires=${lock.expires_at})`,
+      'protected memory is in use — do not resume or arm until the lock is released or expires, per LOCKING.md');
   }
 }
 
@@ -223,12 +236,22 @@ if (st && pendingDirReadable && Object.prototype.hasOwnProperty.call(st, 'pendin
 // ---------------------------------------------------------------------------
 if (existsL('.l00prite/ledger.md')) {
   const ledger = readL('.l00prite/ledger.md');
-  const substantive = ledger.replace(/\s+/g, ' ').trim().length > 400;
-  const hasEvidence = /(exit_code|exit code|command|tests? run|verified|verification|evidence_path)/i.test(ledger);
-  if (substantive && !hasEvidence) {
-    warn('ledger.md has run history but no visible verification evidence (command/exit_code/tests)', 'record command + exit_code + timestamp per ledger entry — otherwise "verified" is unaudited');
-  } else if (substantive) {
-    ok('ledger.md entries carry verification evidence');
+  // Only inspect the actual run history, not the entry-template preamble (which always
+  // contains the words command/exit_code/evidence_path and would mask a real evidence-free run).
+  const runsIdx = ledger.search(/^##\s+Runs\s*$/im);
+  if (runsIdx >= 0) {
+    const runs = ledger.slice(runsIdx + '## Runs'.length);
+    const substantive = runs.replace(/\s+/g, ' ').trim().length > 200;
+    if (substantive) {
+      // Require a concrete verification signal (an exit code or an evidence path), not the
+      // mere presence of a "Tests run / Verification" field label, which every entry carries.
+      const hasEvidence = /(exit_code|evidence_path)/i.test(runs);
+      if (!hasEvidence) {
+        warn('ledger.md has run entries but no visible verification evidence (command/exit_code/tests)', 'record command + exit_code + timestamp per ledger entry — otherwise "verified" is unaudited');
+      } else {
+        ok('ledger.md run entries carry verification evidence');
+      }
+    }
   }
 }
 
@@ -240,8 +263,25 @@ if (existsL('.l00prite/failures.md')) {
   else warn('failures.md is missing the inherited failure-mode catalog', 'seed it from templates/l00prite/failures.md so a fresh agent reads known failure modes');
 }
 if (existsL('.l00prite/constraints.md')) {
-  if (/autonomous-edit denylist/i.test(readL('.l00prite/constraints.md'))) ok('constraints.md defines an Autonomous-Edit Denylist');
-  else warn('constraints.md has no Autonomous-Edit Denylist', 'add a machine-readable protected-paths block so Execution Mode cannot edit secrets/auth/migrations without review');
+  const c = readL('.l00prite/constraints.md');
+  const secIdx = c.search(/autonomous-edit denylist/i);
+  if (secIdx < 0) {
+    warn('constraints.md has no Autonomous-Edit Denylist', 'add a machine-readable protected-paths block so Execution Mode cannot edit secrets/auth/migrations without review');
+  } else {
+    // The heading alone is not enough: execute-loop enforces the fenced glob block, so require
+    // the block to exist and still carry the critical shipped protections.
+    const fence = c.slice(secIdx).match(/```[a-z]*\n([\s\S]*?)```/i);
+    const block = fence ? fence[1] : '';
+    const critical = [{ re: /(^|\/|\*)\.env/im, name: '.env' }, { re: /secret|credential/i, name: 'secrets/credentials' }];
+    const missing = critical.filter((p) => !p.re.test(block)).map((p) => p.name);
+    if (!block) {
+      warn('Autonomous-Edit Denylist heading present but no fenced glob block found', 'restore the machine-readable ``` glob block under the heading');
+    } else if (missing.length) {
+      warn(`Autonomous-Edit Denylist is missing critical protections: ${missing.join(', ')}`, 'restore the shipped secret/credential/.env patterns — execute-loop relies on this list before every edit');
+    } else {
+      ok('constraints.md defines an Autonomous-Edit Denylist with the critical protections');
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -262,27 +302,37 @@ if (exec) {
 // 10. Prompt-mirror self-parity (drift). Compare the project's OWN copies.
 // ---------------------------------------------------------------------------
 const mirrorDirs = ['.claude/prompts', '.codex/prompts'].filter((d) => existsL(d));
-if (existsL('.l00prite/prompts') && mirrorDirs.length) {
+if (existsL('.l00prite/prompts')) {
+  // The six loop prompts must all be present in .l00prite/prompts — a missing one is not
+  // "no drift", it is a project missing a loop procedure build-loop promised to scaffold.
+  let baseMissing = 0;
+  for (const name of PROMPT_NAMES) {
+    if (!existsL(`.l00prite/prompts/${name}.md`)) {
+      baseMissing++;
+      fail(`missing loop prompt: .l00prite/prompts/${name}.md`, 're-scaffold the canonical loop prompts');
+    }
+  }
   let drift = 0, compared = 0;
-  const names = [...PROMPT_NAMES, 'README'];
-  for (const name of names) {
-    const base = `.l00prite/prompts/${name}.md`;
-    if (!existsL(base)) continue;
-    const baseContent = readL(base);
-    for (const dir of mirrorDirs) {
+  for (const dir of mirrorDirs) {
+    // Once a vendor prompt directory exists, it must carry every loop prompt, byte-identical.
+    for (const name of PROMPT_NAMES) {
+      const base = `.l00prite/prompts/${name}.md`;
       const mirror = `${dir}/${name}.md`;
-      if (existsL(mirror)) {
-        compared++;
-        if (readL(mirror) !== baseContent) {
-          drift++;
-          fail(`prompt drift: ${mirror} differs from .l00prite/prompts/${name}.md`, `re-copy the canonical prompt so mirrors are byte-identical`);
-        }
+      if (!existsL(base)) continue; // already failed above
+      if (!existsL(mirror)) {
+        drift++;
+        fail(`missing prompt mirror: ${mirror} (present in .l00prite/prompts/)`, `copy ${name}.md into ${dir} so vendor agents get the loop prompts`);
+        continue;
+      }
+      compared++;
+      if (readL(mirror) !== readL(base)) {
+        drift++;
+        fail(`prompt drift: ${mirror} differs from .l00prite/prompts/${name}.md`, 're-copy the canonical prompt so mirrors are byte-identical');
       }
     }
   }
-  if (compared && !drift) ok(`prompt mirrors are byte-identical to .l00prite/prompts (${compared} compared)`);
-} else if (existsL('.l00prite/prompts')) {
-  ok('prompt self-parity skipped (no .claude/.codex prompt mirrors in this project)');
+  if (mirrorDirs.length && compared && !drift) ok(`prompt mirrors are byte-identical to .l00prite/prompts (${compared} compared)`);
+  else if (!mirrorDirs.length && !baseMissing) ok('prompt self-parity skipped (no .claude/.codex prompt mirrors in this project)');
 }
 
 // ---------------------------------------------------------------------------
