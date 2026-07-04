@@ -67,8 +67,9 @@ prompt a model *with your project's memory* right from the browser.
 
 ## 5. Point your coding tools at it
 
-The gateway speaks the OpenAI-compatible API, so Claude Code, Codex CLI, Aider, OpenCode, IDE
-extensions, and any OpenAI SDK work unchanged:
+The gateway speaks the OpenAI-compatible API, so Codex CLI, Aider, OpenCode, IDE extensions,
+and any OpenAI SDK work unchanged (Claude Code is the exception — it speaks Anthropic's own
+API, which this gateway doesn't serve yet):
 
 ```bash
 export OPENAI_BASE_URL=http://127.0.0.1:8787/v1

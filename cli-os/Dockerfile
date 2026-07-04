@@ -7,7 +7,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -ldflags='-s -w' -o /l00prite ./cmd/l00prite
 
-# Runtime: tiny alpine (only for the first-run seed script + healthcheck wget). The binary itself is
+# Runtime: tiny alpine (only for the entrypoint shell script + healthcheck wget). The binary itself is
 # static and would run on scratch.
 FROM alpine:3.20
 RUN adduser -D -u 10001 l00prite

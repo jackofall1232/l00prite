@@ -35,7 +35,7 @@ Prefer to stay in the terminal? The CLI does everything the wizard does:
   ./l00prite token mint --project default
   ./l00prite serve
 
-Point any OpenAI-compatible tool (Claude Code, Codex, Aider, an SDK) at it:
+Point any OpenAI-compatible tool (Codex, Aider, an OpenAI SDK) at it:
   OPENAI_BASE_URL=http://127.0.0.1:8787/v1
   OPENAI_API_KEY=<the l00prite token>
 

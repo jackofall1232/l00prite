@@ -250,7 +250,8 @@ afterward.
 >   provider — no CLI needed post-setup.
 > - **Repository registration**: the dashboard's Repositories section has a **Register repo** modal (and the
 >   CLI equivalent below). Registration takes a **filesystem path on the machine running the gateway** —
->   there is no git-URL support today — and the server verifies the directory exists before storing anything:
+>   there is no git-URL support today. The dashboard endpoint verifies the directory exists (and registers
+>   the repo under your token's project) before storing anything; the CLI stores the path as given:
 >   ```bash
 >   ./cli-os repo register myrepo --root /path/to/repo
 >   ```
@@ -271,7 +272,8 @@ Everything the wizard does is available from the CLI as well:
 ## 7. Connecting a coding tool
 
 The gateway speaks the **OpenAI-compatible** API, so any tool that accepts an OpenAI base URL + key works
-unchanged — Claude Code, Codex CLI, Aider, OpenCode, IDE extensions, or any OpenAI SDK. Point it at the
+unchanged — Codex CLI, Aider, OpenCode, IDE extensions, or any OpenAI SDK. (Claude Code is the
+exception: it speaks Anthropic's own API, which this gateway does not serve yet.) Point it at the
 gateway's `/v1` base and use your **minted gateway token** as the API key (a token looks like
 `l00p_<id>_<secret>`, e.g. `l00p_df10555433457fd425_mKbIK_vjcLiJpcTzDOPmwhIPlWN_OpHM`):
 

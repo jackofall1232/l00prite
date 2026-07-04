@@ -1,7 +1,7 @@
 # l00prite CLI-OS
 
 A self-hostable **control plane for AI coding**. It runs on your own server, exposes an
-**OpenAI-compatible** endpoint so existing coding tools (Claude Code, Codex CLI, Aider,
+**OpenAI-compatible** endpoint so existing coding tools (Codex CLI, Aider,
 OpenCode, IDEs, any OpenAI SDK) work unchanged, keeps provider keys server-side, routes across
 LLM providers with explainable rules, injects repo-aware persistent memory, tracks **real**
 cost per project, records a run ledger, and enforces safety limits on spend, retries,
@@ -102,7 +102,7 @@ docker compose exec cli-os l00prite token mint --project default
 | POST | `/v1/providers/remove` | token | Remove a provider + its model selection — **server-side type-to-confirm** (`confirm:"<name>"`), 409 + impact on mismatch |
 | POST | `/v1/providers/update` | token | Enable/disable a provider, or set it as default |
 | POST | `/v1/providers/models` | token | Enable/disable specific models for a provider (enforced in routing + `/v1/models`) |
-| POST | `/v1/repos` | token | Register a repository from the dashboard (same primitive as `repo register`) — the root path is verified to exist on the gateway host before anything is stored; duplicate ids are rejected 409 |
+| POST | `/v1/repos` | token | Register a repository from the dashboard (same primitive as `repo register`) — the root path is verified to exist on the gateway host before anything is stored; duplicate ids are rejected 409; the repo lands in the **acting token's project** (an explicit different project is 403 — cross-project registration stays a CLI operation) |
 | POST | `/v1/repos/remove` | token | Unregister a repository — deletes only the id→path mapping; nothing on disk is touched |
 
 **Provider lifecycle from the dashboard (Part E):** the above `/v1/providers/*` endpoints let a
