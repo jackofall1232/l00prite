@@ -20,7 +20,15 @@ type ProviderInfo struct {
 	Name      string
 	Enabled   bool
 	IsDefault bool
+	// DisabledModels are models the operator switched off for this provider (Part C/E). A nil map means
+	// nothing is disabled, so routing behaves exactly as before for every provider without a selection.
+	DisabledModels map[string]bool
 }
+
+// serves reports whether this provider may auto/bare-route the given model — true unless the operator
+// has explicitly disabled it. Explicit operator intent (route-header pins, provider/model pins, alias
+// targets) deliberately bypasses this: naming a specific model by hand overrides the catalog toggle.
+func (p ProviderInfo) serves(model string) bool { return !p.DisabledModels[model] }
 
 // RouteResult is a routing decision: the chosen (provider, model) and the inspectable decision.
 type RouteResult struct {
@@ -95,6 +103,20 @@ func Pick(providers []ProviderInfo, aliases map[string]string, req map[string]an
 			enabled[p.Name] = true
 		}
 	}
+	// Zero routable providers is the "removed the only provider" failure state: return a specific,
+	// dashboard-pointing error (distinct code) instead of falling through to the generic "no enabled
+	// providers available" 503 — so an average user sees exactly what to do, not a confusing routing
+	// error. The all-tripped case (providers exist and are enabled but their breakers are open) is left
+	// to the existing message downstream.
+	if len(enabled) == 0 {
+		msg := "No providers are configured. Open the l00prite dashboard to add a provider before this gateway can route requests."
+		if len(providers) > 0 {
+			msg = "All providers are disabled. Open the l00prite dashboard to enable or add a provider before this gateway can route requests."
+		}
+		e := apierr.New(503, msg, "service_unavailable")
+		e.Code = "no_providers_configured"
+		return RouteResult{}, e
+	}
 	var isDefault *ProviderInfo
 	for i := range providers {
 		if providers[i].Enabled && providers[i].IsDefault {
@@ -161,30 +183,36 @@ func Pick(providers []ProviderInfo, aliases map[string]string, req map[string]an
 				}
 				continue
 			}
-			if contains(adapters.ModelsFor(p.Name), wanted) {
+			if contains(adapters.ModelsFor(p.Name), wanted) && p.serves(wanted) {
 				return mustUse(use, p.Name, wanted, "model_owner", `model "`+wanted+`" served by `+p.Name)
 			}
 		}
 	}
-	// Rule 4: default provider (+ requested model or its own default model), honoring the breaker.
+	// Rule 4: default provider (+ requested model or its own default model), honoring the breaker AND
+	// the operator's model selection — a model disabled on the default provider never routes to it.
 	if isDefault != nil && !IsTripped(isDefault.Name) {
 		model := wanted
 		if model == "" {
-			model = firstModelOr(isDefault.Name, "default")
+			model = firstEnabledModel(*isDefault, "default")
 		}
-		return mustUse(use, isDefault.Name, model, "default_provider", "no explicit target; default provider "+isDefault.Name)
+		if model != "" && isDefault.serves(model) {
+			return mustUse(use, isDefault.Name, model, "default_provider", "no explicit target; default provider "+isDefault.Name)
+		}
 	}
 	if isDefault != nil && IsTripped(isDefault.Name) {
 		alternatives = append(alternatives, isDefault.Name+" (circuit open)")
 	}
-	// Rule 5 fallback: first enabled, non-tripped provider.
+	// Rule 5 fallback: first enabled, non-tripped provider that can serve the model — skipping any that
+	// have the requested model disabled, and any whose whole catalog is disabled for a bare request.
 	for _, p := range providers {
 		if enabled[p.Name] && !IsTripped(p.Name) {
 			model := wanted
 			if model == "" {
-				model = firstModelOr(p.Name, "default")
+				model = firstEnabledModel(p, "default")
 			}
-			return mustUse(use, p.Name, model, "fallback_first", "fell back to first available provider "+p.Name)
+			if model != "" && p.serves(model) {
+				return mustUse(use, p.Name, model, "fallback_first", "fell back to first available provider "+p.Name)
+			}
 		}
 	}
 	return RouteResult{}, apierr.New(503, "No enabled providers available to route this request", "service_unavailable")
@@ -197,12 +225,21 @@ func mustUse(use func(string, string, string, string) (RouteResult, bool), provi
 	return r, nil
 }
 
-func firstModelOr(provider, fallback string) string {
-	models := adapters.ModelsFor(provider)
-	if len(models) > 0 {
-		return models[0]
+// firstEnabledModel returns the provider's first manifest model the operator has NOT disabled. A
+// provider with a catalog but every model disabled returns "" (unroutable for a bare/auto request — the
+// caller skips it); a provider with NO manifest catalog returns the fallback, preserving the prior
+// behavior of forwarding an arbitrary model id to a custom openai-compat upstream.
+func firstEnabledModel(p ProviderInfo, fallback string) string {
+	models := adapters.ModelsFor(p.Name)
+	if len(models) == 0 {
+		return fallback
 	}
-	return fallback
+	for _, m := range models {
+		if p.serves(m) {
+			return m
+		}
+	}
+	return ""
 }
 
 func contains(list []string, s string) bool {

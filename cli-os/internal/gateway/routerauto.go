@@ -399,6 +399,29 @@ func joinKeys(list []scored) string {
 	return strings.Join(ks, ", ")
 }
 
+// filterDisabledCandidates drops (provider, model) candidates the operator has disabled for that
+// provider, so auto-routing never selects a model that's been switched off in the dashboard. When no
+// provider has any disabled model it returns the input unchanged (zero overhead for the common case).
+func filterDisabledCandidates(cand []adapters.Candidate, providers []ProviderInfo) []adapters.Candidate {
+	disabled := map[string]map[string]bool{}
+	for _, p := range providers {
+		if len(p.DisabledModels) > 0 {
+			disabled[p.Name] = p.DisabledModels
+		}
+	}
+	if len(disabled) == 0 {
+		return cand
+	}
+	var out []adapters.Candidate
+	for _, c := range cand {
+		if d := disabled[c.Provider]; d != nil && d[c.Model] {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 func selectAuto(providers []ProviderInfo, routing config.Routing, req map[string]any, signal autoSignal, defaultMaxTokens int) (RouteResult, error) {
 	profile, err := resolveProfile(signal.Profile, routing)
 	if err != nil {
@@ -411,7 +434,7 @@ func selectAuto(providers []ProviderInfo, routing config.Routing, req map[string
 			enabledNames = append(enabledNames, p.Name)
 		}
 	}
-	cand := adapters.Catalog(enabledNames)
+	cand := filterDisabledCandidates(adapters.Catalog(enabledNames), providers)
 	if len(cand) == 0 {
 		return RouteResult{}, apierr.New(400, "Auto routing found no routable models. Enable a provider that publishes a known model catalog (e.g. anthropic, zhipu), then retry.", "invalid_request_error")
 	}

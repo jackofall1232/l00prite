@@ -308,6 +308,9 @@ func (app *App) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 		cost := CostOf(route.Provider, route.Model, usage)
 		pep.Commit(app.DB, resv.ReservationID, cost.USD)
 		MarkSuccess(route.Provider)
+		if !provRow.Verified { // first successful streamed use flips the provider to verified
+			markProviderVerified(app.DB, route.Provider)
+		}
 		u := usage
 		ledger.Append(app.DB, cfg.LedgerPath, ledger.Entry{RequestID: requestID, Project: project, Repo: repoID, Provider: route.Provider, Model: route.Model, RuleID: ruleID, Decision: route.Decision, Usage: &u, CostUSD: &cost.USD, CostEstimated: cost.Estimated, CostUnconfirmed: cost.Unconfirmed, MemoryStatus: mem.Status, Outcome: "ok"})
 		return
@@ -547,6 +550,9 @@ func (app *App) HandleModels(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		for _, id := range adapters.ModelsFor(p.Name) {
+			if p.DisabledModels[id] { // operator-disabled models are not advertised in the catalog
+				continue
+			}
 			data = append(data, map[string]any{"id": id, "object": "model", "owned_by": p.Name})
 			data = append(data, map[string]any{"id": p.Name + "/" + id, "object": "model", "owned_by": p.Name})
 		}
