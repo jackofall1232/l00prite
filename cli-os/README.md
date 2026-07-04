@@ -1,88 +1,136 @@
 # l00prite CLI-OS
 
-> **Status: design + module layout under maintainer review.** This subtree contains the
-> architecture for turning l00prite from a scaffold-only memory protocol into a self-hostable
-> **control plane for AI coding**. No runtime implementation has landed yet beyond the example
-> provider manifests that validate the adapter approach. Read
-> [`docs/architecture.md`](docs/architecture.md) first, then
-> [`docs/open-questions.md`](docs/open-questions.md) — several product decisions are pending.
+A self-hostable **control plane for AI coding**. It runs on your own server, exposes an
+**OpenAI-compatible** endpoint so existing coding tools (Claude Code, Codex CLI, Aider,
+OpenCode, IDEs, any OpenAI SDK) work unchanged, keeps provider keys server-side, routes across
+LLM providers with explainable rules, injects repo-aware persistent memory, tracks **real**
+cost per project, records a run ledger, and enforces safety limits on spend, retries,
+destructive actions, stale context, and concurrent sessions.
 
-l00prite CLI-OS runs on a user-controlled server. It exposes OpenAI-compatible endpoints so
-existing coding tools (Claude Code, Codex CLI, Aider, OpenCode, IDEs) work unchanged, manages
-provider keys server-side, routes across LLM providers with explainable rules, injects
-repo-aware persistent memory, tracks real cost/usage per project, records run ledgers, and
-enforces safety limits on retries, spend, destructive actions, stale context, and concurrent
-sessions.
+**Not a proxy.** The OpenAI endpoint is the compatibility layer; the product is provider
+abstraction + repo memory + routing + cost tracking + safety policy + run ledger + installable
+server + CLI control surface + dashboard.
 
-**Not a proxy.** The OpenAI-compatible endpoint is the compatibility layer; the product is
-provider abstraction + repo memory + routing + cost tracking + safety policy + run ledgers +
-installable server + CLI/admin surface (+ future dashboard).
+> **v1.0.0 — runnable and tested.** Zero external npm dependencies (Node ≥ 22 built-ins only:
+> `http`/`fetch`/`crypto`/`node:sqlite`). The full request path is covered by an offline
+> end-to-end test suite (`npm test`, 12 checks). See [`RELEASE.md`](RELEASE.md) for what is
+> proven vs. what still needs a networked validation pass (live-provider round-trips, first-party
+> pricing confirmation).
 
-The intended developer flow: clone → one install command → add provider keys → register repos →
-point a coding tool at the l00prite endpoint → switch providers by config/flag/dashboard →
-keep memory, cost tracking, logs, and history across sessions.
+## Quickstart (local)
 
-## Why it lives in `cli-os/`
+```bash
+cd cli-os
+./install/install.sh                                   # checks Node 22+, runs init
 
-l00prite today is a prompt-file protocol (Markdown + JSON + a dependency-free Node validator).
-CLI-OS is greenfield runtime code that takes real dependencies, so it lives in its own subtree,
-leaving the protocol files and `scripts/validate-l00prite.js` untouched (validator still passes).
+node bin/cli.js provider add mock --adapter mock --default   # zero-key demo upstream
+node bin/cli.js token mint --project demo                    # prints a token (once)
+node bin/cli.js serve                                        # http://127.0.0.1:8787
+```
 
-## Docs
+Point any OpenAI-compatible tool at it:
 
-| Doc | What |
-|---|---|
-| [`docs/architecture.md`](docs/architecture.md) | Two-track design, request lifecycle, safety/PEP, module boundaries |
-| [`docs/interface-contract.md`](docs/interface-contract.md) | `MemoryQuery` / `MemoryContext` — the Gateway↔Memory seam |
-| [`docs/provider-adapters.md`](docs/provider-adapters.md) | Verified provider specs (incl. **GLM 5.2 confirmed real**), egress/pricing caveats |
-| [`docs/routing-rules-v1.md`](docs/routing-rules-v1.md) | Explainable (non-ML) routing rules |
-| [`docs/security-model.md`](docs/security-model.md) | Key storage, auth, least-privilege file access, no insecure defaults |
-| [`docs/v1-scope.md`](docs/v1-scope.md) | v1 (ships) vs v2 (deferred), with the cut line justified |
-| [`docs/open-questions.md`](docs/open-questions.md) | Assumptions + decisions needed before implementation |
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
+export OPENAI_API_KEY=<the l00prite token>
+curl "$OPENAI_BASE_URL/chat/completions" \
+  -H "authorization: Bearer $OPENAI_API_KEY" -H 'content-type: application/json' \
+  -d '{"model":"demo","messages":[{"role":"user","content":"hello"}]}'
+```
 
-## Proposed module layout
+Swap the demo upstream for real providers:
+
+```bash
+node bin/cli.js provider add anthropic --key sk-ant-... --default
+node bin/cli.js provider add openai    --key sk-...     --adapter openai-compat
+node bin/cli.js provider add glm        --key ...        --adapter openai-compat   # glm-5.2
+node bin/cli.js repo register myrepo --root /path/to/repo --project demo   # inject .l00prite memory
+node bin/cli.js cap set --project demo --daily 20                          # hard $/day cap
+```
+
+Open the **dashboard** at `http://127.0.0.1:8787/`.
+
+## Quickstart (Docker)
+
+```bash
+cd cli-os
+docker compose up --build            # seeds a demo mock provider on first run
+# add real providers / tokens:
+docker compose exec cli-os node bin/cli.js provider add anthropic --key sk-ant-... --default
+docker compose exec cli-os node bin/cli.js token mint --project demo
+```
+
+## Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/v1/chat/completions` | OpenAI-compatible chat (streaming + non-streaming) |
+| GET  | `/v1/models` | List models across enabled providers |
+| GET  | `/healthz` | Provider + circuit-breaker status |
+| GET  | `/` | Dashboard |
+
+Per-request headers (optional): `x-l00prite-repo` (repo id for memory), `x-l00prite-route`
+(`provider/model` pin), `x-l00prite-paths` (comma-separated files, for memory ranking).
+
+## CLI (control plane)
+
+```
+l00prite init | serve | health
+l00prite provider add <name> [--key K] [--adapter native-messages|openai-compat|mock] [--base URL] [--default]
+l00prite provider list | default <name> | enable|disable|remove <name>
+l00prite token mint --project P [--repo ID] [--expires DAYS] | token list | token revoke <id>
+l00prite repo register <id> --root PATH [--project P] | repo list
+l00prite cap set --project P --daily USD | cap list
+l00prite route explain <request-id> | ledger [--limit N]
+```
+
+## How it works
+
+Two decoupled tracks behind a typed, latency-bounded interface, with a cross-cutting policy
+layer. Read the design docs for the full picture:
+
+- [`docs/architecture.md`](docs/architecture.md) — two-track Gateway/Memory design, request
+  lifecycle, the Policy Enforcement Point.
+- [`docs/interface-contract.md`](docs/interface-contract.md) — `MemoryQuery`/`MemoryContext`.
+- [`docs/provider-adapters.md`](docs/provider-adapters.md) — verified provider specs (incl.
+  **GLM 5.2 confirmed real**), egress/pricing caveats.
+- [`docs/routing-rules-v1.md`](docs/routing-rules-v1.md) · [`docs/security-model.md`](docs/security-model.md)
+  · [`docs/v1-scope.md`](docs/v1-scope.md) · [`docs/open-questions.md`](docs/open-questions.md)
+
+Safety posture (inherited from l00prite): safe-by-default, no auto-everything; **persisted flags
+are never authorization** — cost/retry/destructive gates are enforced by a Policy Enforcement
+Point over an atomic store, not by the request handler; repo memory is **untrusted input**,
+wrapped in a non-instruction envelope before injection; concurrency uses atomic DB
+leases/transactions, not cooperative file locks.
+
+## Module layout
 
 ```
 cli-os/
-  README.md                     # this file
-  docs/                         # the architecture + decision docs above
+  bin/cli.js                     # launcher (applies warning suppression, imports src/cli-main.js)
   src/
-    gateway/                    # Track 1: routing + compatibility layer
-      ingress/                  # OpenAI-compat HTTP handlers (chat/completions, models)
-      auth/                     # token verify, principal resolution
-      router/                   # explainable rules + decision log
-      adapters/                 # one dir per provider + shared base
-        anthropic/              #   full native /v1/messages adapter
-        openai/                 #   native schema (+ optional /v1/responses)
-        _manifests/             #   per-provider JSON: base url, models, pricing, capabilities
-      retry/                    # idempotency-aware backoff + circuit breaker
-      meter/                    # real-usage cost accounting (provider usage > estimate)
-    memory/                     # Track 2: context reconstruction
-      retrieval/                # ranking + selection (naive v1, embeddings v2)
-      staleness/                # invalidation (mtime/hash, TTL, explicit)
-      store/                    # .l00prite/-backed store + rebuildable index
-    policy/                     # PEP: caps, gates, atomic spend reservations
-    state/                      # transactional store (SQLite WAL v1), leases
-    ledger/                     # run ledger + usage DB writer
-    cli/                        # admin surface (keys, tokens, repos, route explain, caps)
-    config/                     # typed config load/validate (no insecure defaults)
-  test/
-    adapters/                   # per-provider conformance suites (recorded fixtures)
-    interface/                  # MemoryQuery/MemoryContext contract tests
-    safety/                     # cap / retry / gate enforcement tests
-  install/                      # one-command install (script + optional container)
+    cli-main.js                  # admin CLI implementation
+    config.js                    # config load + no-insecure-defaults validation
+    server.js                    # HTTP(S) server + static dashboard
+    state/db.js                  # node:sqlite (WAL) transactional store
+    security/vault.js            # AES-256-GCM provider-key vault
+    security/tokens.js           # opaque gateway tokens (hashed, constant-time)
+    policy/pep.js                # Policy Enforcement Point: caps, reservations, leases
+    gateway/
+      ingress.js                 # /v1/chat/completions pipeline (stream + non-stream)
+      router.js                  # explainable routing + circuit breaker
+      meter.js                   # real-usage cost accounting
+      inject.js                  # untrusted-memory injection
+      adapters/
+        anthropic.js             # native /v1/messages translator (SSE blocks -> chunks)
+        openaiCompat.js          # OpenAI-shaped passthrough (OpenAI, GLM, DeepSeek, Groq, …)
+        mock.js                  # zero-key demo upstream
+        registry.js              # adapter + manifest resolution
+        _manifests/*.json        # per-provider base url, models, pricing, capabilities
+    memory/memory.js             # Track 2: retrieval/ranking + staleness + degradation
+    ledger/ledger.js             # run ledger (sqlite + jsonl)
+    util.js
+  public/dashboard.html          # served control-plane dashboard
+  test/*.test.js                 # unit + end-to-end (node:test)
+  install/ · Dockerfile · docker-compose.yml · .env.example
 ```
-
-The runtime **language is an open question** ([`docs/open-questions.md`](docs/open-questions.md)
-Q3); the layout is language-agnostic. `src/gateway/adapters/_manifests/*.json` are populated now
-as concrete, verified examples that validate the manifest-driven adapter approach.
-
-## Safety posture (inherited from l00prite)
-
-- Safe-by-default; no "auto-everything." Costly/destructive actions have explicit stop
-  conditions.
-- **Persisted flags are never authorization** — cost/retry/destructive-action gates are enforced
-  by a Policy Enforcement Point *outside* the process that would benefit from ignoring them.
-- Repo memory (PR comments, issues, logs) is **untrusted input**, never instructions.
-- Concurrency uses **atomic** leases/transactions, not cooperative file locks, for anything
-  money- or memory-affecting.

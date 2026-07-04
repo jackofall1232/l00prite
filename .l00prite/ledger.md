@@ -26,6 +26,76 @@ Append one entry per agent run. Do not overwrite prior runs.
 
 ## Runs
 
+### Run 2026-07-04T02:00:00Z — Claude (Opus 4.8), branch claude/looprite-cli-os-jntwqi
+- **Goal:** Implement l00prite CLI-OS v1.0.0 as a runnable, tested product ("make it ready to
+  ship") — a real OpenAI-compatible gateway with provider adapters, repo memory, explainable
+  routing, real cost tracking, a Policy Enforcement Point, security, a CLI control surface, the
+  served dashboard, tests, and Docker/install packaging.
+- **Triggering event:** none — direct maintainer instruction in-session ("go ahead and make this
+  the full production release make it ready to ship").
+- **Reviewer/comment reference:** none.
+- **Decision:** Normal work, large build. The maintainer's "ship it" authorized proceeding on
+  the recommended defaults; recorded the one transparent change (runtime = zero-dep Node instead
+  of the recommended Go) because the build environment blocks module fetch + live-provider egress
+  (Go not buildable/testable here) while Node runs natively, matches the existing validator, and
+  gives real ACID via built-in node:sqlite. Decisions logged in `cli-os/docs/open-questions.md`
+  and `cli-os/RELEASE.md`.
+- **Completed work:** Built the full `cli-os/` runtime (~20 modules): OpenAI-compatible ingress
+  (streaming + non-streaming, idempotency-aware retry), Anthropic native `/v1/messages`
+  translator (SSE blocks → OpenAI chunks) + OpenAI-compatible passthrough + zero-key mock
+  upstream, explainable router + circuit breaker, real-usage cost meter, Policy Enforcement Point
+  (atomic $ caps reserve→commit/refund, leases) on node:sqlite WAL, AES-256-GCM key vault, opaque
+  hashed tokens, `.l00prite/` memory retrieval + untrusted-injection, run ledger + audit, admin
+  CLI (init/provider/token/repo/cap/route-explain/serve), served dashboard, Dockerfile + compose
+  + install script + `.env.example`, and a `node:test` suite.
+- **Fix implemented:** not applicable — new implementation. Incidental: switched ledger insert to
+  positional binding; added a re-exec launcher so the node:sqlite ExperimentalWarning never
+  reaches operators; added `LOOPRITE_ALLOW_INSECURE_BIND` explicit opt-in for container binds.
+- **Changed files:** created `cli-os/{package.json,bin/,src/,test/,public/,install/,Dockerfile,
+  docker-compose.yml,.env.example,.gitignore,.dockerignore,RELEASE.md}`; modified
+  `cli-os/README.md`, `cli-os/docs/open-questions.md`, and this ledger. No existing protocol
+  files, prompts, templates, `.claude/commands/build-loop.md`, or `scripts/validate-l00prite.js`
+  touched.
+- **Tests run / Verification:**
+  - `command`: `npm test` (node:test — vault, tokens, PEP cap enforcement, meter, Anthropic
+    request+SSE translation, memory, full e2e server run over the mock upstream)
+  - `exit_code`: 0
+  - `summary`: 12 pass, 0 fail. e2e covers auth 401, non-stream 200 + ledger, streaming SSE +
+    [DONE], cost-cap 402, /healthz, /v1/models.
+  - `evidence_path`: `cli-os/test/`
+  - `timestamp`: 2026-07-04T02:00:00Z
+  - `command`: `node scripts/validate-l00prite.js` (protocol regression guard)
+  - `exit_code`: 0
+  - `summary`: 0 FAIL — CLI-OS subtree does not affect the prompt-protocol invariants.
+  - `timestamp`: 2026-07-04T02:00:00Z
+  - `command`: manual smoke — init → provider add → repo register → token mint → serve → curl
+    /v1/chat/completions (non-stream + stream), /healthz, dashboard, ledger; safe-bind refusal +
+    opt-in
+  - `exit_code`: 0
+  - `summary`: full operator flow works; server refuses non-loopback bind without TLS and serves
+    only under the explicit opt-in.
+  - `timestamp`: 2026-07-04T02:00:00Z
+- **Response drafted/sent:** implementation summary + honest ship caveats to the maintainer; no
+  PR opened (not requested).
+- **Event status:** not applicable.
+- **Failures:** Live-provider round-trips could NOT be executed — the build environment blocks
+  egress to provider domains (403). Adapter translation is unit-tested and the pipeline is
+  e2e-tested against the mock upstream, but a real-key smoke test must run in a networked
+  environment before production traffic. Provider pricing (except Anthropic) remains unconfirmed.
+- **Decisions:** runtime = zero-dep Node; providers = framework + Anthropic native + OpenAI-compat
+  + mock; quality = static config rank; `/v1/responses` deferred to v2; memory = naive v1;
+  cost cap = hard-block. Recorded in `cli-os/RELEASE.md` and `docs/open-questions.md`.
+- **Confidence:** High for the offline-provable surface (tests + validator + smoke). Medium for
+  production-at-scale until a networked live-provider smoke test and first-party pricing pass run.
+- **Next action:** Maintainer runs a live-provider smoke test with real keys in a networked env,
+  confirms provider pricing (Q7), and decides on a PR / release tag. Optional follow-ups: wire the
+  dashboard to live `/healthz`+ledger data; `/v1/responses`; embeddings.
+- **Do-not-retry notes:** Do not claim live-provider readiness without an egress-enabled smoke
+  test; do not backfill provider pricing from training-data memory (manifests keep unconfirmed
+  prices null and cost is flagged estimated).
+- **Lock:** none acquired. CLI-OS work is in the `cli-os/` subtree (not a lease-protected path);
+  the only protected-path write was this `.l00prite/ledger.md` append in a single-agent session.
+
 ### Run 2026-07-04T00:00:00Z — Claude (Opus 4.8), branch claude/looprite-cli-os-jntwqi
 - **Goal:** Design pass for l00prite CLI-OS — turn the scaffold-only memory protocol into a
   self-hostable coding gateway (OpenAI-compatible endpoint + repo memory + routing + cost

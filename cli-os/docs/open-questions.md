@@ -3,6 +3,27 @@
 Per the brief: do not guess on ambiguous product decisions — surface them. Implementation of
 Track 1/Track 2 beyond adapter-approach validation waits on Q1–Q3 at minimum.
 
+## Resolved for v1.0.0 (maintainer said "ship it" → proceeded on the recommendations)
+
+- **Q3 runtime → Node.js (zero external deps).** Changed from the earlier Go recommendation for
+  a concrete reason: the build environment blocks module fetch + live-provider egress, so Go
+  couldn't be built or tested here, while Node runs natively, matches the existing Node
+  validator, and gives real ACID via built-in `node:sqlite`. Flagged transparently; say the word
+  and a Go port is straightforward against the same design.
+- **Q1 providers → framework + Anthropic (native) + OpenAI-compatible (covers GLM 5.2, DeepSeek,
+  Gemini, Groq, Mistral, OpenRouter, local) + mock.** Adding any OpenAI-compatible provider is a
+  `l00prite provider add`, not code.
+- **Q2 "quality" → operator-assigned static rank in config** (no ML).
+- **Q4 `/v1/responses` → deferred to v2** (chat/completions ships first).
+- **Q5 memory → naive rank-and-select v1** (no embeddings; swappable behind the interface).
+- **Q6 cost cap → hard-block by default** (402 before spend).
+- **A1 constraint supersession → taken** for the `cli-os/` subtree only; the prompt protocol
+  stays dependency-free.
+
+Still genuinely open / needs your input: **Q7 pricing** — Anthropic is first-party-confirmed;
+other providers' price maps ship `null`/unconfirmed (egress-blocked). Want me to run a
+first-party pricing pass from a networked environment, or will you supply the numbers?
+
 ## Assumptions made (flagged, not silently taken)
 
 - **A1 — Constraint supersession.** CLI-OS supersedes the `.l00prite/constraints.md` hard rule
