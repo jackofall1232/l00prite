@@ -176,13 +176,11 @@ func TestProviderRotatePreservesIdentityAndKillsOldKey(t *testing.T) {
 	if verified1 != 0 {
 		t.Fatalf("rotate must reset verified to 0, got %d", verified1)
 	}
-	// the OLD key is really gone: the stored ciphertext decrypts to the NEW key only.
+	// the OLD key is really gone: the single enc_key cell now decrypts to the NEW key, so the old
+	// ciphertext was overwritten in place (a real overwrite, not a second stored copy) — unrecoverable.
 	dec, err := security.DecryptSecret(cfg.MasterKeyPath, enc)
 	if err != nil || dec != "key-new" {
-		t.Fatalf("stored key must decrypt to the rotated key: dec=%q err=%v", dec, err)
-	}
-	if dec == "key-old" {
-		t.Fatalf("old key must be unrecoverable after rotation")
+		t.Fatalf("stored key must decrypt to the rotated key (old key gone): dec=%q err=%v", dec, err)
 	}
 
 	// a real routed request flips verified to 1.
@@ -280,6 +278,55 @@ func TestProviderRemoveLastProviderLifecycle(t *testing.T) {
 	}
 	if resp := post(t, base, token, map[string]any{"model": "x", "messages": []any{map[string]any{"role": "user", "content": "hi"}}}, nil); resp.StatusCode != 200 {
 		t.Fatalf("routing must work again after re-adding a provider, got %d", resp.StatusCode)
+	}
+}
+
+// TestProviderDisableStopsRouting: the /v1/providers/update endpoint's enabled flip actually affects
+// routing — a disabled provider stops serving requests, and disabling the LAST enabled provider yields
+// the distinct "All providers are disabled" no_providers_configured 503 (a provider still exists, unlike
+// the remove-to-zero case). Re-enabling restores routing (and clears any breaker).
+func TestProviderDisableStopsRouting(t *testing.T) {
+	srv, _, _, _, token := configured(t)
+	base := srv.URL
+	msg := map[string]any{"model": "x", "messages": []any{map[string]any{"role": "user", "content": "hi"}}}
+	doJSON(t, "POST", base+"/v1/providers", token, map[string]any{"name": "mocka", "adapter": "mock", "default": true})
+	doJSON(t, "POST", base+"/v1/providers", token, map[string]any{"name": "mockb", "adapter": "mock"})
+
+	// disable mockb — a request must route to the still-enabled default, never to the disabled provider.
+	if resp, m := doJSON(t, "POST", base+"/v1/providers/update", token, map[string]any{"name": "mockb", "enabled": false}); resp.StatusCode != 200 {
+		t.Fatalf("disable mockb: %d %v", resp.StatusCode, m)
+	}
+	resp := post(t, base, token, msg, nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("a request must still route to the enabled default, got %d", resp.StatusCode)
+	}
+	if p := resp.Header.Get("x-l00prite-provider"); p == "mockb" {
+		t.Fatalf("a disabled provider must not serve requests, but mockb did")
+	}
+	resp.Body.Close()
+
+	// disable the remaining provider: zero ENABLED but the rows still exist (distinct from removal).
+	if resp, _ := doJSON(t, "POST", base+"/v1/providers/update", token, map[string]any{"name": "mocka", "enabled": false}); resp.StatusCode != 200 {
+		t.Fatalf("disable mocka: %d", resp.StatusCode)
+	}
+	resp = post(t, base, token, msg, nil)
+	if resp.StatusCode != 503 {
+		t.Fatalf("zero enabled providers must be 503, got %d", resp.StatusCode)
+	}
+	e, _ := bodyJSON(t, resp)["error"].(map[string]any)
+	if e == nil || e["code"] != "no_providers_configured" {
+		t.Fatalf("all-disabled must carry code no_providers_configured: %v", e)
+	}
+	if !strings.Contains(asString(e["message"]), "disabled") {
+		t.Fatalf("the all-disabled message must be distinct (mention disabled): %v", e["message"])
+	}
+
+	// re-enabling restores routing.
+	if resp, _ := doJSON(t, "POST", base+"/v1/providers/update", token, map[string]any{"name": "mocka", "enabled": true}); resp.StatusCode != 200 {
+		t.Fatalf("re-enable mocka: %d", resp.StatusCode)
+	}
+	if resp := post(t, base, token, msg, nil); resp.StatusCode != 200 {
+		t.Fatalf("re-enabling a provider must restore routing, got %d", resp.StatusCode)
 	}
 }
 
