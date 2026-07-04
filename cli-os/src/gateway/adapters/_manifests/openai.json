@@ -30,7 +30,9 @@
     "shape": "high",
     "shape_source": "OpenAI official OpenAPI spec (github.com/openai/openai-openapi)",
     "pricing": "unconfirmed",
-    "pricing_source": "NONE fetched first-party -- openai.com doc domains were egress-blocked in the research session"
+    "pricing_source": "NONE fetched first-party -- see pricing_note",
+    "pricing_checked": "2026-07-04",
+    "pricing_note": "First-party confirmation attempted 2026-07-04 from a networked environment and FAILED: every official OpenAI domain is blocked. platform.openai.com/docs/pricing, openai.com/api/pricing/, developers.openai.com/api/docs/pricing and help.openai.com all return HTTP 403 (org-policy egress denial at the CONNECT layer + provider bot protection). Per the brief, pricing and concrete flagship model ids are left null rather than carried over from training-data memory. Do NOT backfill. See docs/pricing-confirmation.md."
   },
   "models": [
     {
@@ -39,7 +41,7 @@
       "capabilities": { "tools": true, "parallel_tools": true, "vision": true, "streaming_usage": "opt-in" },
       "price_per_mtok": { "input": null, "output": null },
       "price_confidence": "unconfirmed",
-      "notes": "Model ids + pricing intentionally left null. The API SHAPE is verified; concrete flagship model ids and prices need a first-party confirmation pass (Open Question Q7) before wiring real numbers. Do NOT backfill from training-data memory."
+      "notes": "Model ids + pricing intentionally left null. The API SHAPE is verified from OpenAI's own OpenAPI spec; concrete flagship model ids and prices need a first-party pricing-page fetch, which the 2026-07-04 pass could not reach (all official OpenAI domains 403). Do NOT backfill from training-data memory. Ids starting with 'PENDING' are filtered out of the routable catalog, so OpenAI contributes no routable models until confirmed."
     }
   ]
 }
