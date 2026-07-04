@@ -11,21 +11,22 @@ destructive actions, stale context, and concurrent sessions.
 abstraction + repo memory + routing + cost tracking + safety policy + run ledger + installable
 server + CLI control surface + dashboard.
 
-> **v1.0.0 — runnable and tested.** Zero external npm dependencies (Node ≥ 22 built-ins only:
-> `http`/`fetch`/`crypto`/`node:sqlite`). The full request path is covered by an offline
-> end-to-end test suite (`npm test`, 12 checks). See [`RELEASE.md`](RELEASE.md) for what is
-> proven vs. what still needs a networked validation pass (live-provider round-trips, first-party
-> pricing confirmation).
+> **v1.1.0 — Go rewrite, runnable and tested.** A single statically-compiled Go binary (pure-Go
+> SQLite via `modernc.org/sqlite`, no cgo — `CGO_ENABLED=0 go build` yields one static executable
+> that `ldd` reports as "not a dynamic executable"). The full request path is covered by an offline
+> test suite (`go test ./...`, 51 checks). See [`RELEASE.md`](RELEASE.md) and
+> [`docs/node-to-go-port-notes.md`](docs/node-to-go-port-notes.md) for what is proven vs. what still
+> needs a networked validation pass (live-provider round-trips, OpenAI/GLM pricing confirmation).
 
 ## Quickstart (local)
 
 ```bash
 cd cli-os
-./install/install.sh                                   # checks Node 22+, runs init
+./install/install.sh                    # builds the static ./l00prite binary, runs init
 
-node bin/cli.js provider add mock --adapter mock --default   # zero-key demo upstream
-node bin/cli.js token mint --project demo                    # prints a token (once)
-node bin/cli.js serve                                        # http://127.0.0.1:8787
+./l00prite provider add mock --adapter mock --default   # zero-key demo upstream
+./l00prite token mint --project demo                    # prints a token (once)
+./l00prite serve                                        # http://127.0.0.1:8787
 ```
 
 Point any OpenAI-compatible tool at it:
@@ -41,11 +42,11 @@ curl "$OPENAI_BASE_URL/chat/completions" \
 Swap the demo upstream for real providers:
 
 ```bash
-node bin/cli.js provider add anthropic --key sk-ant-... --default
-node bin/cli.js provider add openai    --key sk-...     --adapter openai-compat
-node bin/cli.js provider add glm        --key ...        --adapter openai-compat   # glm-5.2
-node bin/cli.js repo register myrepo --root /path/to/repo --project demo   # inject .l00prite memory
-node bin/cli.js cap set --project demo --daily 20                          # hard $/day cap
+./l00prite provider add anthropic --key sk-ant-... --default
+./l00prite provider add openai    --key sk-...     --adapter openai-compat
+./l00prite provider add glm        --key ...        --adapter openai-compat   # glm-5.2
+./l00prite repo register myrepo --root /path/to/repo --project demo   # inject .l00prite memory
+./l00prite cap set --project demo --daily 20                          # hard $/day cap
 ```
 
 Open the **dashboard** at `http://127.0.0.1:8787/`.
@@ -56,8 +57,8 @@ Open the **dashboard** at `http://127.0.0.1:8787/`.
 cd cli-os
 docker compose up --build            # seeds a demo mock provider on first run
 # add real providers / tokens:
-docker compose exec cli-os node bin/cli.js provider add anthropic --key sk-ant-... --default
-docker compose exec cli-os node bin/cli.js token mint --project demo
+docker compose exec cli-os l00prite provider add anthropic --key sk-ant-... --default
+docker compose exec cli-os l00prite token mint --project demo
 ```
 
 ## Endpoints
@@ -126,37 +127,42 @@ leases/transactions, not cooperative file locks.
 
 ## Module layout
 
+A single Go module (`go build ./cmd/l00prite` → one static binary). Ported from the original Node
+tree (kept in git history); see [`docs/node-to-go-port-notes.md`](docs/node-to-go-port-notes.md).
+
 ```
 cli-os/
-  bin/cli.js                     # launcher (applies warning suppression, imports src/cli-main.js)
-  src/
-    cli-main.js                  # admin CLI implementation
-    config.js                    # config load + no-insecure-defaults validation
-    server.js                    # HTTP(S) server + static dashboard
-    state/db.js                  # node:sqlite (WAL) transactional store
-    security/vault.js            # AES-256-GCM provider-key vault
-    security/tokens.js           # opaque gateway tokens (hashed, constant-time)
-    policy/pep.js                # Policy Enforcement Point: caps, reservations, leases
+  go.mod / go.sum                          # module: modernc.org/sqlite (pure-Go, only non-stdlib dep)
+  cmd/l00prite/main.go                      # admin CLI (init/serve/provider/token/repo/cap/route/…)
+  internal/
+    config/config.go                        # config load + no-insecure-defaults validation
+    util/util.go                            # ids, ISO time, constant-time compare, token estimate
+    apierr/apierr.go                         # typed HTTP error carried through routing/upstream
+    oai/oai.go                               # OpenAI wire shapes: Usage + chunk/response builders
+    state/db.go                              # SQLite (WAL) transactional store; BEGIN IMMEDIATE tx
+    security/vault.go                        # AES-256-GCM provider-key vault (Node-compatible format)
+    security/tokens.go                       # opaque gateway tokens (hashed, constant-time via subtle)
+    policy/pep.go                            # Policy Enforcement Point: caps, reservations, leases
+    memory/memory.go                         # Track 2: retrieval/ranking + staleness + containment
+    ledger/ledger.go                         # run ledger (sqlite + jsonl), incl. cost_unconfirmed
+    server/server.go                         # HTTP(S) server + embedded dashboard + safe startup
     gateway/
-      ingress.js                 # /v1/chat/completions pipeline (dry-run | bridge | stream | default)
-      router.js                  # explainable routing + circuit breaker + opt-in auto tier
-      router-auto.js             # capability filter + preference scoring (auto:cheap|quality|balanced)
-      bridge.js                  # cross-provider delegation: l00prite_bridge tool + bounded loop
-      turn.js                    # runTurn — the one shared route→reserve→call→meter→commit primitive
-      upstream.js                # shared provider-call helpers (fetch, retry, SSE parse)
-      envelope.js                # untrusted-content envelope (memory + bridged output) w/ breakout guard
-      meter.js                   # real-usage cost accounting
-      inject.js                  # untrusted-memory injection
+      ingress.go                             # /v1/chat/completions (dry-run | bridge | stream | default)
+      router.go                              # explainable routing + circuit breaker + opt-in auto tier
+      routerauto.go                          # capability filter + preference scoring (auto:cheap|…)
+      bridge.go                              # cross-provider delegation: l00prite_bridge + bounded loop
+      turn.go                                # runTurn — one shared route→reserve→call→meter→commit
+      upstream.go                            # provider-call helpers (net/http, retry, SSE parse)
+      envelope.go                            # untrusted-content envelope w/ breakout guard
+      meter.go                               # real-usage cost accounting (unpriced ⇒ unconfirmed, not $0)
+      inject.go                              # untrusted-memory injection
       adapters/
-        anthropic.js             # native /v1/messages translator (SSE blocks -> chunks)
-        openaiCompat.js          # OpenAI-shaped passthrough (OpenAI, GLM, DeepSeek, Groq, …)
-        mock.js                  # zero-key demo upstream
-        registry.js              # adapter + manifest resolution
-        _manifests/*.json        # per-provider base url, models, pricing, capabilities
-    memory/memory.js             # Track 2: retrieval/ranking + staleness + degradation
-    ledger/ledger.js             # run ledger (sqlite + jsonl)
-    util.js
-  public/dashboard.html          # served control-plane dashboard
-  test/*.test.js                 # unit + end-to-end (node:test)
+        anthropic.go                         # native /v1/messages translator (SSE blocks -> chunks)
+        openaicompat.go                      # OpenAI-shaped passthrough (OpenAI, GLM, DeepSeek, …)
+        mock.go                              # zero-key demo upstream (bridge-aware test hooks)
+        registry.go                          # adapter + manifest resolution (manifests embedded)
+        manifests/*.json                     # per-provider base url, models, pricing, capabilities
+    */(*_test.go)                            # unit + end-to-end (go test ./..., 51 checks)
+  public/dashboard.html + embed.go           # served (embedded) control-plane dashboard
   install/ · Dockerfile · docker-compose.yml · .env.example
 ```
