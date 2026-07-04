@@ -7,6 +7,7 @@ package gateway
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/jackofall1232/l00prite/cli-os/internal/config"
@@ -38,6 +39,13 @@ type ProviderRow struct {
 	EncKey    string
 	Enabled   bool
 	IsDefault bool
+	// Verified is true once a real routed request has succeeded against this provider's current key.
+	// A freshly added provider, or one whose key was just rotated, is unverified until first use.
+	Verified bool
+	// DisabledModels is the set of this provider's manifest models the operator has switched OFF (Part
+	// C/E model selection). Absence means enabled, so a nil map (no selection stored, and every test
+	// literal that omits it) leaves the full catalog routable exactly as before.
+	DisabledModels map[string]bool
 }
 
 // Denial is a reservation denial surfaced to the caller.
@@ -75,10 +83,15 @@ type TurnOpts struct {
 	Meta         map[string]any
 }
 
-// ListProviders returns the provider rows (default first, then name).
+// ListProviders returns the provider rows (default first, then name). The correlated subquery folds
+// each provider's disabled-model set into the SAME query — one round trip, and (with the single-conn
+// pool) no open-cursor ordering hazard from a second query. Model ids never contain commas, so the
+// group_concat split is unambiguous.
 func ListProviders(db *sql.DB) []ProviderRow {
 	rows, err := db.QueryContext(state.Ctx(),
-		`SELECT name, adapter, base_url, enc_key, enabled, is_default FROM providers ORDER BY is_default DESC, name`)
+		`SELECT name, adapter, base_url, enc_key, enabled, is_default, verified,
+		        (SELECT group_concat(model) FROM provider_models pm WHERE pm.provider = providers.name AND pm.enabled = 0)
+		   FROM providers ORDER BY is_default DESC, name`)
 	if err != nil {
 		return nil
 	}
@@ -86,44 +99,66 @@ func ListProviders(db *sql.DB) []ProviderRow {
 	var out []ProviderRow
 	for rows.Next() {
 		var (
-			p               sql.NullString
-			baseURL, encKey sql.NullString
-			name, adapter   string
-			enabled, isDef  int
+			baseURL, encKey       sql.NullString
+			name, adapter         string
+			enabled, isDef, verif int
+			disabled              sql.NullString
 		)
-		if err := rows.Scan(&name, &adapter, &baseURL, &encKey, &enabled, &isDef); err != nil {
+		if err := rows.Scan(&name, &adapter, &baseURL, &encKey, &enabled, &isDef, &verif, &disabled); err != nil {
 			continue
 		}
-		_ = p
 		out = append(out, ProviderRow{
 			Name: name, Adapter: adapter, BaseURL: baseURL.String, EncKey: encKey.String,
-			Enabled: enabled != 0, IsDefault: isDef != 0,
+			Enabled: enabled != 0, IsDefault: isDef != 0, Verified: verif != 0,
+			DisabledModels: parseDisabledSet(disabled.String),
 		})
 	}
 	return out
 }
 
+// parseDisabledSet turns a group_concat("a,b,c") list into a set; "" yields nil (nothing disabled).
+func parseDisabledSet(csv string) map[string]bool {
+	if csv == "" {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, m := range strings.Split(csv, ",") {
+		if m != "" {
+			set[m] = true
+		}
+	}
+	return set
+}
+
 func providerInfos(rows []ProviderRow) []ProviderInfo {
 	out := make([]ProviderInfo, len(rows))
 	for i, r := range rows {
-		out[i] = ProviderInfo{Name: r.Name, Enabled: r.Enabled, IsDefault: r.IsDefault}
+		out[i] = ProviderInfo{Name: r.Name, Enabled: r.Enabled, IsDefault: r.IsDefault, DisabledModels: r.DisabledModels}
 	}
 	return out
 }
 
 func getProvider(db *sql.DB, name string) *ProviderRow {
 	var (
-		adapter         string
-		baseURL, encKey sql.NullString
-		enabled, isDef  int
+		adapter               string
+		baseURL, encKey       sql.NullString
+		enabled, isDef, verif int
 	)
 	err := db.QueryRowContext(state.Ctx(),
-		`SELECT adapter, base_url, enc_key, enabled, is_default FROM providers WHERE name = ?`, name).
-		Scan(&adapter, &baseURL, &encKey, &enabled, &isDef)
+		`SELECT adapter, base_url, enc_key, enabled, is_default, verified FROM providers WHERE name = ?`, name).
+		Scan(&adapter, &baseURL, &encKey, &enabled, &isDef, &verif)
 	if err != nil {
 		return nil
 	}
-	return &ProviderRow{Name: name, Adapter: adapter, BaseURL: baseURL.String, EncKey: encKey.String, Enabled: enabled != 0, IsDefault: isDef != 0}
+	return &ProviderRow{Name: name, Adapter: adapter, BaseURL: baseURL.String, EncKey: encKey.String, Enabled: enabled != 0, IsDefault: isDef != 0, Verified: verif != 0}
+}
+
+// markProviderVerified flips a provider to verified the first time a real routed request succeeds
+// against its current key. It is a no-op once verified (the guard is the caller's provRow.Verified
+// check plus the WHERE clause), so it never repeatedly writes on the hot path, and a key rotation —
+// which resets verified to 0 — correctly re-arms it.
+func markProviderVerified(db *sql.DB, name string) {
+	_, _ = db.ExecContext(state.Ctx(), `UPDATE providers SET verified = 1 WHERE name = ? AND verified = 0`, name)
 }
 
 const intentCap = 2000
@@ -282,6 +317,9 @@ func runTurn(app *App, opts TurnOpts) (TurnResult, error) {
 	cost := CostOf(route.Provider, route.Model, result.Usage)
 	pep.Commit(db, resv.ReservationID, cost.USD)
 	MarkSuccess(route.Provider)
+	if !provRow.Verified { // first successful real use proves the key works "in anger" — flip verified
+		markProviderVerified(db, route.Provider)
+	}
 	usage := result.Usage
 	ledger.Append(db, cfg.LedgerPath, ledger.Entry{
 		RequestID: opts.RequestID, Project: opts.Project, Repo: opts.RepoID,

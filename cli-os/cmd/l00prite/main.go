@@ -363,6 +363,9 @@ func providerCmd(db *sql.DB, cfg config.Config, sub, arg string, flags map[strin
 		_, _ = db.ExecContext(state.Ctx(), `UPDATE providers SET enabled = ? WHERE name = ?`, v, arg)
 		fmt.Printf("%s: %sd\n", arg, sub)
 	case "remove":
+		// Delete the provider AND its model-selection rows, matching the dashboard's remove endpoint so
+		// neither surface leaves ghost provider_models rows behind for a later re-add to resurrect.
+		_, _ = db.ExecContext(state.Ctx(), `DELETE FROM provider_models WHERE provider = ?`, arg)
 		_, _ = db.ExecContext(state.Ctx(), `DELETE FROM providers WHERE name = ?`, arg)
 		fmt.Printf("Removed %s\n", arg)
 	default:

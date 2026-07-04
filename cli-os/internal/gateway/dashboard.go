@@ -82,7 +82,10 @@ func (app *App) buildSummary(principal *security.Principal) map[string]any {
 		provOut = append(provOut, map[string]any{
 			"name": p.Name, "adapter": p.Adapter, "base_url": p.BaseURL,
 			"enabled": p.Enabled, "is_default": p.IsDefault, "has_key": hasKey,
-			"circuit_open": tripped, "models": modelsOrEmpty(p.Name),
+			"verified": p.Verified, "circuit_open": tripped, "models": modelsOrEmpty(p.Name),
+			"disabled_models": strSliceAny(sortedDisabled(p.DisabledModels)),
+			// Pre-removal impact, computed server-side so the dashboard's warning matches the confirm gate.
+			"removal": app.removalImpact(p.Name, providers),
 			"today": map[string]any{
 				"cost_usd": agg.cost, "requests": agg.requests, "ok": agg.ok, "errors": agg.errors,
 				"prompt_tokens": agg.promptTok, "completion_tokens": agg.complTok, "cost_unconfirmed": agg.unconfirmed,
@@ -163,9 +166,19 @@ func (app *App) buildSummary(principal *security.Principal) map[string]any {
 	}
 
 	dbOK := app.dbPing()
-	sysStatus := "ok"
-	if circuitOpen > 0 || provEnabled == 0 || !dbOK {
-		sysStatus = "degraded"
+	// A specific, honest headline so the average user sees exactly what broke after removing/disabling
+	// their last provider — not a green "Operational" over an empty provider list, and not a vague
+	// "Degraded" when the real problem is "there is nothing to route to."
+	sysStatus, statusLabel := "ok", "Operational"
+	switch {
+	case provTotal == 0:
+		sysStatus, statusLabel = "degraded", "No providers configured"
+	case provEnabled == 0:
+		sysStatus, statusLabel = "degraded", "All providers disabled"
+	case !dbOK:
+		sysStatus, statusLabel = "degraded", "Database error"
+	case circuitOpen > 0:
+		sysStatus, statusLabel = "degraded", "Degraded"
 	}
 
 	return map[string]any{
@@ -175,7 +188,8 @@ func (app *App) buildSummary(principal *security.Principal) map[string]any {
 		"principal":    map[string]any{"token_id": principal.TokenID, "project": principal.Project, "repo": nilIfEmpty(principal.Repo)},
 		"uptime":       uptime,
 		"system": map[string]any{
-			"status": sysStatus, "providers_total": provTotal, "providers_enabled": provEnabled,
+			"status": sysStatus, "status_label": statusLabel,
+			"providers_total": provTotal, "providers_enabled": provEnabled,
 			"providers_healthy": provHealthy, "circuit_open": circuitOpen,
 			"vault_initialized": config.MasterKeyPresent(app.Cfg), "db_ok": dbOK,
 			"bridge": map[string]any{"enabled": app.Cfg.Routing.Bridge.Enabled, "max_hops": app.Cfg.Routing.Bridge.MaxHops},
@@ -372,6 +386,20 @@ func (app *App) deriveAlerts(providers []ProviderRow, spendByProject []any, stal
 		}
 		if p.Enabled && p.Adapter != "mock" && p.EncKey == "" {
 			add("warn", "Provider \""+p.Name+"\" is enabled but has no API key — real calls will fail.")
+		}
+		if p.Enabled && len(p.DisabledModels) > 0 {
+			if manifest := adapters.ModelsFor(p.Name); len(manifest) > 0 {
+				allDisabled := true
+				for _, m := range manifest {
+					if !p.DisabledModels[m] {
+						allDisabled = false
+						break
+					}
+				}
+				if allDisabled {
+					add("warn", "Provider \""+p.Name+"\" has all of its models disabled — it can't serve bare or auto-routed requests.")
+				}
+			}
 		}
 	}
 	for _, rawp := range spendByProject {

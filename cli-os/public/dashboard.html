@@ -183,9 +183,35 @@
   .overlay input:focus{border-color:rgba(79,140,255,.6);}
   .note{margin-top:14px;padding:11px 13px;border-radius:var(--r-md);font-size:12.5px;border:1px solid var(--stroke);background:var(--panel);color:var(--text-2);}
   .note.err{border-color:rgba(244,67,54,.34);background:rgba(244,67,54,.09);color:#ffb0a8;}
+  .note.ok{border-color:rgba(0,200,83,.32);background:rgba(0,200,83,.09);color:#9ff0bd;}
+  .note.warn{border-color:rgba(255,179,0,.32);background:rgba(255,179,0,.09);color:#ffdf9c;}
   .hidden{display:none!important;}
   .spin{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.25);border-top-color:var(--accent);animation:spin .7s linear infinite;display:inline-block;}
   @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* provider management: card actions + modal + forms */
+  .prov .p-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px;padding-top:11px;border-top:1px solid var(--stroke);}
+  .btn.tiny{padding:5px 9px;font-size:11.5px;border-radius:9px;}
+  .btn.danger{border-color:rgba(244,67,54,.4);color:#ff9a92;}
+  .btn.danger:hover{background:rgba(244,67,54,.1);border-color:rgba(244,67,54,.6);}
+  .modal{position:fixed;inset:0;z-index:120;display:grid;place-items:start center;padding:32px 20px;background:rgba(6,9,13,.82);backdrop-filter:blur(6px);overflow-y:auto;}
+  .modal .box{width:100%;max-width:520px;margin:auto;}
+  .modal h3{margin:12px 0 4px;font-size:19px;font-weight:700;letter-spacing:-.2px;}
+  .modal .sub{color:var(--text-2);font-size:13px;margin:4px 0 6px;}
+  .field{margin-top:14px;}
+  .field > label{display:block;font-size:11.5px;font-weight:600;color:var(--text-2);margin-bottom:6px;letter-spacing:.02em;}
+  .field label .opt{color:var(--text-3);font-weight:500;}
+  .field input[type=text],.field input[type=password],.field select{width:100%;padding:10px 12px;border-radius:var(--r-md);background:rgba(0,0,0,.3);border:1px solid var(--stroke);color:var(--text);font-family:var(--font-mono);font-size:13px;outline:none;}
+  .field input:focus,.field select:focus{border-color:rgba(79,140,255,.6);}
+  .field.check{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-2);cursor:pointer;}
+  .field.check input{width:16px;height:16px;accent-color:var(--accent);}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;align-items:center;}
+  .modal-actions .spacer{flex:1;}
+  .modelgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;max-height:290px;overflow-y:auto;}
+  .modelrow{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--stroke);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:12px;cursor:pointer;}
+  .modelrow input{accent-color:var(--accent);flex:0 0 auto;}
+  .modelrow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  @media (max-width:560px){ .modelgrid{grid-template-columns:1fr;} .modal .box{max-width:none;} }
 
   @media (max-width:1180px){ .grid-main{grid-template-columns:1fr;} .charts{grid-template-columns:1fr;} .hero{grid-template-columns:1fr;} }
   @media (max-width:1000px){ .sidebar{display:none;} .kpi-grid{grid-template-columns:repeat(2,1fr);} .cost-head{grid-template-columns:repeat(2,1fr);} }
@@ -261,7 +287,12 @@
       <section class="card hero" id="hero"></section>
 
       <section id="sec-providers">
-        <div class="sec-head"><h2>Providers</h2><span class="meta" id="providers-meta"></span></div>
+        <div class="sec-head"><h2>Providers</h2>
+          <div style="display:flex;align-items:center;gap:12px;margin-left:auto">
+            <span class="meta" id="providers-meta"></span>
+            <button class="btn sm primary" id="add-provider-btn" style="display:none"><svg class="ico" style="width:15px;height:15px"><use href="#i-server"/></svg> Add provider</button>
+          </div>
+        </div>
         <div id="providers-body"></div>
       </section>
 
@@ -303,6 +334,8 @@
     </div>
   </div>
 </div>
+
+<div class="modal hidden" id="modal"><div class="box card card-pad" id="modal-body"></div></div>
 
 <div class="overlay hidden" id="overlay">
   <div class="box card card-pad">
@@ -362,6 +395,7 @@
   function render(){
     const d=S.summary; if(!d) return;
     $("disconnect-btn").style.display="";
+    $("add-provider-btn").style.display="";
     // header
     const providersOnline=(d.system&&d.system.providers_healthy)||0, providersTotal=(d.system&&d.system.providers_total)||0;
     const repos=(d.repos||[]).length, spendToday=(d.spend&&d.spend.today_committed_usd)||0;
@@ -378,7 +412,7 @@
 
   function renderHero(d){
     const sys=d.system||{}, up=d.uptime||{};
-    const status = sys.status==="ok" ? {w:"Operational",c:""} : {w:"Degraded",c:"warn"};
+    const status = sys.status==="ok" ? {w:sys.status_label||"Operational",c:""} : {w:sys.status_label||"Degraded",c:"warn"};
     const uptimeTxt = up.tracked ? dur(up.seconds) : "not tracked";
     const vault = sys.vault_initialized ? `<span class="pill ok"><span class="d"></span>initialized</span>` : `<span class="pill warn"><span class="d"></span>not set</span>`;
     const bridge = sys.bridge ? (sys.bridge.enabled?`on · ≤${sys.bridge.max_hops} hops`:"off") : "—";
@@ -411,7 +445,7 @@
   function renderProviders(d){
     const provs=d.providers||[];
     $("providers-meta").textContent = provs.length? provs.length+" configured" : "";
-    if(!provs.length){ $("providers-body").innerHTML = `<div class="empty"><b>No providers configured.</b> Add one with <code>l00prite provider add</code> or the setup wizard.</div>`; return; }
+    if(!provs.length){ $("providers-body").innerHTML = `<div class="empty"><b>No providers configured.</b> The gateway can't route any requests until you add one.<div style="margin-top:12px"><button class="btn primary sm" data-action="add">Add a provider</button></div></div>`; return; }
     $("providers-body").innerHTML = `<div class="prov-grid">${provs.map(provCard).join("")}</div>`;
   }
   function provCard(p){
@@ -423,13 +457,24 @@
     else{ stat=`<span class="pill ok"><span class="d"></span>ready</span>`; }
     const initials=(p.name||"?").slice(0,2).toUpperCase();
     const model=(p.models&&p.models[0])|| p.adapter;
+    const dis=(p.disabled_models||[]).length;
+    const modelNote = dis>0 ? `${esc(model)} · ${dis} model${dis===1?"":"s"} off` : esc(model);
     const reqs=t.requests||0;
     const errPill = (t.errors>0)?`<span class="pill warn" title="requests not OK today"><span class="d"></span>${t.errors} err</span>`:"";
     const costCell = reqs>0 ? (usd(t.cost_usd)+(t.cost_unconfirmed?` <small title="price unconfirmed">?</small>`:"")) : `<span class="dim">$0.00</span>`;
+    // verified = a real request has succeeded with the current key; unverified until then (or after a rotation).
+    const vPill = p.verified
+      ? `<span class="pill ok" title="a real request has succeeded with the current key"><span class="d"></span>verified</span>`
+      : `<span class="pill idle" title="no successful request yet with the current key"><span class="d"></span>unverified</span>`;
+    const nm=esc(p.name);
+    const rotateBtn = p.adapter!=="mock" ? `<button class="btn tiny" data-action="rotate" data-provider="${nm}">Rotate key</button>` : "";
+    const modelsBtn = (p.models&&p.models.length) ? `<button class="btn tiny" data-action="models" data-provider="${nm}">Models</button>` : "";
+    const toggleBtn = `<button class="btn tiny" data-action="${p.enabled?"disable":"enable"}" data-provider="${nm}">${p.enabled?"Disable":"Enable"}</button>`;
+    const defaultBtn = p.is_default ? "" : `<button class="btn tiny" data-action="default" data-provider="${nm}">Set default</button>`;
     return `<article class="card prov ${cls}">
       <div class="p-top"><div class="p-logo">${esc(initials)}</div>
         <div style="min-width:0"><div class="p-name">${esc(p.name)}${p.is_default?` <svg class="ico" style="width:12px;height:12px;color:var(--accent-2);display:inline;vertical-align:-1px" title="default"><use href="#i-star"/></svg>`:""}</div>
-          <div class="p-model">${esc(model)}</div></div>
+          <div class="p-model">${modelNote}</div></div>
         <span style="margin-left:auto">${stat}</span></div>
       <div class="p-stats">
         <div class="st"><div class="sl">Today cost</div><div class="sv">${costCell}</div></div>
@@ -439,8 +484,13 @@
       </div>
       <div class="p-foot">
         <span class="pill idle"><svg class="ico" style="width:12px;height:12px"><use href="#i-shield"/></svg> ${p.has_key?"key vaulted":(p.adapter==="mock"?"no key needed":"no key")}</span>
+        ${vPill}
         ${errPill}
         <span class="pill idle" style="margin-left:auto" title="adapter">${esc(p.adapter)}</span>
+      </div>
+      <div class="p-actions">
+        ${rotateBtn}${modelsBtn}${toggleBtn}${defaultBtn}
+        <button class="btn tiny danger" style="margin-left:auto" data-action="remove" data-provider="${nm}">Remove</button>
       </div>
     </article>`;
   }
@@ -559,8 +609,195 @@
         <div class="r-main"><div class="r-t mono">${esc(x.action)}${x.detail?` <span style="color:var(--text-3)">${esc(String(x.detail).slice(0,40))}</span>`:""}</div><div class="r-meta">${esc(x.actor||"—")} · ${ago(x.ts)}</div></div></div>`).join("");
   }
 
+  // ---- provider management (Part E) ----
+  // Every call carries the same Bearer token the dashboard already uses — the management endpoints share
+  // the exact auth of every other data endpoint. A key is never sent back by the server, so it never
+  // appears here; the UI only ever submits a NEW key to replace a stored one.
+  async function api(method, path, body){
+    const opt = {method, headers:{authorization:"Bearer "+S.token}};
+    if(body!==undefined){ opt.headers["content-type"]="application/json"; opt.body=JSON.stringify(body); }
+    let res, data=null;
+    try{ res = await fetch(path, opt); }catch(e){ return {res:{ok:false,status:0}, data:{error:{message:"Network error — is the gateway reachable?"}}}; }
+    try{ data = await res.json(); }catch(e){}
+    return {res, data};
+  }
+  function mErr(data, fallback){ if(data&&data.error&&data.error.message) return data.error.message; if(data&&data.detail) return data.detail; return fallback||"Something went wrong."; }
+  function findProvider(name){ return ((S.summary&&S.summary.providers)||[]).find(p=>p.name===name); }
+  function openModal(html){ $("modal-body").innerHTML=html; $("modal").classList.remove("hidden"); }
+  function closeModal(){ $("modal").classList.add("hidden"); $("modal-body").innerHTML=""; }
+  async function afterMutation(){ closeModal(); await refresh(); }
+  function busy(btn,label){ btn.dataset.old=btn.innerHTML; btn.disabled=true; btn.innerHTML=`<span class="spin"></span> ${esc(label)}`; }
+  function unbusy(btn,label){ btn.disabled=false; btn.innerHTML=label||btn.dataset.old||""; }
+
+  function add(){
+    openModal(`
+      <div class="eyebrow"><span class="tick"></span> Add provider</div>
+      <h3>Add a provider</h3>
+      <div class="sub">The key is validated with a real call, stored encrypted in the vault, and marked <b>unverified</b> until its first successful request.</div>
+      <div class="field"><label>Adapter type</label>
+        <select id="m-adapter">
+          <option value="native-messages">Anthropic (native /v1/messages)</option>
+          <option value="openai-compat">OpenAI-compatible (OpenAI, GLM, DeepSeek, Groq, …)</option>
+          <option value="mock">Mock (zero-key demo upstream)</option>
+        </select></div>
+      <div class="field"><label>Provider name</label><input type="text" id="m-name" placeholder="anthropic"></div>
+      <div class="field" id="m-modelwrap"><label>Model to test <span class="opt">— optional</span></label><input type="text" id="m-model" placeholder="auto (first known model)"></div>
+      <div class="field" id="m-keywrap"><label>API key</label><input type="password" id="m-key" placeholder="sk-…" autocomplete="off"></div>
+      <div class="field" id="m-basewrap"><label>Base URL <span class="opt" id="m-basehint"></span></label><input type="text" id="m-base"></div>
+      <label class="field check"><input type="checkbox" id="m-default" checked> Make this the default provider</label>
+      <label class="field check" id="m-skipwrap"><input type="checkbox" id="m-skip"> Add without validating <span class="opt">— advanced, offline</span></label>
+      <div id="m-note"></div>
+      <div class="modal-actions">
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn" id="m-validate">Validate key</button>
+        <div class="spacer"></div>
+        <button class="btn primary" id="m-add" disabled>Add provider</button>
+      </div>`);
+    const g=id=>document.getElementById(id);
+    const adapterSel=g("m-adapter"), nameIn=g("m-name"), baseIn=g("m-base"), baseHint=g("m-basehint");
+    const keywrap=g("m-keywrap"), basewrap=g("m-basewrap"), modelwrap=g("m-modelwrap"), skipwrap=g("m-skipwrap");
+    const validateBtn=g("m-validate"), addBtn=g("m-add"), skip=g("m-skip"), note=g("m-note");
+    let epoch=0;
+    const D={"native-messages":{name:"anthropic",base:"https://api.anthropic.com",hint:"— default shown; edit if self-hosting"},
+             "openai-compat":{name:"openai",base:"",hint:"— required, e.g. https://api.openai.com/v1"},
+             "mock":{name:"mock",base:"",hint:""}};
+    function resetV(){ epoch++; const gate=adapterSel.value!=="mock" && !skip.checked; addBtn.disabled=gate; if(gate) note.innerHTML=""; }
+    function sync(){
+      const d=D[adapterSel.value];
+      if(!nameIn.dataset.touched) nameIn.value=d.name;
+      baseIn.value=d.base; baseHint.textContent=d.hint;
+      const isMock=adapterSel.value==="mock";
+      keywrap.classList.toggle("hidden",isMock); basewrap.classList.toggle("hidden",isMock);
+      modelwrap.classList.toggle("hidden",isMock); validateBtn.classList.toggle("hidden",isMock); skipwrap.classList.toggle("hidden",isMock);
+      resetV();
+      if(isMock){ addBtn.disabled=false; note.innerHTML=`<div class="note">The mock upstream needs no key — it echoes requests so you can see the full path working.</div>`; }
+    }
+    function body(){ return {name:nameIn.value.trim(), adapter:adapterSel.value, base_url:baseIn.value.trim(), api_key:g("m-key").value, model:g("m-model").value.trim()}; }
+    nameIn.oninput=()=>{ nameIn.dataset.touched="1"; resetV(); };
+    [baseIn,g("m-key"),g("m-model")].forEach(el=>el.oninput=resetV);
+    adapterSel.onchange=sync;
+    skip.onchange=()=>{ if(skip.checked){ addBtn.disabled=false; note.innerHTML=`<div class="note warn">Skipping validation — a bad key will only fail on the first real request.</div>`; } else resetV(); };
+    validateBtn.onclick=async()=>{
+      const b=body(); if(!b.name){ note.innerHTML=`<div class="note err">Give the provider a name.</div>`; return; }
+      if(!b.api_key){ note.innerHTML=`<div class="note err">Enter an API key to validate.</div>`; return; }
+      const my=epoch; busy(validateBtn,"Testing…");
+      const {res,data}=await api("POST","/v1/providers/test",b);
+      unbusy(validateBtn,"Validate key"); if(my!==epoch) return;
+      if(res.ok && data && data.ok){ addBtn.disabled=false; note.innerHTML=`<div class="note ok"><b>Key works.</b>${data.model_used?` Model <span class="mono">${esc(data.model_used)}</span>.`:""}</div>`; }
+      else { addBtn.disabled=true; note.innerHTML=`<div class="note err"><b>Validation failed:</b> ${esc((data&&data.error)||mErr(data,"the provider rejected the call"))}</div>`; }
+    };
+    addBtn.onclick=async()=>{
+      const b=body(); b.default=g("m-default").checked; b.skip_validation=skip.checked;
+      if(!b.name){ note.innerHTML=`<div class="note err">Give the provider a name.</div>`; return; }
+      busy(addBtn,"Adding…");
+      const {res,data}=await api("POST","/v1/providers",b);
+      if(!res.ok){ unbusy(addBtn,"Add provider"); note.innerHTML=`<div class="note err">${esc((data&&data.detail)||mErr(data,"Could not add the provider."))}</div>`; return; }
+      afterMutation();
+    };
+    sync();
+  }
+
+  function rotate(name){
+    const p=findProvider(name)||{name};
+    openModal(`
+      <div class="eyebrow"><span class="tick"></span> Rotate key</div>
+      <h3>Rotate the key for <span class="mono">${esc(name)}</span></h3>
+      <div class="sub"><b>The old key is permanently overwritten in the vault</b> and can't be recovered. The provider keeps its settings and history but is marked <b>unverified</b> until its next successful request.</div>
+      <div class="field"><label>New API key</label><input type="password" id="r-key" placeholder="sk-…" autocomplete="off"></div>
+      <div class="field"><label>Model to test <span class="opt">— optional</span></label><input type="text" id="r-model" placeholder="auto (first known model)"></div>
+      <label class="field check"><input type="checkbox" id="r-skip"> Rotate without validating <span class="opt">— advanced, offline</span></label>
+      <div id="r-note"></div>
+      <div class="modal-actions">
+        <button class="btn" data-close>Cancel</button>
+        <button class="btn" id="r-validate">Validate key</button>
+        <div class="spacer"></div>
+        <button class="btn primary" id="r-rotate">Rotate key</button>
+      </div>`);
+    const g=id=>document.getElementById(id);
+    const keyIn=g("r-key"), modelIn=g("r-model"), skip=g("r-skip"), note=g("r-note"), vBtn=g("r-validate"), rBtn=g("r-rotate");
+    let epoch=0; keyIn.oninput=()=>{epoch++;};
+    vBtn.onclick=async()=>{
+      if(!keyIn.value){ note.innerHTML=`<div class="note err">Enter the new key to validate.</div>`; return; }
+      const my=++epoch; busy(vBtn,"Testing…");
+      const {res,data}=await api("POST","/v1/providers/test",{name, adapter:p.adapter, base_url:p.base_url, api_key:keyIn.value, model:modelIn.value.trim()});
+      unbusy(vBtn,"Validate key"); if(my!==epoch) return;
+      if(res.ok && data && data.ok){ note.innerHTML=`<div class="note ok"><b>Key works.</b>${data.model_used?` Model <span class="mono">${esc(data.model_used)}</span>.`:""}</div>`; }
+      else note.innerHTML=`<div class="note err"><b>Validation failed:</b> ${esc((data&&data.error)||mErr(data,"the provider rejected the call"))}</div>`;
+    };
+    rBtn.onclick=async()=>{
+      if(!keyIn.value){ note.innerHTML=`<div class="note err">Enter a new API key.</div>`; return; }
+      busy(rBtn,"Rotating…");
+      const {res,data}=await api("POST","/v1/providers/rotate",{name, api_key:keyIn.value, model:modelIn.value.trim(), skip_validation:skip.checked});
+      if(!res.ok){ unbusy(rBtn,"Rotate key"); note.innerHTML=`<div class="note err">${esc((data&&data.detail)||mErr(data,"Could not rotate the key."))}</div>`; return; }
+      afterMutation();
+    };
+  }
+
+  function editModels(name){
+    const p=findProvider(name); if(!p) return;
+    const models=p.models||[]; const disabled=new Set(p.disabled_models||[]);
+    if(!models.length){ openModal(`<div class="eyebrow"><span class="tick"></span> Models</div><h3>Models for <span class="mono">${esc(name)}</span></h3><div class="note">This provider's model catalog isn't known (a custom endpoint), so there's nothing to select — it forwards whatever model your client requests.</div><div class="modal-actions"><div class="spacer"></div><button class="btn" data-close>Close</button></div>`); return; }
+    const rows=models.map(m=>`<label class="modelrow"><input type="checkbox" data-model="${esc(m)}" ${disabled.has(m)?"":"checked"}><span title="${esc(m)}">${esc(m)}</span></label>`).join("");
+    openModal(`
+      <div class="eyebrow"><span class="tick"></span> Models</div>
+      <h3>Models for <span class="mono">${esc(name)}</span></h3>
+      <div class="sub">Uncheck a model to stop the gateway advertising or auto-routing to it. Disabling every model leaves this provider unable to serve bare or auto-routed requests.</div>
+      <div class="modelgrid" id="mg">${rows}</div>
+      <div id="mm-note"></div>
+      <div class="modal-actions"><button class="btn" data-close>Cancel</button><div class="spacer"></div><button class="btn primary" id="mm-save">Save selection</button></div>`);
+    document.getElementById("mm-save").onclick=async()=>{
+      const dis=[...document.querySelectorAll('#mg input[type=checkbox]')].filter(c=>!c.checked).map(c=>c.dataset.model);
+      const btn=document.getElementById("mm-save"); busy(btn,"Saving…");
+      const {res,data}=await api("POST","/v1/providers/models",{name, disabled_models:dis});
+      if(!res.ok){ unbusy(btn,"Save selection"); document.getElementById("mm-note").innerHTML=`<div class="note err">${esc(mErr(data,"Could not save the selection."))}</div>`; return; }
+      afterMutation();
+    };
+  }
+
+  function confirmRemove(name){
+    const p=findProvider(name)||{name};
+    const warns=(p.removal&&p.removal.warnings)||[];
+    const warnHtml = warns.length
+      ? warns.map(w=>`<div class="note ${w.level==="error"?"err":"warn"}">${esc(w.message)}</div>`).join("")
+      : `<div class="note warn">This permanently deletes the provider and its stored key.</div>`;
+    openModal(`
+      <div class="eyebrow"><span class="tick" style="background:var(--err)"></span> Remove provider</div>
+      <h3>Remove <span class="mono">${esc(name)}</span></h3>
+      <div class="sub">This is permanent: the stored key is erased from the vault and the provider stops serving requests immediately.</div>
+      ${warnHtml}
+      <div class="field"><label>Type <span class="mono">${esc(name)}</span> to confirm</label><input type="text" id="rm-confirm" autocomplete="off" placeholder="${esc(name)}"></div>
+      <div id="rm-note"></div>
+      <div class="modal-actions"><button class="btn" data-close>Cancel</button><div class="spacer"></div><button class="btn danger" id="rm-go" disabled>Remove provider</button></div>`);
+    const inp=document.getElementById("rm-confirm"), go=document.getElementById("rm-go");
+    inp.oninput=()=>{ go.disabled = inp.value!==name; };
+    inp.focus();
+    go.onclick=async()=>{
+      busy(go,"Removing…");
+      const {res,data}=await api("POST","/v1/providers/remove",{name, confirm:inp.value});
+      if(!res.ok){ unbusy(go,"Remove provider"); document.getElementById("rm-note").innerHTML=`<div class="note err">${esc(mErr(data,"Could not remove the provider."))}</div>`; return; }
+      afterMutation();
+    };
+  }
+
+  async function toggleProvider(name, enable){ await api("POST","/v1/providers/update",{name, enabled:enable}); refresh(); }
+  async function makeDefault(name){ await api("POST","/v1/providers/update",{name, default:true}); refresh(); }
+
+  function handleProviderAction(action, name){
+    if(action==="add") return add();
+    if(action==="rotate") return rotate(name);
+    if(action==="models") return editModels(name);
+    if(action==="remove") return confirmRemove(name);
+    if(action==="enable") return toggleProvider(name,true);
+    if(action==="disable") return toggleProvider(name,false);
+    if(action==="default") return makeDefault(name);
+  }
+
   // ---- events ----
   $("refresh-btn").onclick=refresh;
+  $("add-provider-btn").onclick=()=>add();
+  $("providers-body").addEventListener("click",e=>{ const b=e.target.closest("[data-action]"); if(b){ handleProviderAction(b.dataset.action, b.dataset.provider); } });
+  $("modal").addEventListener("click",e=>{ if(e.target===$("modal") || (e.target.closest&&e.target.closest("[data-close]"))) closeModal(); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("modal").classList.contains("hidden")) closeModal(); });
   $("disconnect-btn").onclick=()=>{ S.token=null; try{localStorage.removeItem(TOKEN_KEY);}catch(e){} $("disconnect-btn").style.display="none"; showOverlay(); };
   $("token-save").onclick=()=>{ const v=$("token-input").value.trim(); if(!v){ showOverlay("Enter a token."); return; } S.token=v; try{localStorage.setItem(TOKEN_KEY,v);}catch(e){} refresh(); };
   $("token-input").addEventListener("keydown",e=>{ if(e.key==="Enter") $("token-save").click(); });

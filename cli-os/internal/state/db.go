@@ -26,7 +26,18 @@ CREATE TABLE IF NOT EXISTS providers (
   enc_key TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
   is_default INTEGER NOT NULL DEFAULT 0,
+  verified INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
+);
+
+-- Per-provider model selection (Part C / Part E). A row records an operator's explicit choice for one
+-- (provider, model); ABSENCE means "enabled" (the manifest default), so a provider with no rows here
+-- exposes its full manifest catalog exactly as before. Only a stored enabled=0 row disables a model.
+CREATE TABLE IF NOT EXISTS provider_models (
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (provider, model)
 );
 
 CREATE TABLE IF NOT EXISTS tokens (
@@ -128,6 +139,10 @@ func Open(dbPath string) (*sql.DB, error) {
 		"PRAGMA journal_mode = WAL;",
 		"PRAGMA foreign_keys = ON;",
 		"PRAGMA busy_timeout = 5000;",
+		// This DB stores encrypted provider-key ciphertext. secure_delete zeroes freed page content, so
+		// a rotated/removed key's old ciphertext does not linger in freed pages until the next vacuum —
+		// defense in depth behind the AES-256-GCM at rest (the plaintext key is never written here).
+		"PRAGMA secure_delete = ON;",
 	} {
 		if _, err := db.Exec(pragma); err != nil {
 			db.Close()
@@ -152,6 +167,14 @@ func Open(dbPath string) (*sql.DB, error) {
 // ALTER errors when the column already exists (a fresh v2 DB) — that is expected and ignored.
 func migrate(db *sql.DB) {
 	_, _ = db.Exec(`ALTER TABLE ledger ADD COLUMN cost_unconfirmed INTEGER`)
+	// A provider added before Part E has no verified column; add it. On a FRESH v-current DB the schema
+	// const already created the column, so this ALTER errors (duplicate column) and is ignored — new
+	// providers correctly start verified=0. On an OLD DB the ALTER SUCCEEDS (err==nil): those providers
+	// predate the flag and were presumably in working use, so backfill them to verified=1 rather than
+	// showing every existing provider as "unverified" after an upgrade.
+	if _, err := db.Exec(`ALTER TABLE providers ADD COLUMN verified INTEGER NOT NULL DEFAULT 0`); err == nil {
+		_, _ = db.Exec(`UPDATE providers SET verified = 1`)
+	}
 	_, _ = db.Exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version' AND value = '1'`)
 }
 

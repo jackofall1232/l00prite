@@ -237,8 +237,9 @@ type providerReq struct {
 	SkipValidation bool   `json:"skip_validation"` // allow adding a keyless/unvalidated provider deliberately
 }
 
-// HandleSetupProvider is POST /v1/setup/provider — validate (real call) then persist a provider via
-// the same INSERT the CLI's `provider add` uses. A bad key is rejected 400 and stored nowhere.
+// HandleSetupProvider is POST /v1/setup/provider — validate (real call) then persist a provider through
+// the SAME storeProvider core the authenticated dashboard "add provider" endpoint (Part E) uses, so the
+// first-run and ongoing paths can never diverge. A bad key is rejected 400 and stored nowhere.
 func (app *App) HandleSetupProvider(w http.ResponseWriter, r *http.Request) {
 	if app.setupGate(w) {
 		return
@@ -248,71 +249,16 @@ func (app *App) HandleSetupProvider(w http.ResponseWriter, r *http.Request) {
 		oaiError(w, 400, "Invalid JSON body", "invalid_request_error", "")
 		return
 	}
-	name := strings.TrimSpace(body.Name)
-	if name == "" {
-		oaiError(w, 400, "provider name is required", "invalid_request_error", "")
-		return
-	}
-	adapterKind := resolveAdapterKind(name, body.Adapter)
-	baseURL := body.BaseURL
-	if strings.TrimSpace(baseURL) == "" {
-		baseURL = adapters.DefaultBaseURL(name)
-	}
-
-	needsKey := adapterKind != "mock"
-	if needsKey && !config.MasterKeyPresent(app.Cfg) {
-		oaiError(w, 400, "Initialize the vault first (POST /v1/setup/vault) before adding a keyed provider.", "invalid_request_error", "vault_required")
-		return
-	}
-
-	// Real key validation before we store anything — unless explicitly skipped (keyless/offline add).
-	validatedModel := ""
-	if !body.SkipValidation {
-		res := TestProviderKey(app.Cfg, adapterKind, name, baseURL, body.APIKey, body.Model)
-		if !res.OK {
-			sendJSON(w, 400, map[string]any{"error": map[string]any{
-				"message": "Provider validation failed: " + res.Error, "type": "invalid_request_error", "code": "provider_validation_failed"},
-				"ok": false, "detail": res.Error})
-			return
-		}
-		validatedModel = res.ModelUsed
-	}
-
-	// Encrypt the key (keyed adapters only) and persist — identical row shape to CLI `provider add`.
-	var encVal any
-	if needsKey && strings.TrimSpace(body.APIKey) != "" {
-		enc, err := security.EncryptSecret(app.Cfg.MasterKeyPath, body.APIKey)
-		if err != nil {
-			oaiError(w, 500, "Failed to encrypt provider key: "+err.Error(), "configuration_error", "")
-			return
-		}
-		encVal = enc
-	}
-	isDef := 0
-	if body.Default {
-		isDef = 1
-	}
-	var baseVal any
-	if baseURL != "" {
-		baseVal = baseURL
-	}
-	if _, err := app.DB.ExecContext(state.Ctx(),
-		`INSERT OR REPLACE INTO providers(name,adapter,base_url,enc_key,enabled,is_default,created_at) VALUES(?,?,?,?,1,?,?)`,
-		name, adapterKind, baseVal, encVal, isDef, util.NowISO()); err != nil {
-		oaiError(w, 500, "Failed to store provider: "+err.Error(), "configuration_error", "")
-		return
-	}
-	if body.Default {
-		_, _ = app.DB.ExecContext(state.Ctx(), `UPDATE providers SET is_default = CASE WHEN name = ? THEN 1 ELSE 0 END`, name)
-	}
-	setupAudit(app, "provider.add", name)
-	sendJSON(w, 200, map[string]any{
-		"provider": map[string]any{
-			"name": name, "adapter": adapterKind, "base_url": nilIfEmpty(baseURL),
-			"is_default": body.Default, "has_key": encVal != nil, "validated": !body.SkipValidation,
-			"validated_model": nilIfEmpty(validatedModel),
-		},
+	res, e := app.storeProvider(providerParams{
+		Name: body.Name, Adapter: body.Adapter, BaseURL: body.BaseURL, APIKey: body.APIKey,
+		Model: body.Model, Default: body.Default, SkipValidation: body.SkipValidation,
 	})
+	if e != nil {
+		writeProviderErr(w, e)
+		return
+	}
+	setupAudit(app, "provider.add", res.Name)
+	sendJSON(w, 200, map[string]any{"provider": providerPublic(res)})
 }
 
 type tokenReq struct {
