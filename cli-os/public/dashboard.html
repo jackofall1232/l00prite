@@ -702,7 +702,7 @@
           <option value="openai-compat">OpenAI-compatible (OpenAI, GLM, DeepSeek, Groq, …)</option>
         </select></div>
       <div class="field"><label>Provider name</label><input type="text" id="m-name" placeholder="anthropic"></div>
-      <div class="field" id="m-modelwrap"><label>Model to test <span class="opt">— optional</span></label><input type="text" id="m-model" placeholder="auto (first known model)"></div>
+      <div class="field" id="m-modelwrap"><label>Model to test <span class="opt" id="m-modelhint">— optional</span></label><input type="text" id="m-model" placeholder="auto (first known model)"></div>
       <div class="field" id="m-keywrap"><label>API key</label><input type="password" id="m-key" placeholder="sk-…" autocomplete="off"></div>
       <div class="field" id="m-basewrap"><label>Base URL <span class="opt" id="m-basehint"></span></label><input type="text" id="m-base"></div>
       <label class="field check"><input type="checkbox" id="m-default" checked> Make this the default provider</label>
@@ -718,13 +718,18 @@
     const adapterSel=g("m-adapter"), nameIn=g("m-name"), baseIn=g("m-base"), baseHint=g("m-basehint");
     const validateBtn=g("m-validate"), addBtn=g("m-add"), skip=g("m-skip"), note=g("m-note");
     let epoch=0;
-    const D={"native-messages":{name:"anthropic",base:"https://api.anthropic.com",hint:"— default shown; edit if self-hosting"},
-             "openai-compat":{name:"openai",base:"",hint:"— required, e.g. https://api.openai.com/v1"}};
+    const D={"native-messages":{name:"anthropic",base:"https://api.anthropic.com",hint:"— default shown; edit if self-hosting",
+               mHint:"— optional; a known model is picked",mPh:"auto (first known model)"},
+             "openai-compat":{name:"openai",base:"",hint:"— required, e.g. https://api.openai.com/v1",
+               // OpenAI-compatible endpoints usually have no built-in catalog here, so validation
+               // needs a concrete model id — labeling it "optional" would dead-end the flow.
+               mHint:"— usually required (no built-in catalog), e.g. gpt-4o",mPh:"e.g. gpt-4o"}};
     function resetV(){ epoch++; const gate=!skip.checked; addBtn.disabled=gate; if(gate) note.innerHTML=""; }
     function sync(){
       const d=D[adapterSel.value];
       if(!nameIn.dataset.touched) nameIn.value=d.name;
       baseIn.value=d.base; baseHint.textContent=d.hint;
+      g("m-modelhint").textContent=d.mHint; g("m-model").placeholder=d.mPh;
       resetV();
     }
     function body(){ return {name:nameIn.value.trim(), adapter:adapterSel.value, base_url:baseIn.value.trim(), api_key:g("m-key").value, model:g("m-model").value.trim()}; }
@@ -851,6 +856,7 @@
   // Registering a repo points the gateway at a path on ITS OWN filesystem; the server verifies the
   // directory exists before storing anything, so a typo fails right here in the modal.
   function addRepo(){
+    const project=(S.summary&&S.summary.principal&&S.summary.principal.project)||"default";
     openModal(`
       <div class="eyebrow"><span class="tick"></span> Register repository</div>
       <h3>Connect a repository</h3>
@@ -859,7 +865,8 @@
         get its <span class="mono">.l00prite</span> memory injected.</div>
       <div class="field"><label>Repo id <span class="opt">— a short name, e.g. myrepo</span></label><input type="text" id="rp-id" placeholder="myrepo" autocomplete="off"></div>
       <div class="field"><label>Path on the gateway host</label><input type="text" id="rp-root" placeholder="/home/you/projects/myrepo" autocomplete="off"></div>
-      <div class="field"><label>Project <span class="opt">— groups cost tracking and caps</span></label><input type="text" id="rp-project" placeholder="default" autocomplete="off"></div>
+      <div class="field"><label>Project <span class="opt">— only same-project tokens can use a repo; this token's project is <span class="mono">${esc(project)}</span></span></label>
+        <input type="text" id="rp-project" value="${esc(project)}" autocomplete="off"></div>
       <div id="rp-note"></div>
       <div class="modal-actions"><button class="btn" data-close>Cancel</button><div class="spacer"></div><button class="btn primary" id="rp-add">Register</button></div>`);
     const idIn=document.getElementById("rp-id"), rootIn=document.getElementById("rp-root");
@@ -874,21 +881,27 @@
       if(!res.ok){ unbusy(btn,"Register"); note.innerHTML=`<div class="note err">${esc(mErr(data,"Could not register the repo."))}</div>`; return; }
       const mem=(data&&data.memory)||{};
       if(!mem.present_count){
-        // Registered fine, but be honest that there's no memory to inject yet.
+        // Registered fine, but be honest that there's no memory to inject yet. The repo is already
+        // stored server-side, so refresh the list/picker NOW — any way the user dismisses this
+        // modal (Done, Esc, backdrop, Cancel) must leave the UI consistent.
         unbusy(btn,"Register");
         note.innerHTML=`<div class="note warn"><b>Registered.</b> No <span class="mono">.l00prite</span> memory found in that folder yet — requests work, and memory is injected as soon as the folder exists.</div>`;
-        btn.textContent="Done"; btn.onclick=()=>afterMutation();
+        btn.textContent="Done"; btn.onclick=()=>closeModal();
+        refresh();
         return;
       }
       afterMutation();
     };
   }
   function removeRepo(id){
+    const scoped=((S.summary&&S.summary.tokens&&S.summary.tokens.list)||[]).filter(x=>!x.revoked&&x.repo===id).length;
+    const scopedWarn=scoped>0?`<div class="note warn"><b>${scoped} active token${scoped===1?" is":"s are"} scoped to this repo.</b> Requests using ${scoped===1?"it":"them"} — and any request naming this repo — will fail with “not registered” until the repo is registered again.</div>`:"";
     openModal(`
       <div class="eyebrow"><span class="tick" style="background:var(--err)"></span> Remove repository</div>
       <h3>Remove <span class="mono">${esc(id)}</span></h3>
       <div class="sub">This only unregisters the repo from the gateway — <b>nothing on disk is touched</b>. Requests
         naming it simply stop getting its memory injected.</div>
+      ${scopedWarn}
       <div id="rr-note"></div>
       <div class="modal-actions"><button class="btn" data-close>Cancel</button><div class="spacer"></div><button class="btn danger" id="rr-go">Remove repo</button></div>`);
     document.getElementById("rr-go").onclick=async(e)=>{
@@ -902,12 +915,17 @@
   // ---- playground ----
   // A place to prompt the models: same token, same /v1/chat/completions the coding tools use, so a
   // reply here proves the whole path (auth → route → provider → metering) and shows up in Activity.
-  const chat=[]; let sending=false, lastChatLen=0;
+  const chat=[]; let sending=false, chatGen=0, renderedChatLen=-1;
   function chatMessages(){ return chat.filter(m=>m.role==="user"||m.role==="assistant").map(m=>({role:m.role,content:m.content})); }
   function renderChat(){
     const log=$("play-log"); if(!log) return;
+    // The conversation only ever grows or is cleared, so an unchanged length means unchanged
+    // content — skip the innerHTML rebuild entirely so the 20s auto-refresh can't wipe an
+    // in-progress text selection or yank the scroll position.
+    if(chat.length===renderedChatLen) return;
+    const grew=chat.length>renderedChatLen;
+    renderedChatLen=chat.length;
     if(!chat.length){
-      lastChatLen=0;
       log.innerHTML=`<div class="empty" style="padding:18px">Send a prompt to try your gateway. <b>auto</b> picks the best provider for the task; pick a repo to inject its <code>.l00prite</code> memory. Cost lands in Activity below.</div>`;
       return;
     }
@@ -916,17 +934,25 @@
       const meta=m.meta?`<div class="m-meta">${esc(m.meta.model||"")}${m.meta.pt!=null?` · ${esc(String(m.meta.pt))} in / ${esc(String(m.meta.ct==null?"?":m.meta.ct))} out`:""}</div>`:"";
       return `<div class="msg ${m.role==="user"?"user":"assistant"}">${esc(m.content)}${meta}</div>`;
     }).join("");
-    // Only jump the scroll when something new arrived — the 20s auto-refresh re-render must not
-    // yank a user away from an older message they scrolled up to read.
-    if(chat.length!==lastChatLen){ log.scrollTop=log.scrollHeight; lastChatLen=chat.length; }
+    if(grew) log.scrollTop=log.scrollHeight;
   }
+  let playRepoSig=null;
   function renderPlayRepos(d){
     const sel=$("play-repo"); if(!sel) return;
+    const principal=d.principal||{};
+    // Offer only repos this token can actually use: /v1/chat/completions rejects (403) a repo
+    // whose project differs from the token's, and a repo-scoped token may only name its own repo.
+    let repos=(d.repos||[]).filter(r=>r.project===principal.project);
+    if(principal.repo) repos=repos.filter(r=>r.id===principal.repo);
+    const sig=repos.map(r=>r.id).join(",");
+    if(sig===playRepoSig) return; // unchanged — don't rebuild (an open dropdown would snap shut)
+    playRepoSig=sig;
     const cur=sel.value;
-    const repos=(d.repos||[]);
     sel.innerHTML=`<option value="">no repo memory</option>`+repos.map(r=>`<option value="${esc(r.id)}">repo: ${esc(r.id)}</option>`).join("");
     if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+    else if(principal.repo) sel.value=principal.repo; // token is scoped to one repo — preselect it
   }
+  let playModelSig=null;
   async function loadModels(){
     const sel=$("play-model"); if(!sel) return;
     let data=null;
@@ -935,6 +961,9 @@
     const autos=ids.filter(i=>i==="auto"||i.indexOf("auto:")===0).sort((a,b)=>a==="auto"?-1:(b==="auto"?1:a.localeCompare(b)));
     const bare=[...new Set(ids.filter(i=>autos.indexOf(i)<0 && i.indexOf("/")<0))];
     const pinned=[...new Set(ids.filter(i=>autos.indexOf(i)<0 && i.indexOf("/")>=0))];
+    const sig=autos.join(",")+"|"+bare.join(",")+"|"+pinned.join(",");
+    if(sig===playModelSig) return; // catalog unchanged — don't rebuild (an open dropdown would snap shut)
+    playModelSig=sig;
     const cur=sel.value||"auto";
     const opt=i=>`<option value="${esc(i)}">${esc(i)}</option>`;
     sel.innerHTML =
@@ -959,15 +988,23 @@
   async function playSend(){
     if(sending || !S.token) return;
     const inp=$("play-input"); const text=inp.value.trim(); if(!text) return;
-    chat.push({role:"user",content:text}); renderChat(); inp.value="";
     const model=playModel(), repo=$("play-repo").value;
+    // CLI-registered repo ids aren't charset-restricted; a non-ASCII id would make fetch() itself
+    // throw on the header and surface as a misleading "network error" — catch it up front.
+    if(repo && !/^[\x21-\x7E]+$/.test(repo)){
+      chat.push({role:"error",content:`Repo id "${repo}" contains characters that can't travel in an HTTP header. Re-register it with a simpler id (letters, digits, ".", "-", "_").`});
+      renderChat(); return;
+    }
+    chat.push({role:"user",content:text}); renderChat(); inp.value="";
     sending=true; const btn=$("play-send"); busy(btn,"Sending…");
+    const gen=chatGen; // if the user clears the conversation mid-flight, drop this reply
     const headers={authorization:"Bearer "+S.token,"content-type":"application/json"};
     if(repo) headers["x-l00prite-repo"]=repo;
     let res=null, data=null;
     try{ res=await fetch("/v1/chat/completions",{method:"POST",headers,body:JSON.stringify({model, messages:chatMessages()})}); }catch(e){}
     if(res){ try{ data=await res.json(); }catch(e){} }
     sending=false; unbusy(btn,"Send");
+    if(gen!==chatGen) return; // conversation was cleared while in flight — a stale reply would poison the new one
     if(!res || !res.ok){
       chat.push({role:"error",content:mErr(data, res?("The request failed (HTTP "+res.status+").") : "Network error — is the gateway reachable?")});
       renderChat(); return;
@@ -991,7 +1028,7 @@
     if(b.dataset.action==="repo-remove") removeRepo(b.dataset.repo); });
   $("play-send").onclick=playSend;
   $("play-model").onchange=syncCustomModel;
-  $("play-clear").onclick=()=>{ chat.length=0; renderChat(); };
+  $("play-clear").onclick=()=>{ chat.length=0; chatGen++; renderChat(); };
   $("play-input").addEventListener("keydown",e=>{ if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); playSend(); } });
   renderChat();
   $("modal").addEventListener("click",e=>{ if(e.target===$("modal") || (e.target.closest&&e.target.closest("[data-close]"))) closeModal(); });

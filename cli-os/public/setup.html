@@ -278,7 +278,7 @@
       </select>
       <div class="row">
         <div><label>Provider name</label><input type="text" id="pname" class="mono-in" placeholder="anthropic"></div>
-        <div id="modelwrap"><label>Model to test <span class="opt">— optional</span></label><input type="text" id="pmodel" class="mono-in" placeholder="auto (first known model)"></div>
+        <div id="modelwrap"><label>Model to test <span class="opt" id="modelhint">— optional</span></label><input type="text" id="pmodel" class="mono-in" placeholder="auto (first known model)"></div>
       </div>
       <div id="keywrap"><label>API key</label><input type="password" id="pkey" class="mono-in" placeholder="sk-…" autocomplete="off"></div>
       <div id="basewrap"><label>Base URL <span class="opt" id="basehint"></span></label><input type="text" id="pbase" class="mono-in" placeholder=""></div>
@@ -297,12 +297,18 @@
     const note=document.getElementById("pnote");
     let validated=false, epoch=0;
 
-    const DEFAULTS={"native-messages":{name:"anthropic",base:"https://api.anthropic.com",baseHint:"— default shown; edit if self-hosting"},
-                    "openai-compat":{name:"openai",base:"",baseHint:"— required, e.g. https://api.openai.com/v1"}};
+    const DEFAULTS={"native-messages":{name:"anthropic",base:"https://api.anthropic.com",baseHint:"— default shown; edit if self-hosting",
+                      mHint:"— optional; a known model is picked",mPh:"auto (first known model)"},
+                    "openai-compat":{name:"openai",base:"",baseHint:"— required, e.g. https://api.openai.com/v1",
+                      // OpenAI-compatible endpoints usually have no built-in catalog here, so
+                      // validation needs a concrete model id — "optional" would dead-end the flow.
+                      mHint:"— usually required (no built-in catalog), e.g. gpt-4o",mPh:"e.g. gpt-4o"}};
     function syncAdapter(){
       const d=DEFAULTS[adapterSel.value];
       if(!nameIn.dataset.touched) nameIn.value=d.name;
       baseIn.value=d.base; baseHint.textContent=d.baseHint;
+      document.getElementById("modelhint").textContent=d.mHint;
+      document.getElementById("pmodel").placeholder=d.mPh;
       resetValidation();
     }
     function resetValidation(){ epoch++; validated=false; addBtn.disabled = !skip.checked; if(!skip.checked) note.innerHTML=""; }
@@ -410,7 +416,7 @@
   -H "authorization: Bearer ${tok}" \\
   -H "content-type: application/json" \\
   -d '{"model":"auto","messages":[{"role":"user","content":"hello"}]}'`;
-    const cc = `# Claude Code / any OpenAI-compatible tool:
+    const cc = `# Codex CLI / Aider / any OpenAI-compatible tool:
 export OPENAI_BASE_URL="${base}"
 export OPENAI_API_KEY="${tok}"`;
     card.innerHTML = `
