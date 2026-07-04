@@ -60,7 +60,11 @@ func truncStr(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n]
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) // cap at n runes, never splitting a multibyte character
 }
 
 func backoff(baseMs, attempt, maxMs int) time.Duration {

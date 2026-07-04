@@ -128,12 +128,14 @@ Beyond a straight port, the meter now returns an explicit `Unconfirmed` flag dis
 ## Test parity (run and shown, not claimed)
 
 Every `cli-os/test/*.test.js` behavior has a passing Go equivalent. The Node suite was 50 tests; the
-Go suite is **51 leaf tests** (the 50 behaviors + one synthetic price-tier-ordering test that
-restores the coverage the GLM pricing-confirmation removed — GLM was the shipped tier-1 exemplar and
-its price is now `null`).
+Go suite is **67 leaf tests** — the 50 ported behaviors + a synthetic price-tier-ordering test (GLM,
+the shipped tier-1 exemplar, is now `null`) + a vault Node-blob cross-compat test + network SSE
+translator tests + regression tests for every post-review fix above (mid-stream fail-closed, DB
+migration, config deep-merge/overrides, non-finite hops, Unicode-whitespace envelope, base64url key,
+never-expires token).
 
 ```
-$ go test ./...
+$ go test ./...            # 67 leaf tests, 0 failures
 ok   .../internal/config
 ok   .../internal/gateway
 ok   .../internal/gateway/adapters
@@ -141,14 +143,56 @@ ok   .../internal/memory
 ok   .../internal/policy
 ok   .../internal/security
 ok   .../internal/server
-$ go vet ./...      # clean
-$ gofmt -l .        # clean
+ok   .../internal/state
+$ go test -race ./...      # clean
+$ go vet ./...             # clean
+$ gofmt -l .               # clean
 ```
 
 Mapping: `unit.test.js` (11) → security/policy/config/memory/gateway/adapters unit tests;
 `e2e.test.js` (7) → `server.TestServerE2E` subtests; `routing-auto.test.js` (17) →
 `gateway` routing tests; `bridge.test.js` (4 unit + 11 e2e) → `gateway` envelope/bridge-helper tests
 + `server.TestBridgeE2E` subtests.
+
+## Post-review hardening (from adversarial review + automated PR reviewers)
+
+A 6-way adversarial parity review (each Go subsystem diffed against its Node original) plus the PR's
+automated reviewers (Copilot, Gemini, Codex) surfaced divergences; the substantive ones were fixed:
+
+- **Streaming fails closed** — a mid-stream provider drop / timeout / client-disconnect (a non-`io.EOF`
+  read error) now returns an error so the caller commits the reservation **ceiling** and logs
+  `error_midstream`, instead of committing ~$0 and marking the provider healthy (which leaked budget
+  past the cap). Stream usage falls back to the accumulator (`StreamTranslator.Usage()`) if the
+  terminal event never arrives. (test: `TestStreamMidDropFailsClosed`)
+- **DB migration** — `state.Open` now runs a best-effort idempotent v1→v2 migration
+  (`ALTER TABLE ledger ADD COLUMN cost_unconfirmed`), so a data dir created by the Node runtime is not
+  orphaned (ledger inserts would otherwise silently fail). (test: `TestMigrationAddsCostUnconfirmed`)
+- **Config `bridge` deep-merge** — `{"routing":{"bridge":{"enabled":true}}}` keeps `maxHops:3` instead
+  of zeroing it. **`config.json` runtime overrides restored** — `retry`/`memory`/`requestTimeoutMs`/
+  `tls` are honored again (they were being dropped). String-typed numeric settings (`"20"`) parse.
+  (tests: `TestBridgeConfigDeepMerge`, `TestRuntimeOverridesHonored`, `TestStringTypedNumericConfig`)
+- **PEP fails closed on DB errors** — a spend-read failure now denies rather than proceeding on
+  unknown spend (was a fail-open cap-bypass vector).
+- **Envelope Unicode whitespace** — the closing-tag breakout guard now matches the same whitespace set
+  JS `\s` does (VT, NBSP, ideographic space, ZWNBSP, LS/PS); Go's RE2 `\s` is ASCII-only.
+  (test: `TestEnvelopeNeutralizesUnicodeWhitespaceCloser`)
+- **JS-truthiness parity** — `forward_tools` / `include_usage` / anthropic `stop` & `tool_choice` use a
+  `jsTruthy` helper (so `"true"`/`1`/`""` behave like Node), not strict `== true`.
+- **`bridgeMaxHops` rejects non-finite headers** (`Infinity`/`NaN`); whitespace bridge `target` routes
+  like Node; **bridge responses carry `x-l00prite-cost-unconfirmed`** when any hop is unpriced.
+- **Rune-safe truncation** (mock reply, `userIntent`, memory budget cut) and **rune-based token
+  estimates** (memory, reservation ceiling, routing) so non-ASCII content isn't over-counted or split
+  into invalid UTF-8. HTML escaping is disabled in the estimate JSON so `<>&` match JS `JSON.stringify`.
+- **`cap list` no longer deadlocks** — cap rows are drained before `GetSpend` (single-connection pool).
+- **Master key** accepts base64url / unpadded forms (Node's `Buffer.from` is lenient).
+- **`token mint --expires 0`** means never-expires (Node falsy), not expired-at-creation.
+
+Deliberately **kept as Go-is-better / benign** (documented, not "fixed"): a `null` request body → 400
+(Node crashes to 500); `arguments:"null"` → graceful delegate error (Node throws); a garbage token
+expiry → deny (Node grants). JSON **object key ordering** is alphabetical (Go `map` + `json.Marshal`)
+vs insertion-order (JS) — semantically identical, no correct consumer depends on it; this is inherent
+to the `map[string]any` passthrough design. Empty-string env vars (e.g. `LOOPRITE_DEFAULT_DAILY_CAP=`)
+are treated as unset rather than coerced to 0/false — Node's `Number("")===0` there is a footgun.
 
 ## Open items / your call
 

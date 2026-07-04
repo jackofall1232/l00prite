@@ -1,6 +1,7 @@
 package security
 
 import (
+	"encoding/base64"
 	"os"
 	"strings"
 	"testing"
@@ -71,5 +72,39 @@ func TestTokensMintVerifyRevoke(t *testing.T) {
 	RevokeToken(db, id)
 	if VerifyToken(db, token) != nil {
 		t.Fatalf("revoked token must fail")
+	}
+}
+
+func TestExpiresZeroNeverExpires(t *testing.T) {
+	cfg := setupHome(t)
+	db, err := state.Open(cfg.DBPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	zero := 0
+	_, token, err := MintToken(db, "demo", nil, &zero)
+	if err != nil {
+		t.Fatalf("mint: %v", err)
+	}
+	if VerifyToken(db, token) == nil {
+		t.Fatalf("expiresDays=0 must mean never-expires; token should still verify")
+	}
+}
+
+func TestVaultAcceptsBase64URLKey(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i * 7)
+	}
+	t.Setenv("LOOPRITE_HOME", t.TempDir())
+	t.Setenv("LOOPRITE_MASTER_KEY", base64.RawURLEncoding.EncodeToString(key)) // unpadded base64url
+	blob, err := EncryptSecret("/no-such-path", "sk-x")
+	if err != nil {
+		t.Fatalf("encrypt with a base64url env key must work (Node accepts it): %v", err)
+	}
+	got, err := DecryptSecret("/no-such-path", blob)
+	if err != nil || got != "sk-x" {
+		t.Fatalf("roundtrip with base64url key failed: %v %q", err, got)
 	}
 }

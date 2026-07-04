@@ -5,12 +5,12 @@
 package gateway
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackofall1232/l00prite/cli-os/internal/apierr"
 	"github.com/jackofall1232/l00prite/cli-os/internal/config"
@@ -44,24 +44,22 @@ func estimatePromptTokens(messages []any) int {
 			continue
 		}
 		if s, ok := m["content"].(string); ok {
-			chars += len(s)
+			chars += utf8.RuneCountInString(s)
 		} else if arr := asArr(m["content"]); arr != nil {
 			for _, pp := range arr {
 				p := asMap(pp)
 				switch {
 				case p != nil && asStr(p["type"]) == "text":
-					chars += len(asStr(p["text"]))
+					chars += utf8.RuneCountInString(asStr(p["text"]))
 				case p != nil && asStr(p["type"]) == "image_url":
 					images++
 				default:
-					b, _ := json.Marshal(pp)
-					chars += len(b)
+					chars += jsonLenApprox(pp)
 				}
 			}
 		}
 		if tc := asArr(m["tool_calls"]); tc != nil {
-			b, _ := json.Marshal(m["tool_calls"])
-			chars += len(b)
+			chars += jsonLenApprox(m["tool_calls"])
 		}
 	}
 	return util.EstimateTokensFromChars(chars) + images*imageTokens
@@ -86,7 +84,7 @@ func DeriveRequirements(req map[string]any, defaultMaxTokens int) Requirements {
 	needsStreamingUsage := false
 	if req["stream"] == true {
 		if so := asMap(req["stream_options"]); so != nil {
-			needsStreamingUsage = so["include_usage"] == true
+			needsStreamingUsage = jsTruthy(so["include_usage"])
 		}
 	}
 	maxOut := numToInt(req["max_tokens"])

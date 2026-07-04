@@ -8,6 +8,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -97,7 +98,9 @@ func BridgeMaxHops(h http.Header, cfg config.Config) int {
 		return base
 	}
 	n, err := strconv.ParseFloat(raw, 64)
-	if err != nil || n < 0 {
+	// Reject non-finite values: Go's ParseFloat accepts "Infinity"/"NaN" (unlike Number(...)+isFinite),
+	// and int(+Inf) is a huge negative that would break the hop loop.
+	if err != nil || n < 0 || math.IsInf(n, 0) || math.IsNaN(n) {
 		return base
 	}
 	if int(n) < base {
@@ -107,10 +110,13 @@ func BridgeMaxHops(h http.Header, cfg config.Config) int {
 }
 
 func resolveTargetModel(target string, providers []ProviderRow) string {
-	t := strings.TrimSpace(target)
+	// Default-then-trim (matches `String(target || 'auto').trim()`): only an empty/absent target
+	// defaults to "auto"; a whitespace-only target trims to "" and routes via the default provider.
+	t := target
 	if t == "" {
 		t = "auto"
 	}
+	t = strings.TrimSpace(t)
 	if parseAutoSignal(t) != nil {
 		return t
 	}
@@ -253,7 +259,7 @@ func executeBridge(app *App, toolCall map[string]any, primaryReq map[string]any,
 			map[string]any{"role": "user", "content": userContent},
 		},
 	}
-	if args["forward_tools"] == true {
+	if jsTruthy(args["forward_tools"]) {
 		if primaryTools := asArr(primaryReq["tools"]); primaryTools != nil {
 			var forwarded []any
 			for _, t := range primaryTools {
@@ -298,6 +304,7 @@ type BridgeResult struct {
 	Denied       *Denial
 	PrimaryTurn  int
 	Exhausted    bool
+	Unconfirmed  bool // true if any hop routed through an unpriced/unconfirmed-price model
 }
 
 // RunBridge runs the bounded bridge loop.
@@ -315,6 +322,7 @@ func RunBridge(app *App, requestID, project, repoID, repoRoot string, openaiReq 
 
 	subCalls := 0
 	totalCost := 0.0
+	unconfirmed := false // any hop routed through an unpriced/unconfirmed-price model
 	totalUsage := oai.Usage{}
 	addUsage := func(u oai.Usage) {
 		totalUsage.PromptTokens += u.PromptTokens
@@ -341,9 +349,12 @@ func RunBridge(app *App, requestID, project, repoID, repoRoot string, openaiReq 
 			return BridgeResult{}, terr
 		}
 		if !turn.OK {
-			return BridgeResult{Denied: turn.Denial, SubCalls: subCalls, TotalCostUsd: totalCost, TotalUsage: totalUsage, Hops: hops, PrimaryTurn: turnNo}, nil
+			return BridgeResult{Denied: turn.Denial, SubCalls: subCalls, TotalCostUsd: totalCost, TotalUsage: totalUsage, Hops: hops, PrimaryTurn: turnNo, Unconfirmed: unconfirmed}, nil
 		}
 		totalCost += turn.Cost.USD
+		if turn.Cost.Unconfirmed {
+			unconfirmed = true
+		}
 		addUsage(turn.Usage)
 		last = turn.Response
 		hops = append(hops, map[string]any{"kind": "primary", "turn": turnNo, "provider": turn.Route.Provider, "model": turn.Route.Model, "cost_usd": turn.Cost.USD})
@@ -357,7 +368,7 @@ func RunBridge(app *App, requestID, project, repoID, repoRoot string, openaiReq 
 			}
 		}
 		if forcedFinal || bridgeCalls == 0 {
-			return BridgeResult{Response: turn.Response, SubCalls: subCalls, TotalCostUsd: totalCost, TotalUsage: totalUsage, Hops: hops}, nil
+			return BridgeResult{Response: turn.Response, SubCalls: subCalls, TotalCostUsd: totalCost, TotalUsage: totalUsage, Hops: hops, Unconfirmed: unconfirmed}, nil
 		}
 
 		nextMessages := append([]any{}, asArr(turnReq["messages"])...)
@@ -384,6 +395,9 @@ func RunBridge(app *App, requestID, project, repoID, repoRoot string, openaiReq 
 				nextMessages = append(nextMessages, toolResult(id, delegateError(sub.err)))
 			default:
 				totalCost += sub.cost.USD
+				if sub.cost.Unconfirmed {
+					unconfirmed = true
+				}
 				addUsage(sub.usage)
 				hops = append(hops, map[string]any{"kind": "delegate", "hop": subCalls, "provider": sub.route.Provider, "model": sub.route.Model, "cost_usd": sub.cost.USD})
 				nextMessages = append(nextMessages, toolResult(id, wrapDelegated(sub.route.Provider, sub.route.Model, subCalls, sub.text, sub.proposedToolCalls)))
@@ -392,7 +406,7 @@ func RunBridge(app *App, requestID, project, repoID, repoRoot string, openaiReq 
 		convo = copyMap(convo)
 		convo["messages"] = nextMessages
 	}
-	return BridgeResult{Response: last, SubCalls: subCalls, TotalCostUsd: totalCost, TotalUsage: totalUsage, Hops: hops, Exhausted: true}, nil
+	return BridgeResult{Response: last, SubCalls: subCalls, TotalCostUsd: totalCost, TotalUsage: totalUsage, Hops: hops, Exhausted: true, Unconfirmed: unconfirmed}, nil
 }
 
 // messageOf extracts choices[0].message from an OpenAI response.

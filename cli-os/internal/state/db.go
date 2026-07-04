@@ -138,11 +138,21 @@ func Open(dbPath string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	migrate(db)
 	if _, err := db.Exec(`INSERT OR IGNORE INTO meta(key,value) VALUES('schema_version','2');`); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return db, nil
+}
+
+// migrate applies best-effort, idempotent schema upgrades for data dirs created by an earlier
+// version (e.g. the Node runtime, whose ledger table predates cost_unconfirmed). CREATE TABLE IF NOT
+// EXISTS does not add columns to an existing table, so the column is added here explicitly. The
+// ALTER errors when the column already exists (a fresh v2 DB) — that is expected and ignored.
+func migrate(db *sql.DB) {
+	_, _ = db.Exec(`ALTER TABLE ledger ADD COLUMN cost_unconfirmed INTEGER`)
+	_, _ = db.Exec(`UPDATE meta SET value = '2' WHERE key = 'schema_version' AND value = '1'`)
 }
 
 // Tx runs fn inside a BEGIN IMMEDIATE transaction on a pinned connection, committing on success and

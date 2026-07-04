@@ -45,7 +45,7 @@ func MintToken(q state.Querier, project string, repo *string, expiresDays *int) 
 	secret := base64.RawURLEncoding.EncodeToString(secBytes)
 	hash := util.SHA256Hex(secret)
 	var expiresAt any
-	if expiresDays != nil {
+	if expiresDays != nil && *expiresDays != 0 { // 0 (like nil) means "never expires", matching Node's falsy check
 		expiresAt = util.ISOFromTime(time.Now().Add(time.Duration(*expiresDays) * 24 * time.Hour))
 	}
 	var repoVal any

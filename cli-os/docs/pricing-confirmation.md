@@ -2,7 +2,7 @@
 
 This resolves Open Question **Q7** (pricing/context numbers first-party-confirmed only for
 Anthropic). It records, per provider manifest under
-[`../src/gateway/adapters/_manifests/`](../src/gateway/adapters/_manifests/), what was confirmed
+[`../internal/gateway/adapters/manifests/`](../internal/gateway/adapters/manifests/), what was confirmed
 against the provider's **own** pricing/docs page (not aggregators, not third-party trackers), the
 source URL, the date checked, and what remains `null`.
 

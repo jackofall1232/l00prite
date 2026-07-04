@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackofall1232/l00prite/cli-os/internal/util"
 )
@@ -63,7 +64,9 @@ type Context struct {
 	GeneratedAt   string
 }
 
-func approxTokens(s string) int { return int(math.Ceil(float64(len(s)) / 4)) }
+// approxTokens estimates tokens from character count (runes, ≈ JS String.length for the BMP) so a
+// non-ASCII .l00prite file (em-dashes, smart quotes) isn't over-counted 2-3x by byte length.
+func approxTokens(s string) int { return int(math.Ceil(float64(utf8.RuneCountInString(s)) / 4)) }
 
 // within resolves symlinks (fail closed) and verifies p is inside root.
 func within(root, p string) bool {
@@ -135,7 +138,9 @@ func Query(repoRoot string, d Digest, contextTokens, maxFileBytes int, allowStal
 			buf := make([]byte, maxBytes)
 			n, _ := f.Read(buf)
 			f.Close()
-			text = strings.TrimSpace(string(buf[:n])) + "\n… [truncated: file exceeds memory read cap]"
+			// A byte-cap read can split a trailing multibyte rune; replace any invalid tail with U+FFFD
+			// (as Node's Buffer.toString('utf8') does) so the injected block is valid UTF-8.
+			text = strings.TrimSpace(strings.ToValidUTF8(string(buf[:n]), "�")) + "\n… [truncated: file exceeds memory read cap]"
 		} else {
 			b, err := os.ReadFile(fp)
 			if err != nil {
@@ -197,11 +202,12 @@ func Query(repoRoot string, d Digest, contextTokens, maxFileBytes int, allowStal
 				truncated = true
 				break
 			}
+			runes := []rune(text)
 			end := room * 4
-			if end > len(text) {
-				end = len(text)
+			if end > len(runes) {
+				end = len(runes)
 			}
-			text = text[:end] + "\n… [truncated by context budget]"
+			text = string(runes[:end]) + "\n… [truncated by context budget]" // rune-safe slice (never splits a rune)
 			truncated = true
 		}
 		b := c

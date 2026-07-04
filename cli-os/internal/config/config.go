@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type TLS struct {
@@ -94,21 +95,68 @@ func defaults() Config {
 	}
 }
 
-// fileConfig mirrors the recognized keys of config.json.
+// fileConfig mirrors the recognized keys of config.json. The Node loader shallow-merged config.json
+// over the defaults, so operator overrides for retry/memory/requestTimeoutMs/tls must be honored here
+// too (they were previously dropped, silently reverting to compiled defaults).
 type fileConfig struct {
 	Host               *string           `json:"host"`
 	Port               *int              `json:"port"`
 	DefaultDailyCapUsd *json.RawMessage  `json:"defaultDailyCapUsd"`
 	DefaultMaxTokens   *json.RawMessage  `json:"defaultMaxTokens"`
+	RequestTimeoutMs   *int              `json:"requestTimeoutMs"`
+	Retry              *retryOverride    `json:"retry"`
+	Memory             *memoryOverride   `json:"memory"`
+	TLS                *tlsOverride      `json:"tls"`
 	Aliases            map[string]string `json:"aliases"`
 	Routing            *routingOverride  `json:"routing"`
+}
+
+type retryOverride struct {
+	MaxAttempts *int `json:"maxAttempts"`
+	BaseMs      *int `json:"baseMs"`
+	MaxMs       *int `json:"maxMs"`
+}
+
+type memoryOverride struct {
+	LatencyMs     *int `json:"latencyMs"`
+	ContextTokens *int `json:"contextTokens"`
+	MaxFileBytes  *int `json:"maxFileBytes"`
+}
+
+type tlsOverride struct {
+	CertPath *string `json:"certPath"`
+	KeyPath  *string `json:"keyPath"`
 }
 
 type routingOverride struct {
 	AutoDefaultProfile *string            `json:"autoDefaultProfile"`
 	Profiles           map[string]Profile `json:"profiles"`
 	QualityRanks       map[string]int     `json:"qualityRanks"`
-	Bridge             *Bridge            `json:"bridge"`
+	Bridge             *bridgeOverride    `json:"bridge"`
+}
+
+// bridgeOverride uses pointer fields so a config.json bridge override deep-merges (a field absent
+// from JSON keeps the default) rather than wholesale-replacing the struct.
+type bridgeOverride struct {
+	Enabled *bool `json:"enabled"`
+	MaxHops *int  `json:"maxHops"`
+}
+
+// jsonScalarString unwraps a config.json scalar that may be a JSON number (20) or a JSON string
+// ("20") into its plain string form, so string-typed numeric settings parse (matching JS Number()).
+func jsonScalarString(raw json.RawMessage) string {
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return string(raw)
+	}
+	switch x := v.(type) {
+	case string:
+		return x
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	default:
+		return string(raw)
+	}
 }
 
 func homeDir() string {
@@ -143,10 +191,10 @@ func Load() Config {
 		_ = json.Unmarshal(raw, &fc) // malformed config.json is ignored, like readFileJSON's catch
 	}
 
-	if fc.Host != nil {
+	if fc.Host != nil && *fc.Host != "" { // falsy host in config.json falls back to the default (127.0.0.1)
 		cfg.Host = *fc.Host
 	}
-	if fc.Port != nil {
+	if fc.Port != nil && *fc.Port != 0 { // falsy port in config.json falls back to the default (8787)
 		cfg.Port = *fc.Port
 	}
 	if fc.Aliases != nil {
@@ -166,7 +214,7 @@ func Load() Config {
 	// Default daily cap: env ?? file, must fail SAFE to the default (never NaN).
 	capRaw := os.Getenv("LOOPRITE_DEFAULT_DAILY_CAP")
 	if capRaw == "" && fc.DefaultDailyCapUsd != nil {
-		capRaw = string(*fc.DefaultDailyCapUsd)
+		capRaw = jsonScalarString(*fc.DefaultDailyCapUsd)
 	}
 	if capRaw != "" {
 		cfg.DefaultDailyCapUsd = finiteOr(capRaw, defaults().DefaultDailyCapUsd)
@@ -175,7 +223,7 @@ func Load() Config {
 	// Default max tokens: env ?? file, finite>=0, and 0 -> default (so reservations always bound output).
 	mtRaw := os.Getenv("LOOPRITE_DEFAULT_MAX_TOKENS")
 	if mtRaw == "" && fc.DefaultMaxTokens != nil {
-		mtRaw = string(*fc.DefaultMaxTokens)
+		mtRaw = jsonScalarString(*fc.DefaultMaxTokens)
 	}
 	if mtRaw != "" {
 		v := finiteOr(mtRaw, float64(defaults().DefaultMaxTokens))
@@ -185,7 +233,37 @@ func Load() Config {
 		cfg.DefaultMaxTokens = int(v)
 	}
 
-	// TLS from env (both required).
+	// Runtime overrides from config.json (deep-merged per field so a partial block keeps the defaults).
+	if fc.RequestTimeoutMs != nil && *fc.RequestTimeoutMs > 0 {
+		cfg.RequestTimeoutMs = *fc.RequestTimeoutMs
+	}
+	if fc.Retry != nil {
+		if fc.Retry.MaxAttempts != nil {
+			cfg.Retry.MaxAttempts = *fc.Retry.MaxAttempts
+		}
+		if fc.Retry.BaseMs != nil {
+			cfg.Retry.BaseMs = *fc.Retry.BaseMs
+		}
+		if fc.Retry.MaxMs != nil {
+			cfg.Retry.MaxMs = *fc.Retry.MaxMs
+		}
+	}
+	if fc.Memory != nil {
+		if fc.Memory.LatencyMs != nil {
+			cfg.Memory.LatencyMs = *fc.Memory.LatencyMs
+		}
+		if fc.Memory.ContextTokens != nil {
+			cfg.Memory.ContextTokens = *fc.Memory.ContextTokens
+		}
+		if fc.Memory.MaxFileBytes != nil {
+			cfg.Memory.MaxFileBytes = *fc.Memory.MaxFileBytes
+		}
+	}
+	if fc.TLS != nil && fc.TLS.CertPath != nil && fc.TLS.KeyPath != nil && *fc.TLS.CertPath != "" && *fc.TLS.KeyPath != "" {
+		cfg.TLS = &TLS{CertPath: *fc.TLS.CertPath, KeyPath: *fc.TLS.KeyPath}
+	}
+
+	// TLS from env (both required) — env wins over a config.json tls block.
 	if cert, key := os.Getenv("LOOPRITE_TLS_CERT"), os.Getenv("LOOPRITE_TLS_KEY"); cert != "" && key != "" {
 		cfg.TLS = &TLS{CertPath: cert, KeyPath: key}
 	}
@@ -224,12 +302,28 @@ func mergeRouting(base *Routing, o *routingOverride) {
 	for k, v := range o.QualityRanks {
 		base.QualityRanks[k] = v
 	}
-	if o.Bridge != nil {
-		base.Bridge = *o.Bridge
+	if o.Bridge != nil { // deep-merge: only fields present in the override replace the defaults
+		if o.Bridge.Enabled != nil {
+			base.Bridge.Enabled = *o.Bridge.Enabled
+		}
+		if o.Bridge.MaxHops != nil {
+			base.Bridge.MaxHops = *o.Bridge.MaxHops
+		}
 	}
 }
 
 var loopback = map[string]bool{"127.0.0.1": true, "::1": true, "localhost": true}
+
+// validBase64Key32 reports whether s decodes to 32 bytes under any common base64 variant.
+func validBase64Key32(s string) bool {
+	s = strings.TrimSpace(s)
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		if b, err := enc.DecodeString(s); err == nil && len(b) == 32 {
+			return true
+		}
+	}
+	return false
+}
 
 // ValidateForServe returns human-readable problems that must block startup, else nil.
 func ValidateForServe(cfg Config) []string {
@@ -249,9 +343,7 @@ func ValidateForServe(cfg Config) []string {
 	}
 	envKeyOk := false
 	if k := os.Getenv("LOOPRITE_MASTER_KEY"); k != "" {
-		if b, err := base64.StdEncoding.DecodeString(k); err == nil && len(b) == 32 {
-			envKeyOk = true
-		}
+		envKeyOk = validBase64Key32(k) // accept std/url + padded/unpadded, like the vault loader
 	}
 	if !envKeyOk {
 		if _, err := os.Stat(cfg.MasterKeyPath); err != nil {

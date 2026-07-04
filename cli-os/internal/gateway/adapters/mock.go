@@ -86,11 +86,17 @@ func mockBridgeDirective(req map[string]any) *mockDirective {
 	return &mockDirective{loop: m[1] == "bridgeloop", target: m[2], task: strings.TrimSpace(m[3])}
 }
 
+// truncate caps s at n characters (runes), never splitting a multibyte rune — closer to JS
+// String.slice than a raw byte slice (which could emit invalid UTF-8).
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n]
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
 }
 
 func mockReply(req map[string]any) string {

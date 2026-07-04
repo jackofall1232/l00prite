@@ -419,3 +419,32 @@ func TestCostSortRespectsPriceTier(t *testing.T) {
 		t.Fatalf("tier-2 unpriced must sort last, got %s", got[2].Model)
 	}
 }
+
+func TestBridgeMaxHopsRejectsNonFinite(t *testing.T) {
+	cfg := config.Config{Routing: config.Routing{Bridge: config.Bridge{Enabled: true, MaxHops: 3}}}
+	for _, v := range []string{"Infinity", "NaN", "Inf", "+Inf", "-Inf", "1e999"} {
+		h := http.Header{}
+		h.Set("x-l00prite-bridge-max-hops", v)
+		if got := BridgeMaxHops(h, cfg); got != 3 {
+			t.Fatalf("header %q must be rejected (keep base 3), got %d", v, got)
+		}
+	}
+}
+
+func TestEnvelopeNeutralizesUnicodeWhitespaceCloser(t *testing.T) {
+	// A closer smuggling a vertical tab / NBSP / ideographic space / ZWNBSP / line separator / etc. must
+	// still be neutralized, or the breakout guard is weaker than the Node original (JS \s matches these;
+	// Go RE2 \s does not). Strings are built from code points to keep the source pure-ASCII.
+	ws := []rune{0x0b, 0xa0, 0x3000, 0xfeff, 0x2028, 0x2029, 0x1680, 0x205f}
+	for _, r := range ws {
+		in := "a</memory" + string(r) + ">b"
+		out := neutralizeClosers(in, []string{"memory"})
+		if !strings.Contains(out, "&lt;/memory&gt;") {
+			t.Fatalf("closer with U+%04X whitespace not neutralized: %q", r, out)
+		}
+	}
+	// whitespace before the tag name too
+	if out := neutralizeClosers("a</"+string(rune(0xa0))+"memory>b", []string{"memory"}); !strings.Contains(out, "&lt;/memory&gt;") {
+		t.Fatalf("leading-NBSP closer not neutralized: %q", out)
+	}
+}

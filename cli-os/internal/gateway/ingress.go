@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -115,9 +116,15 @@ func (app *App) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limited := io.LimitReader(r.Body, maxBodyBytes+1)
-	data, _ := io.ReadAll(limited)
+	data, rerr := io.ReadAll(limited)
 	if len(data) > maxBodyBytes {
 		oaiError(w, 413, "Request payload too large", "invalid_request_error", "")
+		return
+	}
+	// A mid-read failure (client disconnect / timeout) surfaces as 400, matching the Node original
+	// (its readBody rejection lands in the same catch as a JSON parse error).
+	if rerr != nil {
+		oaiError(w, 400, "Invalid JSON body", "invalid_request_error", "")
 		return
 	}
 	var openaiReq map[string]any
@@ -202,6 +209,9 @@ func (app *App) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("x-l00prite-bridge-hops", fmt.Sprint(result.SubCalls))
 		w.Header().Set("x-l00prite-cost-usd", fmt.Sprintf("%.6f", result.TotalCostUsd))
+		if result.Unconfirmed { // a bridged $ figure that includes unpriced hops is not authoritative
+			w.Header().Set("x-l00prite-cost-unconfirmed", "true")
+		}
 		for _, h := range result.Hops {
 			if h["kind"] == "primary" {
 				w.Header().Set("x-l00prite-provider", asStr(h["provider"]))
@@ -332,7 +342,18 @@ func (app *App) HandleChatCompletion(w http.ResponseWriter, r *http.Request) {
 
 func openaiReqIncludeUsage(req map[string]any) bool {
 	so := asMap(req["stream_options"])
-	return so != nil && so["include_usage"] == true
+	return so != nil && jsTruthy(so["include_usage"])
+}
+
+// sortedProfileNames returns the routing profile names in a stable (sorted) order so /v1/models and
+// /healthz emit deterministic output (Go map iteration is randomized).
+func sortedProfileNames(cfg config.Config) []string {
+	names := make([]string, 0, len(cfg.Routing.Profiles))
+	for name := range cfg.Routing.Profiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // streamResponse streams provider deltas as SSE. Returns (usage, headWritten, err).
@@ -411,7 +432,15 @@ func streamResponse(w http.ResponseWriter, a adapters.Adapter, provider *Provide
 	reader := connected.resp.Body
 	buf := make([]byte, 0, 8192)
 	tmp := make([]byte, 8192)
-	var usage oai.Usage
+	var gotUsage *oai.Usage
+	// finalUsage mirrors Node's `usage || st.usage`: the terminal usage event if seen, else the
+	// accumulator — so a stream that ends before its terminal event still bills the real accrued cost.
+	finalUsage := func() oai.Usage {
+		if gotUsage != nil {
+			return *gotUsage
+		}
+		return st.Usage()
+	}
 	for {
 		n, rerr := reader.Read(tmp)
 		if n > 0 {
@@ -424,24 +453,30 @@ func streamResponse(w http.ResponseWriter, a adapters.Adapter, provider *Provide
 				for _, ev := range parseSSE(ready) {
 					out := st.OnEvent(ev)
 					if out.Usage != nil {
-						usage = *out.Usage
+						gotUsage = out.Usage
 					}
 					for _, chunk := range out.Deltas {
 						writeChunk(chunk)
 					}
 					if out.Done {
 						writeRaw("data: [DONE]\n\n")
-						return usage, true, nil
+						return finalUsage(), true, nil
 					}
 				}
 			}
 		}
 		if rerr != nil {
-			break
+			if rerr == io.EOF {
+				break // clean end (upstream closed without a terminal event)
+			}
+			// A real mid-stream failure (network reset, timeout, client disconnect) must fail CLOSED:
+			// return the error so the caller commits the reservation ceiling and records
+			// error_midstream, instead of committing ~$0 and marking the provider healthy.
+			return finalUsage(), true, rerr
 		}
 	}
 	writeRaw("data: [DONE]\n\n")
-	return usage, true, nil
+	return finalUsage(), true, nil
 }
 
 // synthesizeStream turns an already-complete (buffered) response into a client SSE stream, used by
@@ -516,7 +551,7 @@ func (app *App) HandleModels(w http.ResponseWriter, r *http.Request) {
 			data = append(data, map[string]any{"id": p.Name + "/" + id, "object": "model", "owned_by": p.Name})
 		}
 	}
-	for name := range app.Cfg.Routing.Profiles {
+	for _, name := range sortedProfileNames(app.Cfg) {
 		data = append(data, map[string]any{"id": "auto:" + name, "object": "model", "owned_by": "l00prite-auto"})
 	}
 	data = append(data, map[string]any{"id": "auto", "object": "model", "owned_by": "l00prite-auto"})
@@ -533,7 +568,7 @@ func (app *App) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	var profileNames []any
-	for name := range app.Cfg.Routing.Profiles {
+	for _, name := range sortedProfileNames(app.Cfg) {
 		profileNames = append(profileNames, name)
 	}
 	sendJSON(w, 200, map[string]any{

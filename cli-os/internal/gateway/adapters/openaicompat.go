@@ -95,3 +95,11 @@ func (s *openaiCompatStream) OnEvent(ev SSEEvent) StreamOut {
 	}
 	return StreamOut{Deltas: deltas, Usage: evtUsage}
 }
+
+// Usage returns the last usage seen (fallback when a stream ends before its terminal usage event).
+func (s *openaiCompatStream) Usage() oai.Usage {
+	if s.usage != nil {
+		return *s.usage
+	}
+	return oai.Usage{}
+}

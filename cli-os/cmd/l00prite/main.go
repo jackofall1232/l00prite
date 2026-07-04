@@ -439,17 +439,25 @@ func capCmd(db *sql.DB, cfg config.Config, sub string, flags map[string]string) 
 		audit(db, "cap.set", fmt.Sprintf("%s=%s", project, daily))
 		fmt.Printf("Daily cap for %q set to $%.2f\n", project, d)
 	case "list":
-		rows, _ := db.QueryContext(state.Ctx(), `SELECT project,limit_usd FROM caps`)
-		if rows != nil {
-			defer rows.Close()
+		// Drain the cap rows into memory BEFORE calling GetSpend: the pool is capped at one connection,
+		// and GetSpend opens its own transaction, so querying while these rows are still open deadlocks.
+		type capRow struct {
+			project string
+			limit   float64
+		}
+		var caps []capRow
+		if rows, err := db.QueryContext(state.Ctx(), `SELECT project,limit_usd FROM caps`); err == nil {
 			for rows.Next() {
-				var project string
-				var limit float64
-				if rows.Scan(&project, &limit) == nil {
-					s := pep.GetSpend(db, project, cfg.DefaultDailyCapUsd)
-					fmt.Printf("%-16s daily $%.2f  spent today $%.4f\n", project, limit, s.Reserved+s.Committed)
+				var c capRow
+				if rows.Scan(&c.project, &c.limit) == nil {
+					caps = append(caps, c)
 				}
 			}
+			rows.Close()
+		}
+		for _, c := range caps {
+			s := pep.GetSpend(db, c.project, cfg.DefaultDailyCapUsd)
+			fmt.Printf("%-16s daily $%.2f  spent today $%.4f\n", c.project, c.limit, s.Reserved+s.Committed)
 		}
 	default:
 		fmt.Fprintln(os.Stderr, "unknown cap subcommand")

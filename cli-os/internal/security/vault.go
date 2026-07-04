@@ -31,10 +31,23 @@ func EnsureMasterKey(path string) error {
 	return os.Chmod(path, 0o600)
 }
 
+// DecodeBase64Key decodes a 32-byte key from base64, accepting std/url and padded/unpadded forms
+// (Node's Buffer.from(k,'base64') is lenient; Go's StdEncoding is not, so a valid base64url or
+// unpadded key would otherwise be rejected). Exported so config validation uses the same rule.
+func DecodeBase64Key(s string) ([]byte, bool) {
+	s = strings.TrimSpace(s)
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		if b, err := enc.DecodeString(s); err == nil && len(b) == 32 {
+			return b, true
+		}
+	}
+	return nil, false
+}
+
 func loadMasterKey(masterKeyPath string) ([]byte, error) {
 	if env := os.Getenv("LOOPRITE_MASTER_KEY"); env != "" {
-		k, err := base64.StdEncoding.DecodeString(env)
-		if err != nil || len(k) != 32 {
+		k, ok := DecodeBase64Key(env)
+		if !ok {
 			return nil, errors.New("LOOPRITE_MASTER_KEY must be base64 of 32 bytes")
 		}
 		return k, nil
@@ -43,8 +56,8 @@ func loadMasterKey(masterKeyPath string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	k, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
-	if err != nil || len(k) != 32 {
+	k, ok := DecodeBase64Key(string(raw))
+	if !ok {
 		return nil, errors.New("master.key is corrupt (expected 32 bytes)")
 	}
 	return k, nil

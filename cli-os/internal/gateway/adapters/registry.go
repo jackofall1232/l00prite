@@ -245,8 +245,11 @@ type StreamOut struct {
 }
 
 // StreamTranslator folds a provider's SSE events into OpenAI chunks, holding per-stream state.
+// Usage returns the usage accumulated so far — used as a fallback when a stream ends (or is cut)
+// before its terminal usage event, mirroring the Node `usage || st.usage` behavior.
 type StreamTranslator interface {
 	OnEvent(ev SSEEvent) StreamOut
+	Usage() oai.Usage
 }
 
 // DirectStreamChunk is one chunk from a direct (no-network) adapter's stream.

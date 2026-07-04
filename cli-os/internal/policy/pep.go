@@ -41,13 +41,15 @@ func capFor(q state.Querier, project string, defaultCap float64) float64 {
 	return limit
 }
 
-func spendRow(q state.Querier, project, day string) (reserved, committed float64) {
-	_, _ = q.ExecContext(state.Ctx(),
-		`INSERT OR IGNORE INTO spend(project,day,reserved_usd,committed_usd) VALUES(?,?,0,0)`, project, day)
-	_ = q.QueryRowContext(state.Ctx(),
+func spendRow(q state.Querier, project, day string) (reserved, committed float64, err error) {
+	if _, err = q.ExecContext(state.Ctx(),
+		`INSERT OR IGNORE INTO spend(project,day,reserved_usd,committed_usd) VALUES(?,?,0,0)`, project, day); err != nil {
+		return 0, 0, err
+	}
+	err = q.QueryRowContext(state.Ctx(),
 		`SELECT reserved_usd, committed_usd FROM spend WHERE project = ? AND day = ?`, project, day).
 		Scan(&reserved, &committed)
-	return
+	return reserved, committed, err
 }
 
 // Reserve atomically reserves amountUsd, denying if it would breach the daily cap. Fails closed on
@@ -57,9 +59,12 @@ func Reserve(db *sql.DB, project string, amountUsd, defaultCap float64) ReserveR
 		return ReserveResult{OK: false, Reason: "invalid_amount", Requested: amountUsd}
 	}
 	day := util.UTCDay()
-	res, _ := state.Tx(db, func(q state.Querier) (ReserveResult, error) {
+	res, err := state.Tx(db, func(q state.Querier) (ReserveResult, error) {
 		cap := capFor(q, project, defaultCap)
-		reserved, committed := spendRow(q, project, day)
+		reserved, committed, serr := spendRow(q, project, day)
+		if serr != nil {
+			return ReserveResult{}, serr // fail CLOSED: a DB read failure must not proceed on unknown spend
+		}
 		inUse := reserved + committed
 		if inUse+amountUsd > cap+1e-9 {
 			return ReserveResult{OK: false, Reason: "cost_cap", Cap: cap, Spent: inUse, Requested: amountUsd}, nil
@@ -77,6 +82,10 @@ func Reserve(db *sql.DB, project string, amountUsd, defaultCap float64) ReserveR
 		}
 		return ReserveResult{OK: true, ReservationID: id, Cap: cap, Spent: inUse}, nil
 	})
+	if err != nil {
+		// A transaction/DB error denies (fail closed) rather than silently proceeding.
+		return ReserveResult{OK: false, Reason: "internal_error"}
+	}
 	return res
 }
 
@@ -177,7 +186,7 @@ func ReapStaleReservations(db *sql.DB, maxAgeMs int64) int {
 func GetSpend(db *sql.DB, project string, defaultCap float64) Spend {
 	day := util.UTCDay()
 	s, _ := state.Tx(db, func(q state.Querier) (Spend, error) {
-		reserved, committed := spendRow(q, project, day)
+		reserved, committed, _ := spendRow(q, project, day) // best-effort read for display
 		return Spend{Day: day, Cap: capFor(q, project, defaultCap), Reserved: reserved, Committed: committed}, nil
 	})
 	return s

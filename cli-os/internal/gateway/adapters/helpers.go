@@ -62,3 +62,22 @@ func jsonStringify(v any) string {
 	}
 	return string(b)
 }
+
+// jsTruthy mirrors JavaScript truthiness for a JSON-decoded value (so a model that stringifies a
+// boolean, or a client that sends 1 instead of true, behaves like the Node original).
+func jsTruthy(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return x
+	case string:
+		return x != ""
+	case float64:
+		return x != 0
+	case int:
+		return x != 0
+	default:
+		return true // arrays, maps, etc. are truthy
+	}
+}

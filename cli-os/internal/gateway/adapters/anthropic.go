@@ -141,7 +141,7 @@ func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bo
 	if req["temperature"] != nil {
 		body["temperature"] = req["temperature"]
 	}
-	if stop := req["stop"]; stop != nil {
+	if stop := req["stop"]; jsTruthy(stop) {
 		if arr := asArr(stop); arr != nil {
 			body["stop_sequences"] = arr
 		} else {
@@ -149,7 +149,7 @@ func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bo
 		}
 	}
 	if tools := asArr(req["tools"]); len(tools) > 0 {
-		var outTools []any
+		outTools := []any{} // matches Node: a client `tools` present but all-non-function yields []
 		for _, tRaw := range tools {
 			t := asMap(tRaw)
 			if asStr(t["type"]) != "function" || asMap(t["function"]) == nil {
@@ -164,7 +164,7 @@ func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bo
 			outTools = append(outTools, map[string]any{"name": fn["name"], "description": desc, "input_schema": schema})
 		}
 		body["tools"] = outTools
-		if tcRaw, ok := req["tool_choice"]; ok && tcRaw != nil {
+		if tcRaw := req["tool_choice"]; jsTruthy(tcRaw) {
 			body["tool_choice"] = translateToolChoice(tcRaw)
 		}
 	}
@@ -306,8 +306,10 @@ func (s *anthropicStream) OnEvent(ev SSEEvent) StreamOut {
 		}
 	case "message_delta":
 		if u := asMap(data["usage"]); u != nil {
-			if _, ok := u["output_tokens"]; ok {
-				s.usage.CompletionTokens = numToInt(u["output_tokens"])
+			// Mirror `output_tokens ?? st.usage.completion_tokens`: a null/absent value keeps the prior
+			// count (set at message_start) rather than resetting it to 0.
+			if v := u["output_tokens"]; v != nil {
+				s.usage.CompletionTokens = numToInt(v)
 			}
 		}
 		if d := asMap(data["delta"]); d != nil {
@@ -330,6 +332,9 @@ func (s *anthropicStream) OnEvent(ev SSEEvent) StreamOut {
 	}
 	return StreamOut{Deltas: out}
 }
+
+// Usage returns the token counts accumulated so far (fallback when a stream ends before message_stop).
+func (s *anthropicStream) Usage() oai.Usage { return s.usage }
 
 // asStrOrEmpty mirrors String(content ?? ”) — null/undefined becomes "".
 func asStrOrEmpty(v any) string {

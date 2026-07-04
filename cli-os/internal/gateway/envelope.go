@@ -19,13 +19,18 @@ type Attr struct {
 
 var attrEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
 
+// wsClass matches the same whitespace set JS regex `\s` does (Go's RE2 `\s` is ASCII-only, which
+// would let an attacker slip a vertical tab / NBSP / other Unicode space into a closing tag and
+// escape the untrusted-content envelope). Covers VT, the Zs separators (incl. NBSP), ZWNBSP, LS, PS.
+const wsClass = `[\s\x{000B}\p{Zs}\x{FEFF}\x{2028}\x{2029}]`
+
 // neutralizeClosers entity-escapes the COMPLETE closing token `</tag ...>` for each protected tag,
-// case-insensitively and tolerant of internal whitespace. Only complete closers are a breakout
-// vector; a bare `</tag` and other angle brackets are left intact for content fidelity.
+// case-insensitively and tolerant of internal (Unicode) whitespace. Only complete closers are a
+// breakout vector; a bare `</tag` and other angle brackets are left intact for content fidelity.
 func neutralizeClosers(text string, tagNames []string) string {
 	out := text
 	for _, t := range tagNames {
-		re := regexp.MustCompile(`(?i)</\s*` + regexp.QuoteMeta(t) + `\s*>`)
+		re := regexp.MustCompile(`(?i)</` + wsClass + `*` + regexp.QuoteMeta(t) + wsClass + `*>`)
 		out = re.ReplaceAllString(out, "&lt;/"+t+"&gt;")
 	}
 	return out

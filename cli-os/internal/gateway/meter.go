@@ -6,7 +6,6 @@
 package gateway
 
 import (
-	"encoding/json"
 	"math"
 
 	"github.com/jackofall1232/l00prite/cli-os/internal/gateway/adapters"
@@ -46,8 +45,7 @@ func ReservationCeiling(providerName, model string, req map[string]any) float64 
 	if msgs == nil {
 		msgs = []any{}
 	}
-	b, _ := json.Marshal(msgs)
-	promptTokens := util.EstimateTokensFromChars(len(b))
+	promptTokens := util.EstimateTokensFromChars(jsonLenApprox(msgs))
 	maxOut := numToInt(req["max_tokens"])
 	if maxOut == 0 {
 		maxOut = numToInt(req["max_completion_tokens"])
