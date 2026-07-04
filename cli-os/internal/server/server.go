@@ -86,6 +86,19 @@ func Handler(app *gateway.App) http.Handler {
 			app.HandleSetupProvider(w, r)
 		case r.Method == http.MethodPost && p == "/v1/setup/token":
 			app.HandleSetupToken(w, r)
+		// Authenticated provider lifecycle management (Part E) — flat POST actions, name in the body.
+		case r.Method == http.MethodPost && p == "/v1/providers":
+			app.HandleProviderAdd(w, r)
+		case r.Method == http.MethodPost && p == "/v1/providers/test":
+			app.HandleProviderTest(w, r)
+		case r.Method == http.MethodPost && p == "/v1/providers/rotate":
+			app.HandleProviderRotate(w, r)
+		case r.Method == http.MethodPost && p == "/v1/providers/remove":
+			app.HandleProviderRemove(w, r)
+		case r.Method == http.MethodPost && p == "/v1/providers/update":
+			app.HandleProviderUpdate(w, r)
+		case r.Method == http.MethodPost && p == "/v1/providers/models":
+			app.HandleProviderModels(w, r)
 		case r.Method == http.MethodPost && p == "/v1/chat/completions":
 			app.HandleChatCompletion(w, r)
 		default:

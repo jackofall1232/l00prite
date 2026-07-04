@@ -363,7 +363,21 @@ func providerCmd(db *sql.DB, cfg config.Config, sub, arg string, flags map[strin
 		_, _ = db.ExecContext(state.Ctx(), `UPDATE providers SET enabled = ? WHERE name = ?`, v, arg)
 		fmt.Printf("%s: %sd\n", arg, sub)
 	case "remove":
-		_, _ = db.ExecContext(state.Ctx(), `DELETE FROM providers WHERE name = ?`, arg)
+		// Delete the provider AND its model-selection rows in ONE transaction, matching the dashboard's
+		// remove endpoint: neither surface leaves ghost provider_models rows behind for a later re-add to
+		// resurrect, and a mid-delete failure is surfaced instead of printing a false "Removed".
+		if _, err := state.Tx(db, func(q state.Querier) (any, error) {
+			if _, err := q.ExecContext(state.Ctx(), `DELETE FROM provider_models WHERE provider = ?`, arg); err != nil {
+				return nil, err
+			}
+			if _, err := q.ExecContext(state.Ctx(), `DELETE FROM providers WHERE name = ?`, arg); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}); err != nil {
+			fmt.Fprintln(os.Stderr, "failed to remove provider: "+err.Error())
+			return
+		}
 		fmt.Printf("Removed %s\n", arg)
 	default:
 		fmt.Fprintln(os.Stderr, "unknown provider subcommand")

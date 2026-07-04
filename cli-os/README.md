@@ -18,6 +18,10 @@ server + CLI control surface + dashboard.
 > [`docs/node-to-go-port-notes.md`](docs/node-to-go-port-notes.md) for what is proven vs. what still
 > needs a networked validation pass (live-provider round-trips, OpenAI/GLM pricing confirmation).
 
+> **Setting up from scratch?** [`INSTALL.md`](INSTALL.md) is the full, verified end-to-end guide —
+> prerequisites → build → `init` → network binding → systemd service → the browser wizard → connecting a
+> coding tool → troubleshooting. The quickstarts below are the condensed version.
+
 ## Quickstart (browser — zero config)
 
 Install the binary and start it with no config at all — the dashboard becomes a first-run
@@ -92,6 +96,21 @@ docker compose exec cli-os l00prite token mint --project demo
 | POST | `/v1/setup/provider/test` | setup¹ | Validate a provider key with a **real** upstream call (stores nothing) |
 | POST | `/v1/setup/provider` | setup¹ | Validate-then-store a provider (same row shape as `provider add`) |
 | POST | `/v1/setup/token` | setup¹ | Mint the first token (same primitive as `token mint`) |
+| POST | `/v1/providers` | token | Add a provider post-setup — **same validate-then-store core as the wizard**; unverified until first real use |
+| POST | `/v1/providers/test` | token | Validate a provider key with a real upstream call (stores nothing) |
+| POST | `/v1/providers/rotate` | token | Replace a provider's key — targeted overwrite (identity preserved), old key erased from the vault, `verified` reset, breaker cleared |
+| POST | `/v1/providers/remove` | token | Remove a provider + its model selection — **server-side type-to-confirm** (`confirm:"<name>"`), 409 + impact on mismatch |
+| POST | `/v1/providers/update` | token | Enable/disable a provider, or set it as default |
+| POST | `/v1/providers/models` | token | Enable/disable specific models for a provider (enforced in routing + `/v1/models`) |
+
+**Provider lifecycle from the dashboard (Part E):** the above `/v1/providers/*` endpoints let a
+non-technical user add, rotate, remove, toggle, and re-select models for providers entirely in the
+browser, with the same Bearer-token auth as every data endpoint — no CLI required, ever. A stored key is
+**never returned** by any response (only replaced); every action is audit-logged with the acting token
+id. Removing the only/default provider is allowed but warns specifically ("This is your only configured
+provider…"), flips System Health to "No providers configured", and makes subsequent requests fail with a
+clear `503 no_providers_configured` pointing back to the dashboard. See
+[`docs/dashboard-and-setup.md`](docs/dashboard-and-setup.md) (Part E).
 
 ¹ **Setup endpoints are reachable only during genuine first-run.** They are open until setup first
 completes (vault + a provider + a token), then **permanently disabled** — every call returns
@@ -148,6 +167,8 @@ layer. Read the design docs for the full picture:
   — cross-provider delegation ("Codex asks Claude to use a tool").
 - [`docs/routing-rules-v1.md`](docs/routing-rules-v1.md) · [`docs/security-model.md`](docs/security-model.md)
   · [`docs/v1-scope.md`](docs/v1-scope.md) · [`docs/open-questions.md`](docs/open-questions.md)
+- [`docs/known-limitations.md`](docs/known-limitations.md) — deliberate scope caveats (e.g. single-tier
+  auth: any valid token can manage providers today).
 
 Safety posture (inherited from l00prite): safe-by-default, no auto-everything; **persisted flags
 are never authorization** — cost/retry/destructive gates are enforced by a Policy Enforcement

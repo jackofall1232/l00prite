@@ -158,3 +158,102 @@ real numbers on the next refresh.
   - `TestMasterKeyPresence` — master-key detection; a missing key is *not* a bind problem (setup mode).
   - `TestBindSafetyStaysFatal` — non-loopback bind without TLS stays fatal; `LOOPRITE_ALLOW_INSECURE_BIND`
     opt-in clears it.
+
+---
+
+## Part E — ongoing provider lifecycle management (post-setup, no CLI)
+
+The first-run wizard only covers the very first provider, and its endpoints lock permanently once setup
+completes. The average user's daily workflow lives in the dashboard *after* that, so Part E adds full
+provider lifecycle management as **authenticated** endpoints — add, rotate, remove, enable/disable,
+set-default, and per-model selection — with the dashboard's Providers section as the UI. No terminal is
+ever required.
+
+### Endpoints (all Bearer-token authenticated — same auth as `/v1/chat/completions`)
+
+- `POST /v1/providers` — add a provider **through the same `storeProvider` core the wizard uses** (one
+  code path, `internal/gateway/providers.go`). A duplicate name is refused (409); an invalid name
+  (charset `[a-z0-9_-]+`) or a bad key (real validation call) is refused and stored nowhere.
+- `POST /v1/providers/test` — validate a key with a real upstream call; stores nothing.
+- `POST /v1/providers/rotate` — replace the key. This is a **targeted `UPDATE` of `enc_key` only**, not
+  the add path's `INSERT OR REPLACE`: the provider's identity — `is_default`, `enabled`, `created_at`,
+  adapter, base URL — is preserved. The old ciphertext is **overwritten in the vault** (`secure_delete`
+  is on, so freed pages are zeroed); `verified` resets to 0; the circuit breaker is cleared so a key
+  that fixes a failing provider isn't left behind a still-open breaker.
+- `POST /v1/providers/remove` — delete the provider **and** its model-selection rows in one transaction.
+  Server-side type-to-confirm: the body must echo `confirm: "<name>"`, or the call returns **409 with the
+  computed removal impact** (so `curl` can't bypass the UI dialog). Because `ListProviders` reads the DB
+  on every request, removal is effective immediately — no cache to expire.
+- `POST /v1/providers/update` — flip `enabled` and/or set-as-default (re-enabling clears the breaker).
+- `POST /v1/providers/models` — set which manifest models are enabled (Part C's selection, now editable
+  post-setup). Unknown ids are dropped; the disabled set replaces the provider's rows atomically.
+
+### `verified` flag (distinct from the wizard's `validated`)
+
+`validated` is the ephemeral save-time probe. `verified` is a **persisted** provider column: a freshly
+added or rotated key starts `verified=0` and flips to `1` the first time a **real routed request**
+succeeds against it (the flip lives next to `MarkSuccess` in `turn.go` / `ingress.go`, guarded by the
+already-loaded `provRow.Verified` so the hot path never re-writes). The migration backfills existing
+providers to `verified=1` only when the `ALTER` actually adds the column (an old DB) — a fresh DB's new
+providers correctly start at 0. The dashboard shows a `verified` / `unverified` badge per provider.
+
+### Model selection enforced in routing (not display-only)
+
+The disabled set is loaded into `ProviderRow`/`ProviderInfo.DisabledModels` (one correlated subquery in
+`ListProviders`, so every routing call site gets it with no signature change) and enforced at four
+points: `/v1/models` (not advertised), the auto-routing catalog (never auto-selected), Rule 3
+`model_owner` (a bare disabled model doesn't attribute to its owner), and default-model selection
+(`firstEnabledModel` skips disabled models). Explicit operator intent — route-header pins, `provider/model`
+pins, and aliases — deliberately bypasses the toggle. Disabling every model of a provider leaves it
+unroutable for bare/auto requests and raises a dashboard alert.
+
+### Removal impact + the confirmed product decision
+
+Removing the only/default provider is **allowed, not blocked** (a deliberate product choice). The
+consequence surfaces in three places, all from real state (`removalImpact`, shared by the summary's
+pre-removal warning and the server confirm gate so they're identical):
+
+1. **Specific pre-removal warning**, enumerated worst-first: only-provider ("This is your only configured
+   provider. Removing it will leave the gateway unable to route any requests until you add a new one.")
+   → default-provider → config aliases pointing at it → auto-routing quality ranks referencing it. The
+   config-file rules "will start failing" (removal doesn't edit config), stated as such.
+2. **System Health** reports a specific headline — `system.status_label` becomes `"No providers
+   configured"` (not a green "Operational" over an empty list, not a vague "Degraded").
+3. **A request with zero providers fails specifically** — `503 { code: "no_providers_configured" }` with
+   a message pointing back to the dashboard, raised at the top of `Pick`, distinct from the
+   all-tripped/all-disabled messages.
+
+### Security posture
+
+- **Same auth** as every other data endpoint; no unauthenticated "emergency revoke" path. Every action
+  is audit-logged with the acting token id as the actor (visible in the dashboard's audit log).
+  *Follow-up (documented, not silently omitted): a `management`-scoped token would restrict these
+  mutations to an admin token rather than any project token. The Part E spec is same-auth, so that's a
+  deliberate v-next, flagged here and in `providers.go`.*
+- **The key value is never returned** by any endpoint after initial save — responses carry `has_key` /
+  `verified` booleans only, so a saved secret can only be replaced, never read back (asserted by tests).
+- **Revocation is immediate** for new requests. An in-flight streamed request already holds the decrypted
+  key in memory and completes; "effectively immediate" is defined as "no *new* request can use a removed
+  key", not in-flight teardown.
+
+### Tests (`internal/server/provider_mgmt_test.go`)
+
+- `TestProviderMgmtAuthRequired` — every management endpoint rejects a missing/invalid token (401).
+- `TestProviderAddReusesWizardCore` — bad key rejected and stored nowhere; name charset enforced;
+  duplicate add refused; good key stored encrypted + unverified.
+- `TestProviderRotatePreservesIdentityAndKillsOldKey` — rotation preserves `is_default`/`enabled`/
+  `created_at`, overwrites the vault (old key unrecoverable), resets `verified`; a real request flips
+  `verified=1`; a second rotate resets it (no stale cache).
+- `TestProviderRemoveLastProviderLifecycle` — mismatched confirm → 409 + impact, nothing removed;
+  confirmed removal deletes the provider and its `provider_models` rows; System Health flips to
+  "No providers configured"; a request returns `503 no_providers_configured`; setup endpoints stay
+  locked; re-adding through the new endpoint restores routing.
+- `TestProviderKeyNeverReturnedAndAudit` — no add/rotate/test/summary response leaks the key; each action
+  is attributed in the audit log to the acting token, with the provider name (never a key) as detail.
+- `TestProviderModelSelectionRouting` — a disabled model disappears from `/v1/models`, isn't auto-selected,
+  and won't route to its provider; re-enabling restores it.
+- `TestProviderRemovalImpactSignals` — the warning enumerates the specific auto-routing quality ranks that
+  will start failing.
+
+Verified end-to-end against the real binary in a browser (add / rotate buttons / model editor /
+type-to-confirm removal / System-Health flip / the zero-provider `503`).
