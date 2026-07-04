@@ -1,0 +1,10 @@
+# Runtime data never belongs in git.
+.env
+*.db
+*.db-wal
+*.db-shm
+master.key
+ledger.jsonl
+/data/
+.cli-os-data/
+node_modules/
