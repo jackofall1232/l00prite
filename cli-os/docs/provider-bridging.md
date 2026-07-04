@@ -77,6 +77,11 @@ Response headers on a bridged reply: `x-l00prite-bridge-hops` (delegated sub-cal
 `x-l00prite-cost-usd` (summed across all hops), `x-l00prite-provider` (the primary). Every hop is a
 ledger row sharing the `request_id`; `l00prite route explain <id>` shows the whole tree.
 
+> **Latency trade-off:** an armed request always **buffers** (it must see the full turn before it
+> can detect a bridge call), so time-to-first-token is the whole primary turn even when the model
+> ends up not delegating. Keep bridging **per-request** (the header) rather than globally
+> `enabled:true` unless you accept buffered streaming for every request on the install.
+
 `l00prite bridge status` prints the current arm state and hop cap.
 
 ## A natural use-case: the cross-provider verifier
