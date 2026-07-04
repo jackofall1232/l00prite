@@ -17,17 +17,25 @@ import (
 	"github.com/jackofall1232/l00prite/cli-os/public"
 )
 
-func serveDashboard(w http.ResponseWriter) {
-	if len(public.Dashboard) == 0 {
+func serveHTML(w http.ResponseWriter, body []byte, fallback string) {
+	if len(body) == 0 {
 		w.Header().Set("content-type", "text/plain")
 		w.WriteHeader(200)
-		w.Write([]byte("l00prite CLI-OS is running. Dashboard asset not found."))
+		w.Write([]byte(fallback))
 		return
 	}
 	w.Header().Set("content-type", "text/html; charset=utf-8")
-	w.Header().Set("content-length", fmt.Sprint(len(public.Dashboard)))
+	w.Header().Set("content-length", fmt.Sprint(len(body)))
 	w.WriteHeader(200)
-	w.Write(public.Dashboard)
+	w.Write(body)
+}
+
+func serveDashboard(w http.ResponseWriter) {
+	serveHTML(w, public.Dashboard, "l00prite CLI-OS is running. Dashboard asset not found.")
+}
+
+func serveSetup(w http.ResponseWriter) {
+	serveHTML(w, public.Setup, "l00prite CLI-OS first-run setup. Setup asset not found.")
 }
 
 func notFound(w http.ResponseWriter) {
@@ -50,12 +58,34 @@ func Handler(app *gateway.App) http.Handler {
 		}()
 		p := r.URL.Path
 		switch {
-		case r.Method == http.MethodGet && (p == "/" || p == "/dashboard"):
+		case r.Method == http.MethodGet && p == "/":
+			// First-run: an unconfigured system serves the setup wizard at / until setup completes,
+			// after which / is permanently the real-data dashboard.
+			if app.SetupComplete() {
+				serveDashboard(w)
+			} else {
+				serveSetup(w)
+			}
+		case r.Method == http.MethodGet && p == "/dashboard":
 			serveDashboard(w)
+		case r.Method == http.MethodGet && p == "/setup":
+			serveSetup(w)
 		case r.Method == http.MethodGet && p == "/healthz":
 			app.HandleHealth(w, r)
 		case r.Method == http.MethodGet && p == "/v1/models":
 			app.HandleModels(w, r)
+		case r.Method == http.MethodGet && p == "/v1/dashboard/summary":
+			app.HandleDashboardSummary(w, r)
+		case r.Method == http.MethodGet && p == "/v1/setup/status":
+			app.HandleSetupStatus(w, r)
+		case r.Method == http.MethodPost && p == "/v1/setup/vault":
+			app.HandleSetupVault(w, r)
+		case r.Method == http.MethodPost && p == "/v1/setup/provider/test":
+			app.HandleSetupProviderTest(w, r)
+		case r.Method == http.MethodPost && p == "/v1/setup/provider":
+			app.HandleSetupProvider(w, r)
+		case r.Method == http.MethodPost && p == "/v1/setup/token":
+			app.HandleSetupToken(w, r)
 		case r.Method == http.MethodPost && p == "/v1/chat/completions":
 			app.HandleChatCompletion(w, r)
 		default:
@@ -88,13 +118,23 @@ func Start(ov Overrides) {
 	if ov.Port != 0 {
 		cfg.Port = ov.Port
 	}
-	if problems := config.ValidateForServe(cfg); len(problems) > 0 {
+	// Bind-safety problems are ALWAYS fatal (no non-loopback bind without TLS; a configured cert pair
+	// must exist). A missing master key is NOT fatal: the server boots into first-run setup mode and
+	// the browser wizard initializes the vault. This is what makes zero-config first run possible.
+	if problems := config.BindProblems(cfg); len(problems) > 0 {
 		fmt.Fprintln(os.Stderr, "Refusing to start — fix these first:")
 		for _, p := range problems {
 			fmt.Fprintln(os.Stderr, "  • "+p)
 		}
 		os.Exit(1)
 	}
+	// A first-run `serve` may have no data dir yet (the user never ran `init`); create it so the DB
+	// and the vault the wizard writes have a home.
+	if err := config.EnsureHome(cfg); err != nil {
+		fmt.Fprintln(os.Stderr, "Failed to create data dir: "+err.Error())
+		os.Exit(1)
+	}
+	firstRun := !config.MasterKeyPresent(cfg)
 	db, err := state.Open(cfg.DBPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to open database: "+err.Error())
@@ -112,7 +152,7 @@ func Start(ov Overrides) {
 		}
 	}()
 
-	app := &gateway.App{DB: db, Cfg: cfg, Aliases: cfg.Aliases}
+	app := &gateway.App{DB: db, Cfg: cfg, Aliases: cfg.Aliases, StartedAt: time.Now()}
 	srv := &http.Server{Addr: fmt.Sprintf("%s:%d", cfg.Host, cfg.Port), Handler: Handler(app)}
 
 	scheme := "http"
@@ -122,6 +162,9 @@ func Start(ov Overrides) {
 	fmt.Printf("l00prite CLI-OS listening on %s://%s:%d\n", scheme, cfg.Host, cfg.Port)
 	fmt.Printf("  • OpenAI endpoint : %s://%s:%d/v1/chat/completions\n", scheme, cfg.Host, cfg.Port)
 	fmt.Printf("  • Dashboard       : %s://%s:%d/\n", scheme, cfg.Host, cfg.Port)
+	if firstRun || !app.SetupComplete() {
+		fmt.Printf("  • First-run setup : open %s://%s:%d/ in a browser to configure (no terminal needed)\n", scheme, cfg.Host, cfg.Port)
+	}
 
 	if cfg.TLS != nil {
 		err = srv.ListenAndServeTLS(cfg.TLS.CertPath, cfg.TLS.KeyPath)

@@ -73,3 +73,50 @@ func TestFalsyPortHostFallBack(t *testing.T) {
 		t.Fatalf("falsy host/port must fall back to defaults, got %s:%d", cfg.Host, cfg.Port)
 	}
 }
+
+func TestMasterKeyPresence(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOOPRITE_HOME", dir)
+	t.Setenv("LOOPRITE_MASTER_KEY", "")
+	cfg := Load()
+	// No env key, no key file -> absent (first run). ValidateForServe must flag it, but this is NOT a
+	// bind problem, so the server may still boot into setup mode.
+	if MasterKeyPresent(cfg) {
+		t.Fatalf("master key must be absent on a fresh dir")
+	}
+	if len(BindProblems(cfg)) != 0 {
+		t.Fatalf("a loopback bind without a key must have no BIND problems (setup mode is allowed): %v", BindProblems(cfg))
+	}
+	if len(ValidateForServe(cfg)) == 0 {
+		t.Fatalf("ValidateForServe must still flag the missing master key")
+	}
+	// Env key of 32 bytes -> present.
+	t.Setenv("LOOPRITE_MASTER_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+	if !MasterKeyPresent(cfg) {
+		t.Fatalf("a valid 32-byte env key must count as present")
+	}
+	// A key file also counts as present.
+	t.Setenv("LOOPRITE_MASTER_KEY", "")
+	if err := os.WriteFile(cfg.MasterKeyPath, []byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !MasterKeyPresent(cfg) {
+		t.Fatalf("a key file must count as present")
+	}
+}
+
+func TestBindSafetyStaysFatal(t *testing.T) {
+	t.Setenv("LOOPRITE_HOME", t.TempDir())
+	t.Setenv("LOOPRITE_ALLOW_INSECURE_BIND", "")
+	// Non-loopback host without TLS is a fatal bind problem — setup mode does NOT relax this.
+	cfg := Load()
+	cfg.Host = "0.0.0.0"
+	if len(BindProblems(cfg)) == 0 {
+		t.Fatalf("binding 0.0.0.0 without TLS must be a bind problem")
+	}
+	// Opting in clears it.
+	t.Setenv("LOOPRITE_ALLOW_INSECURE_BIND", "1")
+	if len(BindProblems(cfg)) != 0 {
+		t.Fatalf("LOOPRITE_ALLOW_INSECURE_BIND=1 must clear the non-loopback bind problem")
+	}
+}

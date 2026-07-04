@@ -14,17 +14,34 @@ server + CLI control surface + dashboard.
 > **v1.1.0 — Go rewrite, runnable and tested.** A single statically-compiled Go binary (pure-Go
 > SQLite via `modernc.org/sqlite`, no cgo — `CGO_ENABLED=0 go build` yields one static executable
 > that `ldd` reports as "not a dynamic executable"). The full request path is covered by an offline
-> test suite (`go test ./...`, 51 checks). See [`RELEASE.md`](RELEASE.md) and
+> test suite (`go test ./...`, 72 checks). See [`RELEASE.md`](RELEASE.md) and
 > [`docs/node-to-go-port-notes.md`](docs/node-to-go-port-notes.md) for what is proven vs. what still
 > needs a networked validation pass (live-provider round-trips, OpenAI/GLM pricing confirmation).
 
-## Quickstart (local)
+## Quickstart (browser — zero config)
+
+Install the binary and start it with no config at all — the dashboard becomes a first-run
+**setup wizard** that walks you through the vault, a provider (with a real key-validation call),
+network safety, and your first token, then hands you a working gateway. No terminal after launch.
+
+```bash
+cd cli-os
+go build -o l00prite ./cmd/l00prite     # or ./install/install.sh
+./l00prite serve                        # boots into setup mode; open http://127.0.0.1:8787/
+```
+
+The wizard writes the **same state the CLI does** (one vault, one providers table, one token store),
+so you can mix the browser and the CLI freely afterward. Once setup completes, `/` is permanently the
+real-data dashboard and the setup endpoints are disabled.
+
+## Quickstart (CLI)
 
 ```bash
 cd cli-os
 ./install/install.sh                    # builds the static ./l00prite binary, runs init
 
 ./l00prite provider add mock --adapter mock --default   # zero-key demo upstream
+./l00prite provider test mock                           # validate a provider with a real call
 ./l00prite token mint --project demo                    # prints a token (once)
 ./l00prite serve                                        # http://127.0.0.1:8787
 ```
@@ -63,12 +80,24 @@ docker compose exec cli-os l00prite token mint --project demo
 
 ## Endpoints
 
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/v1/chat/completions` | OpenAI-compatible chat (streaming + non-streaming); supports `auto:*` routing, bridging, and `x-l00prite-dry-run` route plans |
-| GET  | `/v1/models` | List models across enabled providers (plus `auto:*` pseudo-models) |
-| GET  | `/healthz` | Provider + circuit-breaker status, bridge state, auto profiles |
-| GET  | `/` | Dashboard |
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| POST | `/v1/chat/completions` | token | OpenAI-compatible chat (streaming + non-streaming); supports `auto:*` routing, bridging, and `x-l00prite-dry-run` route plans |
+| GET  | `/v1/models` | none | List models across enabled providers (plus `auto:*` pseudo-models) |
+| GET  | `/v1/dashboard/summary` | token | Real operator state for the dashboard: providers + live health, repos + memory freshness, tokens, spend/caps, run ledger, audit log. All real; unwired values are omitted, never faked. |
+| GET  | `/healthz` | none | Provider + circuit-breaker status, bridge state, auto profiles |
+| GET  | `/` | none | Setup wizard while unconfigured; real-data dashboard once setup completes |
+| GET  | `/v1/setup/status` | none | First-run progress (booleans/counts only, no secrets) + bind info |
+| POST | `/v1/setup/vault` | setup¹ | Initialize the vault master key (generate, or provide your own base64-32) |
+| POST | `/v1/setup/provider/test` | setup¹ | Validate a provider key with a **real** upstream call (stores nothing) |
+| POST | `/v1/setup/provider` | setup¹ | Validate-then-store a provider (same row shape as `provider add`) |
+| POST | `/v1/setup/token` | setup¹ | Mint the first token (same primitive as `token mint`) |
+
+¹ **Setup endpoints are reachable only while the system is genuinely unconfigured** (no vault + no
+provider + no active token). The moment setup completes they are **disabled** — every call returns
+`403 setup_complete` and performs no action — so a setup endpoint can never linger as an
+unauthenticated back door. The server also refuses to bind a non-loopback address without TLS, so
+first-run setup is never exposed by accident.
 
 Per-request headers (optional): `x-l00prite-repo` (repo id for memory), `x-l00prite-route`
 (`provider/model` pin **or** `auto:<profile>`), `x-l00prite-paths` (comma-separated files, for
@@ -94,7 +123,7 @@ return the routing decision only, no spend).
 ```
 l00prite init | serve | health
 l00prite provider add <name> [--key K] [--adapter native-messages|openai-compat|mock] [--base URL] [--default]
-l00prite provider list | default <name> | enable|disable|remove <name>
+l00prite provider list | test <name> [--key K] [--model M] | default <name> | enable|disable|remove <name>
 l00prite token mint --project P [--repo ID] [--expires DAYS] | token list | token revoke <id>
 l00prite repo register <id> --root PATH [--project P] | repo list
 l00prite cap set --project P --daily USD | cap list
@@ -162,7 +191,7 @@ cli-os/
         mock.go                              # zero-key demo upstream (bridge-aware test hooks)
         registry.go                          # adapter + manifest resolution (manifests embedded)
         manifests/*.json                     # per-provider base url, models, pricing, capabilities
-    */(*_test.go)                            # unit + end-to-end (go test ./..., 51 checks)
+    */(*_test.go)                            # unit + end-to-end (go test ./..., 72 checks)
   public/dashboard.html + embed.go           # served (embedded) control-plane dashboard
   install/ · Dockerfile · docker-compose.yml · .env.example
 ```
