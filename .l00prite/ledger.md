@@ -379,3 +379,47 @@ Append one entry per agent run. Do not overwrite prior runs.
 - **Confidence:** High — validator clean, doctor self-tests green, each fix has a negative test.
 - **Next action:** Await further review or merge; keep the ~1h self check-in armed.
 - **Lock:** none acquired — single-agent session; `lock.json` remains `released`.
+
+### Run 2026-07-04T21:40:00Z — Claude (Fable 5), branch claude/os-setup-onboarding-x23ohp
+- **Goal:** CLI-OS onboarding/friction pass per maintainer: make the OS easy to install, remove
+  the demo path, make entering a repo and adding providers easy, fix illegible (black-on-black)
+  text boxes, put clear instructions in the repo root, and give new devs a place to prompt models.
+- **Triggering event:** direct maintainer instruction in-session.
+- **Reviewer/comment reference:** none.
+- **Decision:** Normal work. Root cause of the illegible inputs: dashboard modal fields kept
+  `background:rgba(0,0,0,.3)` while `--text` flips to near-black under
+  `prefers-color-scheme:light` — themed all form controls (incl. select options + autofill) via
+  scheme-aware variables in both HTML files. Demo/mock removed from every user-facing flow but
+  kept as an internal adapter for the offline test suite. Repo registration exposed to the
+  dashboard through new authenticated endpoints reusing the CLI primitive; duplicate ids 409
+  instead of the CLI's silent replace. Playground added as a thin client of the existing
+  authenticated `/v1/chat/completions` (no new server surface), with a custom-model entry for
+  catalog-less providers.
+- **Completed work:** `internal/gateway/repos.go` (`POST /v1/repos`, `POST /v1/repos/remove`,
+  path-existence validation, audit, freshness snapshot) + routes + `repo_mgmt_test.go`;
+  dashboard: form-control theming, Register-repo modal + repo Remove, Playground (model/repo
+  pickers, custom model, chat log), demo option removed; setup wizard: theming, mock option
+  removed, default project `default`; `init` hints, `install/install.sh` next-steps,
+  `docker-entrypoint.sh` no longer seeds a mock provider; `cli-os/README.md` + `INSTALL.md`
+  reworked (real-provider quickstarts, new endpoints, accuracy note); root `GETTING_STARTED.md`
+  (new) + root `README.md` quickstart callout, layout + install pointers; mock reply string no
+  longer says "demo upstream".
+- **Changed files:** `cli-os/{public/dashboard.html,public/setup.html,internal/gateway/repos.go,
+  internal/gateway/adapters/mock.go,internal/server/server.go,internal/server/repo_mgmt_test.go,
+  cmd/l00prite/main.go,install/install.sh,install/docker-entrypoint.sh,README.md,INSTALL.md}`;
+  root `GETTING_STARTED.md` (new), `README.md`, `CLAUDE.md` (§7 row), this ledger. Zero-line
+  diff to `.claude/commands/build-loop.md` and `scripts/validate-l00prite.js` held.
+- **Tests run / Verification:**
+  - `command: go test ./...` · `exit_code: 0` · `summary: all packages pass incl. new repo-mgmt tests`.
+  - `command: node scripts/validate-l00prite.js` · `exit_code: 0` · `summary: 519 PASS, 0 FAIL`.
+  - `command: node uitest.js (Playwright end-to-end against the real binary)` · `exit_code: 0` ·
+    `summary: 18/18 — wizard+dashboard input contrast ≥4.5:1 in dark AND light schemes (measured
+    ~17:1), no mock option in either add-provider path, repo registered through the UI modal,
+    playground prompt round-tripped through /v1/chat/completions with a rendered reply`.
+- **Response drafted/sent:** none.
+- **Event status:** not applicable.
+- **Failures:** none blocking; UI test initially flaky from a stale server + a token-regex that
+  truncated base64url secrets containing `-` — both fixed in the test harness.
+- **Confidence:** High — validator clean, Go suite green, UI verified end-to-end in both schemes.
+- **Next action:** maintainer review of this branch.
+- **Lock:** none acquired — single-agent session; `lock.json` remains `released`.
