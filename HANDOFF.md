@@ -1,5 +1,81 @@
 # HANDOFF
 
+## Latest update: loop-maturity gap pass — doctor, failure catalogs, path denylist (in review)
+
+This pass came from a maintainer request to *analyze the `loop-engineering` reference repo,
+identify meaningful gaps in l00prite, and implement them*, using Fable 5 as advisor and Opus
+as the execution model. A multi-agent gap-analysis workflow mapped both repos, synthesized
+candidate gaps, and had Fable 5 rank them against l00prite's invariants; Opus implemented the
+recommended scope. All work is on branch `claude/l00prite-gaps-analysis-hbv4ej`.
+
+**The governing constraint: zero edits to the two review-gated files**
+(`.claude/commands/build-loop.md`, `scripts/validate-l00prite.js`). Fable's key protective
+reframes shaped the design and were followed exactly:
+
+- **Path safety without a new boundary.** The single largest real safety gap was that
+  Execution Mode gates by *action type* but never by *path* — a confirmed run could edit
+  `.env`, `auth/`, or a migration. Rather than mint a tenth run boundary (which would edit
+  both hardcoded validator arrays, the gated build-loop, and force a "nine → eleven" sweep),
+  a denylisted-path edit now trips the **existing** `destructive_operation_required`
+  boundary. The nine-boundary set is unchanged; the validator is untouched.
+- **No-progress as telemetry now, boundary later.** Added additive, disarmed-neutral
+  `heartbeat.execution` fields (`iterations_since_progress`, `last_progress_iteration`,
+  `no_progress_threshold`) + execute-loop maintenance that escalates a stall through the
+  existing `human_review_gate`, + a doctor stall check. The *formal* `no_progress_detected`
+  boundary is deferred (it needs the gated validator arrays).
+- **No budget-by-token fiction.** An agent cannot honestly measure its own token usage, so no
+  stop is built on self-reported spend. A future budget boundary will be **wall-clock-first**
+  (timestamps are file-checkable); it is deferred to the gated batch.
+
+### What changed
+
+- **`scripts/l00prite-doctor.js`** (new, anchor deliverable) — a read-only, dependency-free
+  health check for a *scaffolded project's* `.l00prite/`, complementing the validator (which
+  checks this repo). It reports `ok`/`warn`/`fail` and exits non-zero only on a fail. Checks:
+  required memory files; JSON validity; **arming consistency** (mirrors the validator's rule —
+  `enabled`/`execution_active` legal only under a matching active execute-loop lock);
+  `state ↔ heartbeat` drift; `blocked` precedence; lock sanity; pending-count vs
+  `events/pending/`; ledger verification evidence (Verifier Theater); seeded-catalog and
+  denylist presence; no-progress stall; and **prompt-mirror self-parity** — the project's own
+  `.l00prite/prompts/` vs its own `.claude/`/`.codex/` copies (never a baked canonical hash,
+  so it survives legitimate protocol upgrades). Verified: HEALTHY on this repo and the
+  example; a 5-way negative test produced 3 FAIL + 2 WARN, exit 1.
+- **`docs/`** (new) — `failure-modes.md`, `anti-patterns.md`, `concepts.md`, `README.md`:
+  l00prite-specific loop wisdom with an S1/S2/S3 severity taxonomy, each failure mapped to the
+  boundary/lock/doctor/denylist that guards it. Adapted from the Loop Engineering project.
+- **Seeded `failures.md`** (template + example + dogfood) — an "Inherited loop failure modes"
+  section, clearly marked as generic wisdom, not project history, so a fresh scaffold warns an
+  agent about known failure modes before it repeats them.
+- **Autonomous-Edit Denylist** (`constraints.md`, all three copies) — a fenced, machine-readable
+  glob block of protected paths + an auto-merge allowlist note, loop-immutable, enforced via
+  `destructive_operation_required`. The dogfood copy encodes this repo's own review gates as
+  globs.
+- **`execute-loop.md`** (canonical + all 6 mirrors, one cp+cmp pass) — the denylist enforcement
+  paragraph, the no-progress persist-step maintenance, and the extended self-modification guard
+  (the loop may never raise `no_progress_threshold` or loosen the denylist). All 25
+  validator-required substrings preserved; all 7 copies byte-identical.
+
+### Files added / modified
+
+Added: `scripts/l00prite-doctor.js`; `docs/README.md`, `docs/failure-modes.md`,
+`docs/anti-patterns.md`, `docs/concepts.md`.
+Modified: `constraints.md`, `failures.md`, `heartbeat.json` (template + example + dogfood each);
+`templates/l00prite/prompts/execute-loop.md` + its 6 mirrors; `templates/AGENTS.md.template`;
+`examples/vendor-neutral-output/AGENTS.md`; `README.md`, `AGENTS.md`, `CLAUDE.md`, this file;
+`.l00prite/` memory (`ledger.md`, `todos.md`, `state.json`).
+**Zero-line diff** to `.claude/commands/build-loop.md` and `scripts/validate-l00prite.js`.
+
+### Remaining gaps
+
+- The **v1.2 gated batch** (in `.l00prite/todos.md`): formal `no_progress_detected` +
+  wall-clock-first `budget_exceeded` boundaries, a run-log substrate, phased autonomy levels
+  (restriction ladder), an independent verifier prompt (after the harness), and a pattern
+  library. Each needs a gated-file edit, so they are quarantined as one maintainer-review unit.
+- The doctor's invariants (denylist present, failures seeded, progress fields exist) are not
+  yet *validator-enforced* — asserting them edits the gated validator, so it is in the v1.2 batch.
+- Everything the prior update's "Remaining gaps" lists (runtime harness, cooperative-not-enforced
+  lock, no CI, no event ingestion) still stands.
+
 ## Latest update: universal agent layer + Execution Mode (v1.1, in review)
 
 This pass, directed by the maintainer, evolves l00prite from a scaffold-and-stop protocol

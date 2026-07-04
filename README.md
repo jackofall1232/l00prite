@@ -165,7 +165,8 @@ templates/l00prite/      The .l00prite/ memory folder template, incl. prompts/ (
 templates/adapters/      Vendor adapter files + how to add a vendor
 templates/vendors.json   Machine-readable vendor manifest
 examples/                Filled reference outputs
-scripts/                 Validation tooling
+docs/                    Operating knowledge: failure modes, anti-patterns, concepts
+scripts/                 Validation tooling (validate-l00prite.js) + the health doctor (l00prite-doctor.js)
 AGENTS.md                Instructions for AI agents working in this repo
 GEMINI.md / QWEN.md / CONVENTIONS.md / .github/ / .cursor/ / .windsurf/   Dogfooded adapters
 HANDOFF.md               Living log of what changed and what's left
@@ -354,6 +355,23 @@ build-loop variants keep Planning Mode non-executing and `--execute` gate-only; 
 review prompts keep the untrusted-content and one-event-per-loop rules; and all JSON
 templates parse with their required fields.
 
+The validator checks the l00prite repo itself. To health-check a **scaffolded target
+project's** `.l00prite/` memory, run the read-only doctor against it:
+
+```bash
+node scripts/l00prite-doctor.js /path/to/your/project   # default: current directory
+```
+
+The doctor never writes and never "fixes" anything — it reports `ok`/`warn`/`fail` findings
+and exits non-zero only on a fail. It catches the failures the protocol is built to prevent:
+`state.json` ↔ `heartbeat.json` arming drift, a crashed run that left Execution Mode armed
+without a lock, prompt-mirror drift (the project's own `.l00prite/prompts/` vs its
+`.claude/`/`.codex/` copies), ledger entries missing verification evidence, a pending-event
+count that no longer matches `events/pending/`, a missing Autonomous-Edit Denylist, and a
+no-progress stall. The failure modes it detects are catalogued, with severities and
+mitigations, in [`docs/`](docs/) ([failure-modes](docs/failure-modes.md) ·
+[anti-patterns](docs/anti-patterns.md) · [concepts](docs/concepts.md)).
+
 ## Current maturity
 
 **Alpha / protocol preview.**
@@ -368,6 +386,13 @@ templates parse with their required fields.
 
 ## Roadmap
 
+- **v1.2 gated batch** (needs maintainer review of the two review-gated files): promote the
+  no-progress telemetry and a **wall-clock-first** budget into formal `no_progress_detected`
+  and `budget_exceeded` run boundaries (nine → eleven); a machine-parseable `run-log.jsonl`
+  + appender; phased autonomy levels (`report_only`/`assisted`/`unattended`, designed as a
+  restriction ladder); an independent verifier prompt (after the harness); and a pattern
+  library. Tracked in `.l00prite/todos.md`. (Token/dollar spend stays out — an agent can't
+  honestly measure its own token usage, so no stop is built on it.)
 - GitHub event ingestion (turning real PR comments into `.l00prite/events/` entries automatically).
 - CI failure capture as events.
 - A runtime harness that mechanically enforces run boundaries and iteration budgets
