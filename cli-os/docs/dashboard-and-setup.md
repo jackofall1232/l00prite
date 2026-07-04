@@ -92,9 +92,17 @@ exactly what was configured.
 
 ## 4. Security note — setup endpoints are locked after setup
 
-`SetupComplete()` (`internal/gateway/setup.go`) is the single source of truth, derived from real state:
-**vault initialized AND ≥1 provider AND ≥1 non-revoked token**. It is not a flag, so the CLI and the
-wizard can never disagree.
+`SetupComplete()` (`internal/gateway/setup.go`) is the single source of truth. The FIRST time the
+system is fully configured — **vault initialized AND ≥1 provider AND ≥1 non-revoked token** (reached
+via the wizard *or* the CLI, and also latched at server boot) — it writes a **durable latch** to the
+`meta` table. From then on `SetupComplete()` stays true even if the operator later revokes every token
+or removes every provider.
+
+> **Why the latch matters (fixed during review):** deriving completion purely from live counts would
+> mean that revoking the last token (`token revoke`) or removing the last provider flips completion
+> back to `false` and silently **re-opens the unauthenticated setup endpoints** — an auth-bypass back
+> door. The latch makes the lockdown permanent; it is cleared only by an explicit reset (wiping the
+> data dir / deleting the `meta` row). Regression-tested by `TestSetupLockdownIsPersistent`.
 
 - While `!SetupComplete()`: the setup mutating/action endpoints are reachable (this is unavoidable — the
   flow *creates* the first credential, so it cannot require one). Exposure is bounded by the fact that
@@ -106,9 +114,15 @@ wizard can never disagree.
   (removing the vault/providers/tokens, e.g. deleting the data dir).
 - `GET /v1/setup/status` stays readable (booleans/counts only, no secrets), like `/healthz`.
 - `GET /v1/dashboard/summary` requires a valid token in every state — including before setup.
+- **Outbound (SSRF) surface:** `provider`/`provider/test` make a real call to the operator-supplied
+  `base_url`. This is inherent to provider setup (you must be able to point at your provider, including
+  a self-hosted one on a private address). It is bounded to the genuine first-run window — reachable
+  only while `!SetupComplete()`, which (with the durable latch above) means *before* the system was
+  ever configured — and to a safe bind (loopback by default). Accepted, not open post-setup.
 
 This is covered by tests (`TestFirstRunWizardE2E` asserts 403 + no mutation on all four endpoints after
-completion) and verified end-to-end against the real binary.
+completion; `TestSetupLockdownIsPersistent` asserts the latch survives token revocation) and verified
+end-to-end against the real binary.
 
 ---
 
@@ -134,6 +148,8 @@ real numbers on the next refresh.
 - `internal/server/setup_test.go`
   - `TestFirstRunWizardE2E` — fresh install → wizard endpoints → working gateway → dashboard shows real
     data reflecting what was configured; setup endpoints locked (403) afterward.
+  - `TestSetupLockdownIsPersistent` — after setup completes, revoking the last token does **not** re-open
+    the setup endpoints (the durable latch holds).
   - `TestSetupProviderRealValidation` — a bad key is rejected and stored nowhere; a good key passes and
     is stored **encrypted** (round-trips through the vault); validated against a fake OpenAI-compatible
     upstream that authorizes only one key.
