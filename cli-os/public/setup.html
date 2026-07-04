@@ -289,7 +289,7 @@
     const keywrap=document.getElementById("keywrap"), basewrap=document.getElementById("basewrap"), modelwrap=document.getElementById("modelwrap");
     const validateBtn=document.getElementById("validate"), addBtn=document.getElementById("add"), skip=document.getElementById("pskip");
     const note=document.getElementById("pnote");
-    let validated=false;
+    let validated=false, epoch=0;
 
     const DEFAULTS={"native-messages":{name:"anthropic",base:"https://api.anthropic.com",baseHint:"— default shown; edit if self-hosting"},
                     "openai-compat":{name:"openai",base:"",baseHint:"— required, e.g. https://api.openai.com/v1"},
@@ -307,7 +307,7 @@
       resetValidation();
       if(isMock){ addBtn.disabled=false; note.innerHTML=`<div class="note">The mock upstream needs no key — it echoes requests so you can see the full path working.</div>`; }
     }
-    function resetValidation(){ validated=false; addBtn.disabled = adapterSel.value!=="mock" && !skip.checked ? true : false; if(adapterSel.value!=="mock"&&!skip.checked) note.innerHTML=""; }
+    function resetValidation(){ epoch++; validated=false; addBtn.disabled = adapterSel.value!=="mock" && !skip.checked ? true : false; if(adapterSel.value!=="mock"&&!skip.checked) note.innerHTML=""; }
     nameIn.oninput=()=>{ nameIn.dataset.touched="1"; resetValidation(); };
     [baseIn,document.getElementById("pkey"),document.getElementById("pmodel")].forEach(el=>el.oninput=resetValidation);
     adapterSel.onchange=syncAdapter;
@@ -322,8 +322,10 @@
       if(!b.name){ note.innerHTML=`<div class="note err">Give the provider a name.</div>`; return; }
       if(!b.api_key){ note.innerHTML=`<div class="note err">Enter an API key to validate.</div>`; return; }
       validateBtn.disabled=true; validateBtn.innerHTML=`<span class="spin"></span> Testing…`;
+      const myEpoch=epoch; // snapshot: if the form changes during the call, discard this (stale) result
       const {res,data}=await api("POST","/v1/setup/provider/test",b);
       validateBtn.disabled=false; validateBtn.innerHTML="Validate key";
+      if(myEpoch!==epoch){ return; } // form edited mid-validation — ignore; the key changed
       if(res.ok && data && data.ok){ validated=true; addBtn.disabled=false;
         note.innerHTML=`<div class="note ok"><b>Key works.</b> A real call succeeded${data.model_used?` (model <span class="mono">${esc(data.model_used)}</span>)`:""}.</div>`;
       } else { validated=false; addBtn.disabled=true;
@@ -332,7 +334,9 @@
     };
     addBtn.onclick=async()=>{
       const b=formBody(); b.default=document.getElementById("pdefault").checked;
-      b.skip_validation = skip.checked || adapterSel.value==="mock" || validated;
+      // Only the explicit advanced checkbox skips validation. Otherwise the SERVER re-validates the
+      // actual submitted key on add — so a stale client "validated" flag can never store a bad key.
+      b.skip_validation = skip.checked;
       if(!b.name){ note.innerHTML=`<div class="note err">Give the provider a name.</div>`; return; }
       addBtn.disabled=true; addBtn.innerHTML=`<span class="spin"></span> Adding…`;
       const {res,data}=await api("POST","/v1/setup/provider",b);

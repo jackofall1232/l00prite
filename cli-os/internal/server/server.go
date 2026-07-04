@@ -121,7 +121,13 @@ func Start(ov Overrides) {
 	// Bind-safety problems are ALWAYS fatal (no non-loopback bind without TLS; a configured cert pair
 	// must exist). A missing master key is NOT fatal: the server boots into first-run setup mode and
 	// the browser wizard initializes the vault. This is what makes zero-config first run possible.
-	if problems := config.BindProblems(cfg); len(problems) > 0 {
+	problems := config.BindProblems(cfg)
+	if config.EnvMasterKeyInvalid() {
+		// An invalid LOOPRITE_MASTER_KEY makes the vault unusable (the loader prefers the env var and
+		// errors on it), so booting "as configured" would only fail on the first encrypt/decrypt. Fatal.
+		problems = append(problems, "LOOPRITE_MASTER_KEY is set but is not valid base64 of 32 bytes — unset it or fix it.")
+	}
+	if len(problems) > 0 {
 		fmt.Fprintln(os.Stderr, "Refusing to start — fix these first:")
 		for _, p := range problems {
 			fmt.Fprintln(os.Stderr, "  • "+p)
@@ -153,6 +159,10 @@ func Start(ov Overrides) {
 	}()
 
 	app := &gateway.App{DB: db, Cfg: cfg, Aliases: cfg.Aliases, StartedAt: time.Now()}
+	// Latch setup-complete at boot if the install is already configured (e.g. provisioned entirely via
+	// the CLI). This makes the lockdown durable: a later `token revoke` / `provider remove` can never
+	// re-open the unauthenticated setup endpoints.
+	_ = app.SetupComplete()
 	srv := &http.Server{Addr: fmt.Sprintf("%s:%d", cfg.Host, cfg.Port), Handler: Handler(app)}
 
 	scheme := "http"

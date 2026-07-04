@@ -195,6 +195,57 @@ func TestFirstRunWizardE2E(t *testing.T) {
 	}
 }
 
+// TestSetupLockdownIsPersistent proves the lockdown is DURABLE: once setup completes, revoking the
+// last token (or removing the last provider) must NOT re-open the unauthenticated setup endpoints.
+// Without a persistent latch this would be a full auth-bypass back door.
+func TestSetupLockdownIsPersistent(t *testing.T) {
+	srv, _, db := unconfigured(t)
+	base := srv.URL
+
+	if resp, _ := doJSON(t, "POST", base+"/v1/setup/vault", "", map[string]any{}); resp.StatusCode != 200 {
+		t.Fatalf("vault: %d", resp.StatusCode)
+	}
+	if resp, _ := doJSON(t, "POST", base+"/v1/setup/provider", "", map[string]any{"name": "mock", "adapter": "mock", "default": true}); resp.StatusCode != 200 {
+		t.Fatalf("provider: %d", resp.StatusCode)
+	}
+	_, tk := doJSON(t, "POST", base+"/v1/setup/token", "", map[string]any{"project": "demo"})
+	tokenID, _ := tk["id"].(string)
+	if tokenID == "" {
+		t.Fatalf("no token id: %v", tk)
+	}
+
+	// setup is complete and locked.
+	if resp, _ := doJSON(t, "POST", base+"/v1/setup/token", "", map[string]any{"project": "x"}); resp.StatusCode != 403 {
+		t.Fatalf("setup must be locked after completion, got %d", resp.StatusCode)
+	}
+
+	// revoke the ONLY token — live counts now say "0 active tokens".
+	if !security.RevokeToken(db, tokenID) {
+		t.Fatalf("revoke failed")
+	}
+	var active int
+	db.QueryRow(`SELECT COUNT(*) FROM tokens WHERE revoked = 0`).Scan(&active)
+	if active != 0 {
+		t.Fatalf("expected 0 active tokens after revoke, got %d", active)
+	}
+
+	// The latch must keep setup locked despite 0 active tokens — no auth-bypass back door.
+	if resp, m := doJSON(t, "POST", base+"/v1/setup/token", "", map[string]any{"project": "attacker"}); resp.StatusCode != 403 {
+		t.Fatalf("SECURITY: setup endpoints re-opened after token revoke (got %d) — auth bypass: %v", resp.StatusCode, m)
+	}
+	if resp, _ := doJSON(t, "POST", base+"/v1/setup/vault", "", map[string]any{}); resp.StatusCode != 403 {
+		t.Fatalf("SECURITY: vault endpoint re-opened after token revoke, got %d", resp.StatusCode)
+	}
+	// / still serves the dashboard, not the wizard.
+	if _, html := getRaw(t, base+"/"); strings.Contains(html, "First-run setup") {
+		t.Fatalf("/ reverted to the wizard after token revoke")
+	}
+	// setup status also reports complete (honors the latch).
+	if _, st := doJSON(t, "GET", base+"/v1/setup/status", "", nil); st["setup_complete"] != true {
+		t.Fatalf("status must stay setup_complete=true after revoke: %v", st)
+	}
+}
+
 // TestSetupProviderRealValidation proves the wizard validates a provider key with a REAL upstream
 // call before storing it: a bad key is rejected and nothing is persisted; a good key passes and is
 // stored encrypted. A fake OpenAI-compatible upstream authorizes only "Bearer goodkey".

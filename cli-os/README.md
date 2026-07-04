@@ -14,7 +14,7 @@ server + CLI control surface + dashboard.
 > **v1.1.0 — Go rewrite, runnable and tested.** A single statically-compiled Go binary (pure-Go
 > SQLite via `modernc.org/sqlite`, no cgo — `CGO_ENABLED=0 go build` yields one static executable
 > that `ldd` reports as "not a dynamic executable"). The full request path is covered by an offline
-> test suite (`go test ./...`, 72 checks). See [`RELEASE.md`](RELEASE.md) and
+> test suite (`go test ./...`, 73 checks). See [`RELEASE.md`](RELEASE.md) and
 > [`docs/node-to-go-port-notes.md`](docs/node-to-go-port-notes.md) for what is proven vs. what still
 > needs a networked validation pass (live-provider round-trips, OpenAI/GLM pricing confirmation).
 
@@ -93,11 +93,12 @@ docker compose exec cli-os l00prite token mint --project demo
 | POST | `/v1/setup/provider` | setup¹ | Validate-then-store a provider (same row shape as `provider add`) |
 | POST | `/v1/setup/token` | setup¹ | Mint the first token (same primitive as `token mint`) |
 
-¹ **Setup endpoints are reachable only while the system is genuinely unconfigured** (no vault + no
-provider + no active token). The moment setup completes they are **disabled** — every call returns
-`403 setup_complete` and performs no action — so a setup endpoint can never linger as an
-unauthenticated back door. The server also refuses to bind a non-loopback address without TLS, so
-first-run setup is never exposed by accident.
+¹ **Setup endpoints are reachable only during genuine first-run.** They are open until setup first
+completes (vault + a provider + a token), then **permanently disabled** — every call returns
+`403 setup_complete` and performs no action. Completion is recorded with a durable latch, so later
+revoking a token or removing a provider can **not** re-open them (no auth-bypass back door). The
+server also refuses to bind a non-loopback address without TLS, so first-run setup is never exposed
+by accident.
 
 Per-request headers (optional): `x-l00prite-repo` (repo id for memory), `x-l00prite-route`
 (`provider/model` pin **or** `auto:<profile>`), `x-l00prite-paths` (comma-separated files, for
@@ -191,7 +192,7 @@ cli-os/
         mock.go                              # zero-key demo upstream (bridge-aware test hooks)
         registry.go                          # adapter + manifest resolution (manifests embedded)
         manifests/*.json                     # per-provider base url, models, pricing, capabilities
-    */(*_test.go)                            # unit + end-to-end (go test ./..., 72 checks)
+    */(*_test.go)                            # unit + end-to-end (go test ./..., 73 checks)
   public/dashboard.html + embed.go           # served (embedded) control-plane dashboard
   install/ · Dockerfile · docker-compose.yml · .env.example
 ```

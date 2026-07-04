@@ -351,15 +351,27 @@ func BindProblems(cfg Config) []string {
 	return problems
 }
 
-// MasterKeyPresent reports whether the vault master key is available (env var of 32 base64 bytes, or a
-// key file on disk). When false, the system is genuinely unconfigured and boots into first-run setup
-// instead of refusing to start. This is the single source of truth for "is the vault initialized".
+// MasterKeyPresent reports whether a USABLE vault master key is available, mirroring the precedence of
+// security.loadMasterKey exactly: if LOOPRITE_MASTER_KEY is set, it is the source of truth and is
+// usable only if it decodes to 32 bytes (the loader will NOT fall back to the key file when the env var
+// is set-but-invalid); otherwise a key file on disk counts. When false, the system is genuinely
+// unconfigured and boots into first-run setup instead of refusing to start. Single source of truth for
+// "is the vault initialized". (An env var that is set-but-invalid is caught as a fatal boot error via
+// EnvMasterKeyInvalid, so it never reaches here as a silent "configured" state.)
 func MasterKeyPresent(cfg Config) bool {
-	if k := os.Getenv("LOOPRITE_MASTER_KEY"); k != "" && validBase64Key32(k) {
-		return true // accept std/url + padded/unpadded, like the vault loader
+	if k := os.Getenv("LOOPRITE_MASTER_KEY"); k != "" {
+		return validBase64Key32(k) // env set: usable ONLY if valid; do not fall back to the file
 	}
 	_, err := os.Stat(cfg.MasterKeyPath)
 	return err == nil
+}
+
+// EnvMasterKeyInvalid reports whether LOOPRITE_MASTER_KEY is set but not valid base64 of 32 bytes.
+// Such a value makes the vault unusable (the loader prefers the env var and errors on it), so startup
+// treats it as fatal rather than booting "as configured" and failing on the first encrypt/decrypt.
+func EnvMasterKeyInvalid() bool {
+	k := os.Getenv("LOOPRITE_MASTER_KEY")
+	return k != "" && !validBase64Key32(k)
 }
 
 // ValidateForServe returns human-readable problems that must block startup, else nil. It combines the

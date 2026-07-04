@@ -27,15 +27,35 @@ import (
 	"github.com/jackofall1232/l00prite/cli-os/internal/util"
 )
 
-// SetupComplete is the single source of truth for "is the system configured": the vault is
-// initialized AND at least one provider exists AND at least one non-revoked token exists. It is
-// derived from real state (not a flag), so the CLI and the wizard agree automatically and there is
-// nothing to get out of sync.
+// setupLatchKey marks, durably, that the system has completed first-run setup at least once.
+const setupLatchKey = "setup_completed_at"
+
+// SetupComplete reports whether first-run setup is finished. The FIRST time the system is fully
+// configured (vault initialized AND ≥1 provider AND ≥1 non-revoked token) it writes a durable latch
+// to the meta table; from then on this stays true even if the operator later revokes every token or
+// removes every provider. Without the latch, dropping active tokens/providers back to zero would
+// re-open the unauthenticated setup endpoints as an auth-bypass back door — so the latch is what makes
+// the lockdown permanent. The latch is set by first-run (wizard or CLI); it is never cleared except by
+// an explicit reset (wiping the data dir / deleting the meta row).
 func (app *App) SetupComplete() bool {
-	if !config.MasterKeyPresent(app.Cfg) {
-		return false
+	if app.setupLatched() {
+		return true
 	}
-	return app.providerCount() >= 1 && app.activeTokenCount() >= 1
+	if config.MasterKeyPresent(app.Cfg) && app.providerCount() >= 1 && app.activeTokenCount() >= 1 {
+		app.latchSetup()
+		return true
+	}
+	return false
+}
+
+func (app *App) setupLatched() bool {
+	var v string
+	err := app.DB.QueryRowContext(state.Ctx(), `SELECT value FROM meta WHERE key = ?`, setupLatchKey).Scan(&v)
+	return err == nil && v != ""
+}
+
+func (app *App) latchSetup() {
+	_, _ = app.DB.ExecContext(state.Ctx(), `INSERT OR IGNORE INTO meta(key,value) VALUES(?,?)`, setupLatchKey, util.NowISO())
 }
 
 func (app *App) providerCount() int {
@@ -115,9 +135,11 @@ func (app *App) HandleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	vault := config.MasterKeyPresent(app.Cfg)
 	provCount := app.providerCount()
 	tokCount := app.activeTokenCount()
-	complete := vault && provCount >= 1 && tokCount >= 1
+	complete := app.SetupComplete() // honors the durable latch, not just live counts
 	next := "done"
 	switch {
+	case complete:
+		next = "done"
 	case !vault:
 		next = "vault"
 	case provCount == 0:

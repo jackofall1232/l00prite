@@ -162,8 +162,9 @@ func (app *App) buildSummary(principal *security.Principal) map[string]any {
 		uptime = map[string]any{"started_at": util.ISOFromTime(app.StartedAt), "seconds": int(time.Since(app.StartedAt).Seconds()), "tracked": true}
 	}
 
+	dbOK := app.dbPing()
 	sysStatus := "ok"
-	if circuitOpen > 0 || provEnabled == 0 {
+	if circuitOpen > 0 || provEnabled == 0 || !dbOK {
 		sysStatus = "degraded"
 	}
 
@@ -176,7 +177,7 @@ func (app *App) buildSummary(principal *security.Principal) map[string]any {
 		"system": map[string]any{
 			"status": sysStatus, "providers_total": provTotal, "providers_enabled": provEnabled,
 			"providers_healthy": provHealthy, "circuit_open": circuitOpen,
-			"vault_initialized": config.MasterKeyPresent(app.Cfg), "db_ok": true,
+			"vault_initialized": config.MasterKeyPresent(app.Cfg), "db_ok": dbOK,
 			"bridge": map[string]any{"enabled": app.Cfg.Routing.Bridge.Enabled, "max_hops": app.Cfg.Routing.Bridge.MaxHops},
 		},
 		"providers": orEmpty(provOut),
@@ -230,6 +231,14 @@ func (app *App) providerAggToday(day string) map[string]provAgg {
 		}
 	}
 	return out
+}
+
+// dbPing is a real, cheap liveness check for the store so the dashboard's "Database" signal reflects
+// actual state rather than a hardcoded value.
+func (app *App) dbPing() bool {
+	var one int
+	err := app.DB.QueryRowContext(state.Ctx(), `SELECT 1`).Scan(&one)
+	return err == nil && one == 1
 }
 
 type repoRow struct{ id, root, project, createdAt string }
