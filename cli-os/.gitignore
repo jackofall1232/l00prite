@@ -7,4 +7,8 @@ master.key
 ledger.jsonl
 /data/
 .cli-os-data/
-node_modules/
+
+# Go build artifacts (the compiled binary).
+/l00prite
+/cli-os
+*.test

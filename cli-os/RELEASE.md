@@ -1,3 +1,30 @@
+# l00prite CLI-OS release notes
+
+## v1.1.0 — Go rewrite (this branch)
+
+The runtime is now a **single statically-compiled Go binary** (was Node.js). This is a language port
+of the exact v1.0.0 design — same two-track Gateway/Memory split, PEP, atomic reserve/commit,
+adapter interface, and untrusted-content envelope. Highlights:
+
+- **Single static binary.** `CGO_ENABLED=0 go build ./cmd/l00prite` → one executable `ldd` reports
+  as "not a dynamic executable". SQLite is `modernc.org/sqlite` (pure Go, no cgo) — the only
+  non-stdlib dependency — chosen specifically so static linking holds. See
+  [`docs/node-to-go-port-notes.md`](docs/node-to-go-port-notes.md) (SQLite-driver + static-linking
+  sign-off items).
+- **Full test parity, shown.** `go test ./...` = 51 checks (the 50 Node behaviors + one synthetic
+  price-tier test); `go vet` and `gofmt` clean. Vault ciphertext stays **byte-compatible** with the
+  Node format (existing vaults decrypt unchanged); token compares stay constant-time
+  (`crypto/subtle`); repo-read containment stays symlink-resolving fail-closed.
+- **Pricing confirmation pass done.** Anthropic pricing confirmed first-party
+  (`platform.claude.com`, 2026-07-04). OpenAI and Zhipu/GLM pages were egress-blocked (403), so their
+  prices are `null` and the meter refuses to bill them a silent `$0` — it flags rows
+  `cost_unconfirmed` and sets `x-l00prite-cost-unconfirmed`. See
+  [`docs/pricing-confirmation.md`](docs/pricing-confirmation.md).
+
+Everything below describes the shipped v1 feature set (unchanged by the port).
+
+---
+
 # l00prite CLI-OS v1.0.0 — release notes
 
 A runnable, self-hostable v1 of the CLI-OS control plane. This document states plainly what is

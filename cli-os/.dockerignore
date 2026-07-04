@@ -1,5 +1,4 @@
 .git
-node_modules
 *.db
 *.db-wal
 *.db-shm
@@ -8,4 +7,5 @@ ledger.jsonl
 data
 .cli-os-data
 .env
-test
+/l00prite
+/cli-os
