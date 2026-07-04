@@ -2,6 +2,7 @@
 // inspectable via `l00prite route explain <request-id>`. Includes a simple circuit breaker so a
 // flapping provider stops poisoning requests.
 import { modelsFor } from './adapters/registry.js';
+import { parseAutoSignal, selectAuto } from './router-auto.js';
 
 const breaker = new Map(); // provider -> { fails, until }
 
@@ -22,12 +23,26 @@ function splitTarget(s) {
   return m ? { provider: m[1], model: m[2] } : null;
 }
 
-// providers: [{ name, enabled, is_default }]; aliases: { name -> "provider/model" }.
-export function pick({ providers, aliases = {}, openaiReq, routeHeader }) {
+// providers: [{ name, enabled, is_default }]; aliases: { name -> "provider/model" };
+// cfg carries routing config (profiles, quality ranks) for the opt-in auto tier.
+export function pick({ providers, aliases = {}, openaiReq, routeHeader, cfg = {} }) {
   const enabled = new Set(providers.filter((p) => p.enabled).map((p) => p.name));
   const isDefault = providers.find((p) => p.enabled && p.is_default);
   const wanted = openaiReq.model;
   const alternatives = [];
+  const routing = cfg.routing || null;
+
+  // Rule 0: auto tier (opt-in). A `model`/header of `auto` or `auto:<profile>` selects the
+  // best/most-efficient provider for this task via capability filter + preference scoring. The
+  // header expresses operator intent, so an auto signal there wins; a bare model auto only fires
+  // when no header pin is present. This is checked FIRST so `auto:cheap` is never misread as a
+  // provider named "auto" by the pin rules below. Disabled when no routing config is supplied.
+  const headerAuto = routing ? parseAutoSignal(routeHeader) : null;
+  const modelAuto = routing && !routeHeader ? parseAutoSignal(wanted) : null;
+  const autoSig = headerAuto || modelAuto;
+  if (autoSig) {
+    return selectAuto({ providers, routing, openaiReq, signal: autoSig, defaultMaxTokens: cfg.defaultMaxTokens });
+  }
 
   const use = (provider, model, rule_id, reason) => {
     if (!enabled.has(provider)) return null;

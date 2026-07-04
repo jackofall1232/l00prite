@@ -5,6 +5,12 @@ inspectable** `RoutingDecision`. v1 is deliberately deterministic and explainabl
 learned scores. Design informed by OpenRouter, LiteLLM, and Portkey (see prior-art lessons in
 [`provider-adapters.md`](provider-adapters.md)).
 
+> **Status update:** Rules 3 (capability filter) and 4 (preference tiebreak) below are now
+> **implemented** as the opt-in **auto-router** — see [`routing-auto-mode.md`](routing-auto-mode.md).
+> Per-request cost-optimization ("cheapest sufficient model") ships as `auto:cheap`. Cross-provider
+> **bridging** (a model delegating a sub-task to another provider) is documented in
+> [`provider-bridging.md`](provider-bridging.md).
+
 ## Inputs / outputs
 
 - **Inputs:** the resolved `principal` (project + policy), the request (its `model` field +
@@ -54,7 +60,10 @@ learned scores. Design informed by OpenRouter, LiteLLM, and Portkey (see prior-a
 
 ## Explicitly out of scope for v1 (→ v2+)
 
-- ML / learned routing, latency-EWMA or quality-inferred scoring.
+- ML / learned routing, latency-EWMA or quality-inferred scoring. (A static `latency` preference
+  was deliberately **not** shipped — a per-model latency hint with no measurement is fake precision;
+  `cost` and `quality` are the real axes.)
 - Weighted load-balancing across many identical backends beyond a simple configured weight.
-- Per-request cost-optimization that inspects prompt size to pick the cheapest sufficient model
-  (designable later against the same manifest + PEP, no re-architecture).
+- ~~Per-request cost-optimization that inspects prompt size to pick the cheapest sufficient model~~
+  — **now shipped** as `auto:cheap` (blended prompt+output price from the manifest, unpriced/
+  unconfirmed models sorted last). See [`routing-auto-mode.md`](routing-auto-mode.md).

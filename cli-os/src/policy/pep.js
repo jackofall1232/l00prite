@@ -42,7 +42,13 @@ export function reserve(db, { project, amountUsd, defaultCap }) {
   });
 }
 
-// Reconcile a reservation with the real cost.
+// Reconcile a reservation with the real cost. NOTE: this is admission control, not a hard
+// post-hoc ceiling — reserve() gates on the pre-flight ESTIMATE (reservationCeiling), and commit()
+// records the provider-reported ACTUAL, which can exceed the estimate (e.g. dense CJK/code that the
+// chars/3.5 heuristic under-counts, or cache-write tokens the ceiling omits). Overshoot is bounded
+// to a single call's estimation error (the next reserve sees the inflated committed total and
+// denies), but a request already in flight is never killed mid-call. Tightening this to a true hard
+// cap requires a conservative worst-case ceiling; tracked as a follow-up.
 export function commit(db, reservationId, actualUsd) {
   return tx(db, () => {
     const r = db.prepare(`SELECT * FROM reservations WHERE id = ?`).get(reservationId);
@@ -63,6 +69,25 @@ export function refund(db, reservationId) {
       .run(r.amount_usd, r.project, r.day);
     db.prepare(`UPDATE reservations SET state = 'refunded' WHERE id = ?`).run(reservationId);
     return true;
+  });
+}
+
+// Reap orphaned reservations. A handler that crashes between reserve() and commit()/refund()
+// strands a `reserved` row, which counts against the daily cap until the UTC-day rollover. A
+// multi-hop bridge request multiplies that exposure (N reservations per request), so recovery must
+// not wait for restart alone. Refund any reservation still `reserved` after maxAgeMs — far longer
+// than a legitimate call (retry.maxAttempts * requestTimeoutMs) so an in-flight request is never
+// reaped out from under itself. Returns the count reclaimed.
+export function reapStaleReservations(db, maxAgeMs) {
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  return tx(db, () => {
+    const stale = db.prepare(`SELECT * FROM reservations WHERE state = 'reserved' AND created_at < ?`).all(cutoff);
+    for (const r of stale) {
+      db.prepare(`UPDATE spend SET reserved_usd = MAX(0, reserved_usd - ?) WHERE project = ? AND day = ?`)
+        .run(r.amount_usd, r.project, r.day);
+      db.prepare(`UPDATE reservations SET state = 'refunded' WHERE id = ?`).run(r.id);
+    }
+    return stale.length;
   });
 }
 

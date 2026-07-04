@@ -73,3 +73,59 @@ export function modelsFor(providerName) {
   const m = manifestFor(providerName);
   return (m?.models || []).map((x) => x.id).filter((id) => !String(id).startsWith('PENDING'));
 }
+
+function modelRow(providerName, model) {
+  const m = manifestFor(providerName);
+  return (m?.models || []).find((x) => x.id === model) || null;
+}
+
+// Declared per-model capabilities from the manifest ({ tools, vision, streaming_usage, ... }).
+// Missing manifest / model returns {} — the capability filter reads absent booleans as false
+// (fail-closed), so an undeclared capability is never assumed present.
+export function capabilitiesFor(providerName, model) {
+  return modelRow(providerName, model)?.capabilities || {};
+}
+
+// Declared context window in tokens, or null when the manifest hasn't verified it. `null` means
+// "unverified", NOT "zero" — the auto-router must not ban a provider whose context is simply
+// undeclared; it passes the min-context filter with a logged caveat instead.
+export function contextFor(providerName, model) {
+  const c = modelRow(providerName, model)?.context;
+  return typeof c === 'number' ? c : null;
+}
+
+// Declared max output tokens, or null when unverified (same posture as context).
+export function maxOutputFor(providerName, model) {
+  const c = modelRow(providerName, model)?.max_output;
+  return typeof c === 'number' ? c : null;
+}
+
+// Price confidence tier for ranking. 0 = priced and first-party-confident, 1 = priced but the
+// number is third-party/unconfirmed, 2 = unpriced. The cost preference must sort tier-2 last so a
+// $0 "unknown price" can never masquerade as the cheapest option (meter.js keeps the same honesty
+// posture: unknown price => cost 0, estimated=true).
+export function priceTierFor(providerName, model) {
+  const p = priceFor(providerName, model);
+  if (!p || p.input == null || p.output == null) return 2;
+  return p.confident ? 0 : 1;
+}
+
+// Enumerate every routable (provider, model) pair across the given enabled provider names, with
+// the facts the auto-router needs. `providerNames` is the set the caller has (enabled) registered.
+export function catalog(providerNames) {
+  const out = [];
+  for (const name of providerNames) {
+    for (const model of modelsFor(name)) {
+      out.push({
+        provider: name,
+        model,
+        capabilities: capabilitiesFor(name, model),
+        context: contextFor(name, model),
+        maxOutput: maxOutputFor(name, model),
+        price: priceFor(name, model),
+        priceTier: priceTierFor(name, model),
+      });
+    }
+  }
+  return out;
+}

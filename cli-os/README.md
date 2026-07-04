@@ -64,13 +64,29 @@ docker compose exec cli-os node bin/cli.js token mint --project demo
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/v1/chat/completions` | OpenAI-compatible chat (streaming + non-streaming) |
-| GET  | `/v1/models` | List models across enabled providers |
-| GET  | `/healthz` | Provider + circuit-breaker status |
+| POST | `/v1/chat/completions` | OpenAI-compatible chat (streaming + non-streaming); supports `auto:*` routing, bridging, and `x-l00prite-dry-run` route plans |
+| GET  | `/v1/models` | List models across enabled providers (plus `auto:*` pseudo-models) |
+| GET  | `/healthz` | Provider + circuit-breaker status, bridge state, auto profiles |
 | GET  | `/` | Dashboard |
 
 Per-request headers (optional): `x-l00prite-repo` (repo id for memory), `x-l00prite-route`
-(`provider/model` pin), `x-l00prite-paths` (comma-separated files, for memory ranking).
+(`provider/model` pin **or** `auto:<profile>`), `x-l00prite-paths` (comma-separated files, for
+memory ranking), `x-l00prite-bridge` (`on`/`off` — arm cross-provider delegation),
+`x-l00prite-bridge-max-hops` (lower the hop cap for this request), `x-l00prite-dry-run` (`1` —
+return the routing decision only, no spend).
+
+### Auto-routing & bridging (multi-provider)
+
+- **Auto-routing** — send `"model": "auto"` or `"auto:cheap"` / `"auto:quality"` / `"auto:balanced"`
+  (or `x-l00prite-route: auto:<profile>`) to route to the **best / most-efficient** provider for the
+  task: a capability filter (tools/vision/context) drops models that can't serve the request, then a
+  preference scorer orders the rest by cost, quality, or a blend — deterministic and fully logged.
+  Unpriced/unconfirmed models never win the "cheapest" slot. See
+  [`docs/routing-auto-mode.md`](docs/routing-auto-mode.md).
+- **Provider bridging** — with `x-l00prite-bridge: on`, the primary model gets an `l00prite_bridge`
+  tool it can call to **delegate a sub-task to another provider** (e.g. Codex asks Claude). Executed
+  server-side through the same router + budget, bounded by a hop cap, with the delegate's output
+  wrapped as untrusted. Off by default. See [`docs/provider-bridging.md`](docs/provider-bridging.md).
 
 ## CLI (control plane)
 
@@ -82,6 +98,8 @@ l00prite token mint --project P [--repo ID] [--expires DAYS] | token list | toke
 l00prite repo register <id> --root PATH [--project P] | repo list
 l00prite cap set --project P --daily USD | cap list
 l00prite route explain <request-id> | ledger [--limit N]
+l00prite route plan <model|auto|auto:profile> [--task "..."] [--vision] [--tools] [--route P/M]
+l00prite route profiles | bridge status
 ```
 
 ## How it works
@@ -94,6 +112,9 @@ layer. Read the design docs for the full picture:
 - [`docs/interface-contract.md`](docs/interface-contract.md) — `MemoryQuery`/`MemoryContext`.
 - [`docs/provider-adapters.md`](docs/provider-adapters.md) — verified provider specs (incl.
   **GLM 5.2 confirmed real**), egress/pricing caveats.
+- [`docs/routing-auto-mode.md`](docs/routing-auto-mode.md) — best-provider-per-task / most-efficient
+  auto-routing (capability filter + preference scoring). · [`docs/provider-bridging.md`](docs/provider-bridging.md)
+  — cross-provider delegation ("Codex asks Claude to use a tool").
 - [`docs/routing-rules-v1.md`](docs/routing-rules-v1.md) · [`docs/security-model.md`](docs/security-model.md)
   · [`docs/v1-scope.md`](docs/v1-scope.md) · [`docs/open-questions.md`](docs/open-questions.md)
 
@@ -117,8 +138,13 @@ cli-os/
     security/tokens.js           # opaque gateway tokens (hashed, constant-time)
     policy/pep.js                # Policy Enforcement Point: caps, reservations, leases
     gateway/
-      ingress.js                 # /v1/chat/completions pipeline (stream + non-stream)
-      router.js                  # explainable routing + circuit breaker
+      ingress.js                 # /v1/chat/completions pipeline (dry-run | bridge | stream | default)
+      router.js                  # explainable routing + circuit breaker + opt-in auto tier
+      router-auto.js             # capability filter + preference scoring (auto:cheap|quality|balanced)
+      bridge.js                  # cross-provider delegation: l00prite_bridge tool + bounded loop
+      turn.js                    # runTurn — the one shared route→reserve→call→meter→commit primitive
+      upstream.js                # shared provider-call helpers (fetch, retry, SSE parse)
+      envelope.js                # untrusted-content envelope (memory + bridged output) w/ breakout guard
       meter.js                   # real-usage cost accounting
       inject.js                  # untrusted-memory injection
       adapters/
