@@ -15,6 +15,15 @@ proven and what still needs a networked validation pass, so "ready to ship" is a
 - **Explainable routing** — first-match rules (explicit pin → alias → model-owner → default →
   fallback) with a circuit breaker; every decision is logged and inspectable via
   `l00prite route explain`.
+- **Auto-routing (multi-provider)** — opt-in `auto` / `auto:cheap|quality|balanced`: a capability
+  filter (tools/vision/context) plus a deterministic cost/quality/balanced scorer picks the best or
+  most-efficient provider per task; unpriced/unconfirmed models never win the "cheapest" slot. Fully
+  logged; dry-runnable via `l00prite route plan` / `x-l00prite-dry-run`. See
+  [`docs/routing-auto-mode.md`](docs/routing-auto-mode.md).
+- **Provider bridging** — off by default; with `x-l00prite-bridge: on` the primary model gets an
+  `l00prite_bridge` tool to delegate a sub-task to another provider ("Codex asks Claude"). Bounded
+  by a hop cap, metered per hop through the PEP, delegate output wrapped untrusted, streaming clients
+  see only the final answer. See [`docs/provider-bridging.md`](docs/provider-bridging.md).
 - **Real cost tracking** — usage is taken from provider responses (cache tokens included),
   priced from per-model manifests with separate input/output/cache rates; unknown/unconfirmed
   prices are recorded as `estimated` rather than fabricated.
@@ -29,9 +38,11 @@ proven and what still needs a networked validation pass, so "ready to ship" is a
   refuses to start without a master key).
 - **Ops** — admin CLI, run ledger (SQLite + JSONL), audit log, one-command install, Dockerfile
   + compose.
-- **Tests** — `npm test`: 12 checks covering the vault, tokens, PEP cap enforcement, the cost
-  meter, Anthropic request + SSE translation, memory, and a full end-to-end server run (auth,
-  routing, memory injection, streaming, 402 cost-cap) against the mock upstream. All pass.
+- **Tests** — `npm test`: 40 checks covering the vault, tokens, PEP cap enforcement + stale-
+  reservation reaping, the cost meter, Anthropic request + SSE translation, memory, auto-routing
+  (capability filter, cost/quality ordering, unknown-price-last, typed errors), provider bridging
+  (delegation loop, hop cap, mid-bridge cap denial, untrusted-envelope breakout, stream no-leak,
+  PEP invariants), and a full end-to-end server run against the mock upstream. All pass.
 
 ## Decisions made (recorded from the open questions)
 

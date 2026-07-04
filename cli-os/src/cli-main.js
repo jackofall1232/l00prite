@@ -7,6 +7,7 @@ import { openDb } from './state/db.js';
 import { ensureMasterKey, encryptSecret } from './security/vault.js';
 import { mintToken, listTokens, revokeToken } from './security/tokens.js';
 import { defaultAdapterKind, defaultBaseUrl } from './gateway/adapters/registry.js';
+import { pick as routerPick } from './gateway/router.js';
 import { explain, recent } from './ledger/ledger.js';
 import { getSpend } from './policy/pep.js';
 import { startServer } from './server.js';
@@ -47,7 +48,15 @@ const HELP = `l00prite CLI-OS — control plane
   l00prite cap list
 
   l00prite route explain <request-id>
+  l00prite route plan <model|auto|auto:profile> [--task "..."] [--vision] [--tools] [--route P/M]
+  l00prite route profiles
+  l00prite bridge status
   l00prite ledger [--limit N]
+
+  Auto-routing: send model "auto" or "auto:<profile>" (cheap|quality|balanced), or
+    header  x-l00prite-route: auto:<profile>  — best/most-efficient provider per task.
+  Bridging (off by default): header  x-l00prite-bridge: on  lets a model delegate a
+    sub-task to another provider via the l00prite_bridge tool (hop cap: routing.bridge.maxHops).
 `;
 
 function main() {
@@ -139,11 +148,53 @@ function main() {
     return console.error('unknown cap subcommand');
   }
 
-  if (cmd === 'route' && sub === 'explain') {
-    const rows = explain(db, arg);
-    if (!rows.length) return console.log(`No ledger rows for "${arg}"`);
-    rows.forEach((r) => { console.log(`\nrequest ${r.request_id} @ ${r.ts}`); console.log(`  route   ${r.provider}/${r.model}  (rule: ${r.rule_id})`); if (r.decision) console.log(`  reason  ${JSON.parse(r.decision).reason}`); console.log(`  tokens  in=${r.prompt_tokens} out=${r.completion_tokens} cache_read=${r.cache_read_tokens}`); console.log(`  cost    $${(r.cost_usd ?? 0).toFixed(6)}${r.cost_estimated ? ' (estimated/unconfirmed price)' : ''}`); console.log(`  memory  ${r.memory_status}   outcome ${r.outcome}`); });
-    return;
+  if (cmd === 'route') {
+    if (sub === 'explain') {
+      const rows = explain(db, arg);
+      if (!rows.length) return console.log(`No ledger rows for "${arg}"`);
+      rows.forEach((r) => { console.log(`\nrequest ${r.request_id} @ ${r.ts}`); console.log(`  route   ${r.provider}/${r.model}  (rule: ${r.rule_id})`); if (r.decision) { const d = JSON.parse(r.decision); console.log(`  reason  ${d.reason}`); if (d.kind) console.log(`  hop     ${d.kind}${d.hop != null ? ` #${d.hop}` : ''}${d.turn != null ? ` turn ${d.turn}` : ''}`); } console.log(`  tokens  in=${r.prompt_tokens} out=${r.completion_tokens} cache_read=${r.cache_read_tokens}`); console.log(`  cost    $${(r.cost_usd ?? 0).toFixed(6)}${r.cost_estimated ? ' (estimated/unconfirmed price)' : ''}`); console.log(`  memory  ${r.memory_status}   outcome ${r.outcome}`); });
+      return;
+    }
+    if (sub === 'profiles') {
+      const routing = cfg.routing || {};
+      console.log('Auto profiles (model "auto:<name>" or header x-l00prite-route: auto:<name>):');
+      for (const [name, p] of Object.entries(routing.profiles || {})) {
+        console.log(`  auto:${name.padEnd(10)} preference=${p.preference || 'balanced'}${p.require ? `  require=${p.require.join('+')}` : ''}${name === routing.autoDefaultProfile ? '   (default for bare "auto")' : ''}`);
+      }
+      console.log('\nOperator quality ranks (provider/model, 0-100; edit routing.qualityRanks in config.json):');
+      for (const [k, v] of Object.entries(routing.qualityRanks || {})) console.log(`  ${k.padEnd(34)} ${v}`);
+      return;
+    }
+    if (sub === 'plan') {
+      const model = arg; if (!model) return console.error('usage: route plan <model|auto|auto:profile> [--task "..."] [--vision] [--tools] [--route P/M]');
+      const providers = db.prepare(`SELECT name, enabled, is_default FROM providers`).all();
+      const content = flags.vision
+        ? [{ type: 'text', text: String(flags.task || 'describe this') }, { type: 'image_url', image_url: { url: 'data:image/png;base64,AA' } }]
+        : String(flags.task || 'do the task');
+      const openaiReq = { model, messages: [{ role: 'user', content }] };
+      if (flags.tools) openaiReq.tools = [{ type: 'function', function: { name: 'demo', parameters: { type: 'object', properties: {} } } }];
+      try {
+        const r = routerPick({ providers, aliases: cfg.aliases || {}, openaiReq, routeHeader: flags.route, cfg });
+        console.log(`Would route -> ${r.provider}/${r.model}   (rule: ${r.decision.rule_id})`);
+        if (r.decision.reason) console.log(`  reason: ${r.decision.reason}`);
+        if (r.decision.candidates) { console.log('  candidates (best first):'); r.decision.candidates.forEach((c) => console.log(`    ${c.target.padEnd(30)} tier=${c.price_tier} quality=${c.quality} est=${c.est_usd == null ? 'n/a' : '$' + c.est_usd}${c.context_unverified ? ' (ctx unverified)' : ''}`)); }
+        if (r.decision.rejected?.length) { console.log('  rejected:'); r.decision.rejected.forEach((x) => console.log(`    ${x.target}: ${x.reasons.join('; ')}`)); }
+      } catch (e) { console.error(`No route: [${e.status || 500}] ${e.message}`); process.exitCode = 1; }
+      return;
+    }
+    return console.error('unknown route subcommand (explain|plan|profiles)');
+  }
+
+  if (cmd === 'bridge') {
+    if (sub === 'status') {
+      const b = cfg.routing?.bridge || {};
+      console.log(`Bridging: ${b.enabled ? 'ENABLED' : 'disabled'} by default  (per-request: header x-l00prite-bridge: on|off)`);
+      console.log(`  max hops : ${b.maxHops}  (header x-l00prite-bridge-max-hops may only LOWER this)`);
+      console.log(`  tool     : l00prite_bridge  (injected into the primary request when armed)`);
+      console.log(`  targets  : provider name, provider/model, or auto / auto:<profile>`);
+      return;
+    }
+    return console.error('usage: bridge status');
   }
 
   if (cmd === 'ledger') { recent(db, Number(flags.limit || 20)).forEach((r) => console.log(`${r.ts}  ${(r.provider || '?')+'/'+(r.model||'?')}  $${(r.cost_usd ?? 0).toFixed(5)}  ${r.outcome}`)); return; }
