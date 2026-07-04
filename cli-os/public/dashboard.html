@@ -12,12 +12,22 @@
     --text:#E7EDF5; --text-2:#9AA7B8; --text-3:#5E6B7C;
     --accent:#4F8CFF; --accent-2:#7AA8FF; --accent-ink:#CFE0FF; --glow:rgba(79,140,255,.2);
     --ok:#00C853; --warn:#FFB300; --err:#F44336; --run:#3D7EFF; --teal:#2DD4BF; --violet:#A78BFA;
+    --input-bg:rgba(0,0,0,.3); --input-bg-solid:#0A0E13;
     --font-sans:"Inter","SF Pro Text",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     --font-mono:"SFMono-Regular","JetBrains Mono","Roboto Mono",ui-monospace,Menlo,Consolas,monospace;
     --r-lg:18px; --r-md:13px; --r-sm:9px;
   }
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
+  /* Form controls are always themed explicitly — text, caret, placeholder, dropdown options, and
+     autofill — so a field can never render its text in the same color as its background in either
+     color scheme (native control colors don't follow the page palette on their own). */
+  input,select,textarea{color:var(--text);caret-color:var(--text);}
+  input::placeholder,textarea::placeholder{color:var(--text-3);opacity:1;}
+  select option{background:var(--input-bg-solid);color:var(--text);}
+  input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus{
+    -webkit-text-fill-color:var(--text);
+    -webkit-box-shadow:0 0 0 1000px var(--input-bg-solid) inset;}
   body{
     font-family:var(--font-sans); color:var(--text); line-height:1.45; letter-spacing:.1px;
     -webkit-font-smoothing:antialiased; min-height:100vh;
@@ -179,7 +189,7 @@
   /* connect overlay */
   .overlay{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px;background:rgba(6,9,13,.82);backdrop-filter:blur(6px);}
   .overlay .box{width:100%;max-width:460px;}
-  .overlay input{width:100%;padding:11px 13px;border-radius:var(--r-md);background:rgba(0,0,0,.3);border:1px solid var(--stroke);color:var(--text);font-family:var(--font-mono);font-size:13px;outline:none;}
+  .overlay input{width:100%;padding:11px 13px;border-radius:var(--r-md);background:var(--input-bg);border:1px solid var(--stroke);color:var(--text);font-family:var(--font-mono);font-size:13px;outline:none;}
   .overlay input:focus{border-color:rgba(79,140,255,.6);}
   .note{margin-top:14px;padding:11px 13px;border-radius:var(--r-md);font-size:12.5px;border:1px solid var(--stroke);background:var(--panel);color:var(--text-2);}
   .note.err{border-color:rgba(244,67,54,.34);background:rgba(244,67,54,.09);color:#ffb0a8;}
@@ -189,8 +199,8 @@
   .spin{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.25);border-top-color:var(--accent);animation:spin .7s linear infinite;display:inline-block;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
-  /* provider management: card actions + modal + forms */
-  .prov .p-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px;padding-top:11px;border-top:1px solid var(--stroke);}
+  /* provider/repo management: card actions + modal + forms */
+  .p-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px;padding-top:11px;border-top:1px solid var(--stroke);}
   .btn.tiny{padding:5px 9px;font-size:11.5px;border-radius:9px;}
   .btn.danger{border-color:rgba(244,67,54,.4);color:#ff9a92;}
   .btn.danger:hover{background:rgba(244,67,54,.1);border-color:rgba(244,67,54,.6);}
@@ -201,8 +211,8 @@
   .field{margin-top:14px;}
   .field > label{display:block;font-size:11.5px;font-weight:600;color:var(--text-2);margin-bottom:6px;letter-spacing:.02em;}
   .field label .opt{color:var(--text-3);font-weight:500;}
-  .field input[type=text],.field input[type=password],.field select{width:100%;padding:10px 12px;border-radius:var(--r-md);background:rgba(0,0,0,.3);border:1px solid var(--stroke);color:var(--text);font-family:var(--font-mono);font-size:13px;outline:none;}
-  .field input:focus,.field select:focus{border-color:rgba(79,140,255,.6);}
+  .field input[type=text],.field input[type=password],.field select,.field textarea{width:100%;padding:10px 12px;border-radius:var(--r-md);background:var(--input-bg);border:1px solid var(--stroke);color:var(--text);font-family:var(--font-mono);font-size:13px;outline:none;}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:rgba(79,140,255,.6);}
   .field.check{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-2);cursor:pointer;}
   .field.check input{width:16px;height:16px;accent-color:var(--accent);}
   .modal-actions{display:flex;gap:10px;margin-top:20px;align-items:center;}
@@ -213,14 +223,28 @@
   .modelrow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   @media (max-width:560px){ .modelgrid{grid-template-columns:1fr;} .modal .box{max-width:none;} }
 
+  /* playground — prompt the models straight from the dashboard */
+  .play-select{padding:8px 10px;border-radius:10px;background:var(--input-bg);border:1px solid var(--stroke);color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;max-width:240px;}
+  .play-select:focus{border-color:rgba(79,140,255,.6);}
+  .chatlog{display:flex;flex-direction:column;gap:10px;max-height:420px;overflow-y:auto;padding:4px 2px;}
+  .msg{max-width:88%;padding:10px 13px;border-radius:var(--r-md);font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+  .msg.user{align-self:flex-end;background:rgba(79,140,255,.14);border:1px solid rgba(79,140,255,.3);}
+  .msg.assistant{align-self:flex-start;background:var(--panel);border:1px solid var(--stroke);}
+  .msg.err{align-self:flex-start;background:rgba(244,67,54,.09);border:1px solid rgba(244,67,54,.34);color:#ffb0a8;}
+  .msg .m-meta{margin-top:7px;font-size:10.5px;color:var(--text-3);font-family:var(--font-mono);}
+  .chatbar{display:flex;gap:10px;margin-top:12px;align-items:flex-end;}
+  .chatbar textarea{flex:1;resize:vertical;min-height:46px;padding:11px 13px;border-radius:var(--r-md);background:var(--input-bg);border:1px solid var(--stroke);color:var(--text);font-family:var(--font-sans);font-size:13.5px;outline:none;}
+  .chatbar textarea:focus{border-color:rgba(79,140,255,.6);}
+  @media (max-width:680px){ .msg{max-width:100%;} .play-select{max-width:150px;} }
+
   @media (max-width:1180px){ .grid-main{grid-template-columns:1fr;} .charts{grid-template-columns:1fr;} .hero{grid-template-columns:1fr;} }
   @media (max-width:1000px){ .sidebar{display:none;} .kpi-grid{grid-template-columns:repeat(2,1fr);} .cost-head{grid-template-columns:repeat(2,1fr);} }
   @media (max-width:680px){ .content{padding:16px;} .repo-grid,.prov-grid{grid-template-columns:1fr;} .kpi-grid{grid-template-columns:1fr 1fr;} .top-title{display:none;} }
   @media (prefers-color-scheme:light){
-    :root{--bg:#F5F7FB;--panel:rgba(10,20,40,.03);--panel-2:rgba(10,20,40,.05);--stroke:rgba(10,20,40,.11);--stroke-2:rgba(10,20,40,.2);--text:#0E1726;--text-2:#465064;--text-3:#7A8698;}
+    :root{--bg:#F5F7FB;--panel:rgba(10,20,40,.03);--panel-2:rgba(10,20,40,.05);--stroke:rgba(10,20,40,.11);--stroke-2:rgba(10,20,40,.2);--text:#0E1726;--text-2:#465064;--text-3:#7A8698;
+      --input-bg:#fff;--input-bg-solid:#fff;}
     body{background:radial-gradient(1200px 620px at 10% -12%, rgba(79,140,255,.12), transparent 60%), var(--bg);}
     .topbar{background:rgba(245,247,251,.8);}
-    .overlay input{background:#fff;}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
 </style>
@@ -242,6 +266,7 @@
   <symbol id="i-inf" viewBox="0 0 24 24"><path d="M7 8.5c-2.2 0-3.7 1.6-3.7 3.5S4.8 15.5 7 15.5c3.4 0 6.6-7 10-7 2.2 0 3.7 1.6 3.7 3.5S19.2 15.5 17 15.5c-3.4 0-6.6-7-10-7z"/></symbol>
   <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.3l2.8 1.7"/></symbol>
   <symbol id="i-fork" viewBox="0 0 24 24"><circle cx="6" cy="5.5" r="2.4"/><circle cx="18" cy="5.5" r="2.4"/><circle cx="12" cy="18.5" r="2.4"/><path d="M6 8v2a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V8"/><line x1="12" y1="13" x2="12" y2="16"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11.5c0 4.14-4.03 7.5-9 7.5-1.02 0-2-.14-2.92-.4L4.5 20l1.15-3.44C4.24 15.24 3.4 13.46 3.4 11.5 3.4 7.36 7.03 4 12 4s9 3.36 9 7.5z"/><line x1="8.5" y1="10.5" x2="15.5" y2="10.5"/><line x1="8.5" y1="13.5" x2="13" y2="13.5"/></symbol>
 </defs></svg>
 
 <div class="app">
@@ -253,6 +278,7 @@
     <div class="nav-label">Workspace</div>
     <nav class="nav">
       <a data-goto="sec-top"><svg class="ico"><use href="#i-grid"/></svg><span>Overview</span></a>
+      <a data-goto="sec-play"><svg class="ico"><use href="#i-chat"/></svg><span>Playground</span></a>
       <a data-goto="sec-providers"><svg class="ico"><use href="#i-server"/></svg><span>Providers</span></a>
       <a data-goto="sec-cost"><svg class="ico"><use href="#i-card"/></svg><span>Costs</span></a>
       <a data-goto="sec-repos"><svg class="ico"><use href="#i-branch"/></svg><span>Repositories</span></a>
@@ -286,6 +312,23 @@
 
       <section class="card hero" id="hero"></section>
 
+      <section class="card card-pad" id="sec-play">
+        <div class="sec-head">
+          <div><div class="eyebrow"><span class="tick" style="background:var(--violet)"></span> Playground</div><h2 style="margin-top:8px">Prompt your models</h2></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+            <select id="play-model" class="play-select" title="Model, provider/model pin, or auto profile"><option value="auto">auto</option></select>
+            <input type="text" id="play-model-custom" class="play-select hidden" placeholder="model id, e.g. glm-5.2" title="Sent as-is — for providers whose catalog isn't known">
+            <select id="play-repo" class="play-select" title="Inject a registered repo's .l00prite memory"><option value="">no repo memory</option></select>
+            <button class="btn sm" id="play-clear">Clear</button>
+          </div>
+        </div>
+        <div class="chatlog" id="play-log"></div>
+        <div class="chatbar">
+          <textarea id="play-input" rows="2" placeholder="Ask anything — it goes through the same gateway your coding tools use (Ctrl/⌘+Enter to send)"></textarea>
+          <button class="btn primary" id="play-send">Send</button>
+        </div>
+      </section>
+
       <section id="sec-providers">
         <div class="sec-head"><h2>Providers</h2>
           <div style="display:flex;align-items:center;gap:12px;margin-left:auto">
@@ -304,7 +347,12 @@
           </section>
 
           <section id="sec-repos">
-            <div class="sec-head"><h2>Repositories &amp; memory</h2><span class="meta" id="repos-meta"></span></div>
+            <div class="sec-head"><h2>Repositories &amp; memory</h2>
+              <div style="display:flex;align-items:center;gap:12px;margin-left:auto">
+                <span class="meta" id="repos-meta"></span>
+                <button class="btn sm primary" id="add-repo-btn" style="display:none"><svg class="ico" style="width:15px;height:15px"><use href="#i-branch"/></svg> Register repo</button>
+              </div>
+            </div>
             <div id="repos-body"></div>
           </section>
         </div>
@@ -390,12 +438,14 @@
     if(r.error){ $("page-sub").textContent = "Could not load state ("+r.error+")."; return; }
     hideOverlay();
     S.summary=r.data; render();
+    loadModels();
   }
 
   function render(){
     const d=S.summary; if(!d) return;
     $("disconnect-btn").style.display="";
     $("add-provider-btn").style.display="";
+    $("add-repo-btn").style.display="";
     // header
     const providersOnline=(d.system&&d.system.providers_healthy)||0, providersTotal=(d.system&&d.system.providers_total)||0;
     const repos=(d.repos||[]).length, spendToday=(d.spend&&d.spend.today_committed_usd)||0;
@@ -408,6 +458,7 @@
     const st=(d.system&&d.system.status)||"ok"; $("foot-dot").style.background = st==="ok"?"var(--ok)":"var(--warn)";
 
     renderHero(d); renderProviders(d); renderCost(d); renderRepos(d); renderAlerts(d); renderActivity(d); renderTokens(d); renderAudit(d);
+    renderPlayRepos(d); renderChat();
   }
 
   function renderHero(d){
@@ -542,7 +593,7 @@
 
   function renderRepos(d){
     const repos=d.repos||[]; $("repos-meta").textContent = repos.length? repos.length+" registered":"";
-    if(!repos.length){ $("repos-body").innerHTML=`<div class="empty"><b>No repositories registered.</b> Register one with <code>l00prite repo register</code> to inject <code>.l00prite</code> memory.</div>`; return; }
+    if(!repos.length){ $("repos-body").innerHTML=`<div class="empty"><b>No repositories registered.</b> Connect one so its <code>.l00prite</code> memory is injected into requests.<div style="margin-top:12px"><button class="btn primary sm" data-action="repo-add">Register a repository</button></div></div>`; return; }
     $("repos-body").innerHTML=`<div class="repo-grid">${repos.map(repoCard).join("")}</div>`;
   }
   function repoCard(r){
@@ -563,6 +614,7 @@
         <span style="margin-left:auto">${statusPill}</span></div>
       <div class="r-sub" style="margin-top:10px">${esc(r.root)}</div>
       <div class="r-mem">${badges}</div>
+      <div class="p-actions"><button class="btn tiny danger" style="margin-left:auto" data-action="repo-remove" data-repo="${esc(r.id)}">Remove</button></div>
     </article>`;
   }
 
@@ -648,10 +700,9 @@
         <select id="m-adapter">
           <option value="native-messages">Anthropic (native /v1/messages)</option>
           <option value="openai-compat">OpenAI-compatible (OpenAI, GLM, DeepSeek, Groq, …)</option>
-          <option value="mock">Mock (zero-key demo upstream)</option>
         </select></div>
       <div class="field"><label>Provider name</label><input type="text" id="m-name" placeholder="anthropic"></div>
-      <div class="field" id="m-modelwrap"><label>Model to test <span class="opt">— optional</span></label><input type="text" id="m-model" placeholder="auto (first known model)"></div>
+      <div class="field" id="m-modelwrap"><label>Model to test <span class="opt" id="m-modelhint">— optional</span></label><input type="text" id="m-model" placeholder="auto (first known model)"></div>
       <div class="field" id="m-keywrap"><label>API key</label><input type="password" id="m-key" placeholder="sk-…" autocomplete="off"></div>
       <div class="field" id="m-basewrap"><label>Base URL <span class="opt" id="m-basehint"></span></label><input type="text" id="m-base"></div>
       <label class="field check"><input type="checkbox" id="m-default" checked> Make this the default provider</label>
@@ -665,22 +716,21 @@
       </div>`);
     const g=id=>document.getElementById(id);
     const adapterSel=g("m-adapter"), nameIn=g("m-name"), baseIn=g("m-base"), baseHint=g("m-basehint");
-    const keywrap=g("m-keywrap"), basewrap=g("m-basewrap"), modelwrap=g("m-modelwrap"), skipwrap=g("m-skipwrap");
     const validateBtn=g("m-validate"), addBtn=g("m-add"), skip=g("m-skip"), note=g("m-note");
     let epoch=0;
-    const D={"native-messages":{name:"anthropic",base:"https://api.anthropic.com",hint:"— default shown; edit if self-hosting"},
-             "openai-compat":{name:"openai",base:"",hint:"— required, e.g. https://api.openai.com/v1"},
-             "mock":{name:"mock",base:"",hint:""}};
-    function resetV(){ epoch++; const gate=adapterSel.value!=="mock" && !skip.checked; addBtn.disabled=gate; if(gate) note.innerHTML=""; }
+    const D={"native-messages":{name:"anthropic",base:"https://api.anthropic.com",hint:"— default shown; edit if self-hosting",
+               mHint:"— optional; a known model is picked",mPh:"auto (first known model)"},
+             "openai-compat":{name:"openai",base:"",hint:"— required, e.g. https://api.openai.com/v1",
+               // OpenAI-compatible endpoints usually have no built-in catalog here, so validation
+               // needs a concrete model id — labeling it "optional" would dead-end the flow.
+               mHint:"— usually required (no built-in catalog), e.g. gpt-4o",mPh:"e.g. gpt-4o"}};
+    function resetV(){ epoch++; const gate=!skip.checked; addBtn.disabled=gate; if(gate) note.innerHTML=""; }
     function sync(){
       const d=D[adapterSel.value];
       if(!nameIn.dataset.touched) nameIn.value=d.name;
       baseIn.value=d.base; baseHint.textContent=d.hint;
-      const isMock=adapterSel.value==="mock";
-      keywrap.classList.toggle("hidden",isMock); basewrap.classList.toggle("hidden",isMock);
-      modelwrap.classList.toggle("hidden",isMock); validateBtn.classList.toggle("hidden",isMock); skipwrap.classList.toggle("hidden",isMock);
+      g("m-modelhint").textContent=d.mHint; g("m-model").placeholder=d.mPh;
       resetV();
-      if(isMock){ addBtn.disabled=false; note.innerHTML=`<div class="note">The mock upstream needs no key — it echoes requests so you can see the full path working.</div>`; }
     }
     function body(){ return {name:nameIn.value.trim(), adapter:adapterSel.value, base_url:baseIn.value.trim(), api_key:g("m-key").value, model:g("m-model").value.trim()}; }
     nameIn.oninput=()=>{ nameIn.dataset.touched="1"; resetV(); };
@@ -802,10 +852,185 @@
     if(action==="default") return makeDefault(name);
   }
 
+  // ---- repository management ----
+  // Registering a repo points the gateway at a path on ITS OWN filesystem; the server verifies the
+  // directory exists before storing anything, so a typo fails right here in the modal.
+  function addRepo(){
+    const project=(S.summary&&S.summary.principal&&S.summary.principal.project)||"default";
+    openModal(`
+      <div class="eyebrow"><span class="tick"></span> Register repository</div>
+      <h3>Connect a repository</h3>
+      <div class="sub">Point the gateway at a repo on <b>the machine running the gateway</b>. Requests that name this
+        repo (the <span class="mono">x-l00prite-repo</span> header, a repo-scoped token, or the Playground's repo picker)
+        get its <span class="mono">.l00prite</span> memory injected.</div>
+      <div class="field"><label>Repo id <span class="opt">— a short name, e.g. myrepo</span></label><input type="text" id="rp-id" placeholder="myrepo" autocomplete="off"></div>
+      <div class="field"><label>Path on the gateway host</label><input type="text" id="rp-root" placeholder="/home/you/projects/myrepo" autocomplete="off"></div>
+      <div class="field"><label>Project <span class="opt">— only same-project tokens can use a repo; this token's project is <span class="mono">${esc(project)}</span></span></label>
+        <input type="text" id="rp-project" value="${esc(project)}" autocomplete="off"></div>
+      <div id="rp-note"></div>
+      <div class="modal-actions"><button class="btn" data-close>Cancel</button><div class="spacer"></div><button class="btn primary" id="rp-add">Register</button></div>`);
+    const idIn=document.getElementById("rp-id"), rootIn=document.getElementById("rp-root");
+    const note=document.getElementById("rp-note"), btn=document.getElementById("rp-add");
+    idIn.focus();
+    btn.onclick=async()=>{
+      const id=idIn.value.trim(), root=rootIn.value.trim(), project=document.getElementById("rp-project").value.trim();
+      if(!id){ note.innerHTML=`<div class="note err">Give the repo a short id.</div>`; return; }
+      if(!root){ note.innerHTML=`<div class="note err">Enter the repo's path on the gateway host.</div>`; return; }
+      busy(btn,"Registering…");
+      const {res,data}=await api("POST","/v1/repos",{id, root, project});
+      if(!res.ok){ unbusy(btn,"Register"); note.innerHTML=`<div class="note err">${esc(mErr(data,"Could not register the repo."))}</div>`; return; }
+      const mem=(data&&data.memory)||{};
+      if(!mem.present_count){
+        // Registered fine, but be honest that there's no memory to inject yet. The repo is already
+        // stored server-side, so refresh the list/picker NOW — any way the user dismisses this
+        // modal (Done, Esc, backdrop, Cancel) must leave the UI consistent.
+        unbusy(btn,"Register");
+        note.innerHTML=`<div class="note warn"><b>Registered.</b> No <span class="mono">.l00prite</span> memory found in that folder yet — requests work, and memory is injected as soon as the folder exists.</div>`;
+        btn.textContent="Done"; btn.onclick=()=>closeModal();
+        refresh();
+        return;
+      }
+      afterMutation();
+    };
+  }
+  function removeRepo(id){
+    const scoped=((S.summary&&S.summary.tokens&&S.summary.tokens.list)||[]).filter(x=>!x.revoked&&x.repo===id).length;
+    const scopedWarn=scoped>0?`<div class="note warn"><b>${scoped} active token${scoped===1?" is":"s are"} scoped to this repo.</b> Requests using ${scoped===1?"it":"them"} — and any request naming this repo — will fail with “not registered” until the repo is registered again.</div>`:"";
+    openModal(`
+      <div class="eyebrow"><span class="tick" style="background:var(--err)"></span> Remove repository</div>
+      <h3>Remove <span class="mono">${esc(id)}</span></h3>
+      <div class="sub">This only unregisters the repo from the gateway — <b>nothing on disk is touched</b>. Requests
+        naming it simply stop getting its memory injected.</div>
+      ${scopedWarn}
+      <div id="rr-note"></div>
+      <div class="modal-actions"><button class="btn" data-close>Cancel</button><div class="spacer"></div><button class="btn danger" id="rr-go">Remove repo</button></div>`);
+    document.getElementById("rr-go").onclick=async(e)=>{
+      busy(e.target,"Removing…");
+      const {res,data}=await api("POST","/v1/repos/remove",{id});
+      if(!res.ok){ unbusy(e.target,"Remove repo"); document.getElementById("rr-note").innerHTML=`<div class="note err">${esc(mErr(data,"Could not remove the repo."))}</div>`; return; }
+      afterMutation();
+    };
+  }
+
+  // ---- playground ----
+  // A place to prompt the models: same token, same /v1/chat/completions the coding tools use, so a
+  // reply here proves the whole path (auth → route → provider → metering) and shows up in Activity.
+  const chat=[]; let sending=false, chatGen=0, renderedChatLen=-1;
+  function chatMessages(){ return chat.filter(m=>m.role==="user"||m.role==="assistant").map(m=>({role:m.role,content:m.content})); }
+  function renderChat(){
+    const log=$("play-log"); if(!log) return;
+    // The conversation only ever grows or is cleared, so an unchanged length means unchanged
+    // content — skip the innerHTML rebuild entirely so the 20s auto-refresh can't wipe an
+    // in-progress text selection or yank the scroll position.
+    if(chat.length===renderedChatLen) return;
+    const grew=chat.length>renderedChatLen;
+    renderedChatLen=chat.length;
+    if(!chat.length){
+      log.innerHTML=`<div class="empty" style="padding:18px">Send a prompt to try your gateway. <b>auto</b> picks the best provider for the task; pick a repo to inject its <code>.l00prite</code> memory. Cost lands in Activity below.</div>`;
+      return;
+    }
+    log.innerHTML=chat.map(m=>{
+      if(m.role==="error") return `<div class="msg err">${esc(m.content)}</div>`;
+      const meta=m.meta?`<div class="m-meta">${esc(m.meta.model||"")}${m.meta.pt!=null?` · ${esc(String(m.meta.pt))} in / ${esc(String(m.meta.ct==null?"?":m.meta.ct))} out`:""}</div>`:"";
+      return `<div class="msg ${m.role==="user"?"user":"assistant"}">${esc(m.content)}${meta}</div>`;
+    }).join("");
+    if(grew) log.scrollTop=log.scrollHeight;
+  }
+  let playRepoSig=null;
+  function renderPlayRepos(d){
+    const sel=$("play-repo"); if(!sel) return;
+    const principal=d.principal||{};
+    // Offer only repos this token can actually use: /v1/chat/completions rejects (403) a repo
+    // whose project differs from the token's, and a repo-scoped token may only name its own repo.
+    let repos=(d.repos||[]).filter(r=>r.project===principal.project);
+    if(principal.repo) repos=repos.filter(r=>r.id===principal.repo);
+    const sig=repos.map(r=>r.id).join(",");
+    if(sig===playRepoSig) return; // unchanged — don't rebuild (an open dropdown would snap shut)
+    playRepoSig=sig;
+    const cur=sel.value;
+    sel.innerHTML=`<option value="">no repo memory</option>`+repos.map(r=>`<option value="${esc(r.id)}">repo: ${esc(r.id)}</option>`).join("");
+    if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
+    else if(principal.repo) sel.value=principal.repo; // token is scoped to one repo — preselect it
+  }
+  let playModelSig=null;
+  async function loadModels(){
+    const sel=$("play-model"); if(!sel) return;
+    let data=null;
+    try{ const res=await fetch("/v1/models"); if(!res.ok) return; data=await res.json(); }catch(e){ return; }
+    const ids=((data&&data.data)||[]).map(m=>m&&m.id).filter(Boolean);
+    const autos=ids.filter(i=>i==="auto"||i.indexOf("auto:")===0).sort((a,b)=>a==="auto"?-1:(b==="auto"?1:a.localeCompare(b)));
+    const bare=[...new Set(ids.filter(i=>autos.indexOf(i)<0 && i.indexOf("/")<0))];
+    const pinned=[...new Set(ids.filter(i=>autos.indexOf(i)<0 && i.indexOf("/")>=0))];
+    const sig=autos.join(",")+"|"+bare.join(",")+"|"+pinned.join(",");
+    if(sig===playModelSig) return; // catalog unchanged — don't rebuild (an open dropdown would snap shut)
+    playModelSig=sig;
+    const cur=sel.value||"auto";
+    const opt=i=>`<option value="${esc(i)}">${esc(i)}</option>`;
+    sel.innerHTML =
+      `<optgroup label="Auto routing">${(autos.length?autos:["auto"]).map(opt).join("")}</optgroup>`+
+      (bare.length?`<optgroup label="Models">${bare.map(opt).join("")}</optgroup>`:"")+
+      (pinned.length?`<optgroup label="Pinned provider/model">${pinned.map(opt).join("")}</optgroup>`:"")+
+      // custom endpoints forward whatever model the client requests, so their models never appear
+      // in the catalog — the free-form entry keeps them promptable from the Playground too.
+      `<optgroup label="Custom"><option value="__custom">custom model…</option></optgroup>`;
+    sel.value=[...sel.options].some(o=>o.value===cur)?cur:"auto";
+    syncCustomModel();
+  }
+  function syncCustomModel(){
+    const sel=$("play-model"), inp=$("play-model-custom");
+    if(sel&&inp) inp.classList.toggle("hidden", sel.value!=="__custom");
+  }
+  function playModel(){
+    const v=$("play-model").value;
+    if(v!=="__custom") return v||"auto";
+    return $("play-model-custom").value.trim()||"auto";
+  }
+  async function playSend(){
+    if(sending || !S.token) return;
+    const inp=$("play-input"); const text=inp.value.trim(); if(!text) return;
+    const model=playModel(), repo=$("play-repo").value;
+    // CLI-registered repo ids aren't charset-restricted; a non-ASCII id would make fetch() itself
+    // throw on the header and surface as a misleading "network error" — catch it up front.
+    if(repo && !/^[\x21-\x7E]+$/.test(repo)){
+      chat.push({role:"error",content:`Repo id "${repo}" contains characters that can't travel in an HTTP header. Re-register it with a simpler id (letters, digits, ".", "-", "_").`});
+      renderChat(); return;
+    }
+    chat.push({role:"user",content:text}); renderChat(); inp.value="";
+    sending=true; const btn=$("play-send"); busy(btn,"Sending…");
+    const gen=chatGen; // if the user clears the conversation mid-flight, drop this reply
+    const headers={authorization:"Bearer "+S.token,"content-type":"application/json"};
+    if(repo) headers["x-l00prite-repo"]=repo;
+    let res=null, data=null;
+    try{ res=await fetch("/v1/chat/completions",{method:"POST",headers,body:JSON.stringify({model, messages:chatMessages()})}); }catch(e){}
+    if(res){ try{ data=await res.json(); }catch(e){} }
+    sending=false; unbusy(btn,"Send");
+    if(gen!==chatGen) return; // conversation was cleared while in flight — a stale reply would poison the new one
+    if(!res || !res.ok){
+      chat.push({role:"error",content:mErr(data, res?("The request failed (HTTP "+res.status+").") : "Network error — is the gateway reachable?")});
+      renderChat(); return;
+    }
+    const msg=(data&&data.choices&&data.choices[0]&&data.choices[0].message)||{};
+    let content=msg.content;
+    if(Array.isArray(content)) content=content.map(p=>(p&&p.text)||"").join("");
+    const u=(data&&data.usage)||{};
+    chat.push({role:"assistant",content:String(content==null?"":content),
+      meta:{model:(data&&data.model)||model, pt:u.prompt_tokens, ct:u.completion_tokens}});
+    renderChat();
+  }
+
   // ---- events ----
   $("refresh-btn").onclick=refresh;
   $("add-provider-btn").onclick=()=>add();
+  $("add-repo-btn").onclick=()=>addRepo();
   $("providers-body").addEventListener("click",e=>{ const b=e.target.closest("[data-action]"); if(b){ handleProviderAction(b.dataset.action, b.dataset.provider); } });
+  $("repos-body").addEventListener("click",e=>{ const b=e.target.closest("[data-action]"); if(!b) return;
+    if(b.dataset.action==="repo-add") addRepo();
+    if(b.dataset.action==="repo-remove") removeRepo(b.dataset.repo); });
+  $("play-send").onclick=playSend;
+  $("play-model").onchange=syncCustomModel;
+  $("play-clear").onclick=()=>{ chat.length=0; chatGen++; renderChat(); };
+  $("play-input").addEventListener("keydown",e=>{ if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); playSend(); } });
+  renderChat();
   $("modal").addEventListener("click",e=>{ if(e.target===$("modal") || (e.target.closest&&e.target.closest("[data-close]"))) closeModal(); });
   document.addEventListener("keydown",e=>{ if(e.key==="Escape" && !$("modal").classList.contains("hidden")) closeModal(); });
   $("disconnect-btn").onclick=()=>{ S.token=null; try{localStorage.removeItem(TOKEN_KEY);}catch(e){} $("disconnect-btn").style.display="none"; showOverlay(); };

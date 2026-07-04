@@ -1,7 +1,7 @@
 # l00prite CLI-OS
 
 A self-hostable **control plane for AI coding**. It runs on your own server, exposes an
-**OpenAI-compatible** endpoint so existing coding tools (Claude Code, Codex CLI, Aider,
+**OpenAI-compatible** endpoint so existing coding tools (Codex CLI, Aider,
 OpenCode, IDEs, any OpenAI SDK) work unchanged, keeps provider keys server-side, routes across
 LLM providers with explainable rules, injects repo-aware persistent memory, tracks **real**
 cost per project, records a run ledger, and enforces safety limits on spend, retries,
@@ -44,10 +44,10 @@ real-data dashboard and the setup endpoints are disabled.
 cd cli-os
 ./install/install.sh                    # builds the static ./l00prite binary, runs init
 
-./l00prite provider add mock --adapter mock --default   # zero-key demo upstream
-./l00prite provider test mock                           # validate a provider with a real call
-./l00prite token mint --project demo                    # prints a token (once)
-./l00prite serve                                        # http://127.0.0.1:8787
+./l00prite provider add anthropic --key sk-ant-... --default
+./l00prite provider test anthropic      # validate the key with a real call
+./l00prite token mint --project default # prints a token (once)
+./l00prite serve                        # http://127.0.0.1:8787
 ```
 
 Point any OpenAI-compatible tool at it:
@@ -57,29 +57,29 @@ export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
 export OPENAI_API_KEY=<the l00prite token>
 curl "$OPENAI_BASE_URL/chat/completions" \
   -H "authorization: Bearer $OPENAI_API_KEY" -H 'content-type: application/json' \
-  -d '{"model":"demo","messages":[{"role":"user","content":"hello"}]}'
+  -d '{"model":"auto","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-Swap the demo upstream for real providers:
+Add more providers, connect a repo, cap spend:
 
 ```bash
-./l00prite provider add anthropic --key sk-ant-... --default
-./l00prite provider add openai    --key sk-...     --adapter openai-compat
-./l00prite provider add glm        --key ...        --adapter openai-compat   # glm-5.2
-./l00prite repo register myrepo --root /path/to/repo --project demo   # inject .l00prite memory
-./l00prite cap set --project demo --daily 20                          # hard $/day cap
+./l00prite provider add openai --key sk-... --adapter openai-compat
+./l00prite provider add glm    --key ...    --adapter openai-compat      # glm-5.2
+./l00prite repo register myrepo --root /path/to/repo                     # inject .l00prite memory
+./l00prite cap set --project default --daily 20                          # hard $/day cap
 ```
 
-Open the **dashboard** at `http://127.0.0.1:8787/`.
+Open the **dashboard** at `http://127.0.0.1:8787/` — providers, repos, and tokens are all manageable
+there too, and the **Playground** lets you prompt any configured model directly from the browser.
 
 ## Quickstart (Docker)
 
 ```bash
 cd cli-os
-docker compose up --build            # seeds a demo mock provider on first run
-# add real providers / tokens:
+docker compose up --build            # first run boots into the browser setup wizard
+# open http://127.0.0.1:8787/ to add a provider + mint a token — or script it:
 docker compose exec cli-os l00prite provider add anthropic --key sk-ant-... --default
-docker compose exec cli-os l00prite token mint --project demo
+docker compose exec cli-os l00prite token mint --project default
 ```
 
 ## Endpoints
@@ -102,6 +102,8 @@ docker compose exec cli-os l00prite token mint --project demo
 | POST | `/v1/providers/remove` | token | Remove a provider + its model selection — **server-side type-to-confirm** (`confirm:"<name>"`), 409 + impact on mismatch |
 | POST | `/v1/providers/update` | token | Enable/disable a provider, or set it as default |
 | POST | `/v1/providers/models` | token | Enable/disable specific models for a provider (enforced in routing + `/v1/models`) |
+| POST | `/v1/repos` | token | Register a repository from the dashboard (same primitive as `repo register`) — the root path is verified to exist on the gateway host before anything is stored; duplicate ids are rejected 409; the repo lands in the **acting token's project** (an explicit different project is 403 — cross-project registration stays a CLI operation) |
+| POST | `/v1/repos/remove` | token | Unregister a repository — deletes only the id→path mapping; nothing on disk is touched |
 
 **Provider lifecycle from the dashboard (Part E):** the above `/v1/providers/*` endpoints let a
 non-technical user add, rotate, remove, toggle, and re-select models for providers entirely in the
@@ -111,6 +113,16 @@ id. Removing the only/default provider is allowed but warns specifically ("This 
 provider…"), flips System Health to "No providers configured", and makes subsequent requests fail with a
 clear `503 no_providers_configured` pointing back to the dashboard. See
 [`docs/dashboard-and-setup.md`](docs/dashboard-and-setup.md) (Part E).
+
+**Repositories from the dashboard:** the `/v1/repos` endpoints do the same for repo registration — the
+dashboard's *Register repo* modal connects a repository (a path on the gateway host) without the CLI,
+reports honestly whether `.l00prite` memory was actually found there, and *Remove* unregisters the
+mapping without touching disk.
+
+**Playground:** the dashboard has a Playground panel — pick a model (or `auto`), optionally pick a
+registered repo to inject its memory, and prompt it directly from the browser. It calls the same
+authenticated `/v1/chat/completions` your coding tools use, so a reply there proves the full path
+(auth → routing → provider → metering) and the cost shows up in Activity.
 
 ¹ **Setup endpoints are reachable only during genuine first-run.** They are open until setup first
 completes (vault + a provider + a token), then **permanently disabled** — every call returns
@@ -210,7 +222,7 @@ cli-os/
       adapters/
         anthropic.go                         # native /v1/messages translator (SSE blocks -> chunks)
         openaicompat.go                      # OpenAI-shaped passthrough (OpenAI, GLM, DeepSeek, …)
-        mock.go                              # zero-key demo upstream (bridge-aware test hooks)
+        mock.go                              # zero-key mock upstream for the offline test suite (bridge-aware test hooks)
         registry.go                          # adapter + manifest resolution (manifests embedded)
         manifests/*.json                     # per-provider base url, models, pricing, capabilities
     */(*_test.go)                            # unit + end-to-end (go test ./..., 73 checks)

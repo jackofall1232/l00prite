@@ -99,6 +99,12 @@ func Handler(app *gateway.App) http.Handler {
 			app.HandleProviderUpdate(w, r)
 		case r.Method == http.MethodPost && p == "/v1/providers/models":
 			app.HandleProviderModels(w, r)
+		// Authenticated repo registration — the dashboard's "connect a repository" path (same
+		// primitive as CLI `repo register`).
+		case r.Method == http.MethodPost && p == "/v1/repos":
+			app.HandleRepoRegister(w, r)
+		case r.Method == http.MethodPost && p == "/v1/repos/remove":
+			app.HandleRepoRemove(w, r)
 		case r.Method == http.MethodPost && p == "/v1/chat/completions":
 			app.HandleChatCompletion(w, r)
 		default:

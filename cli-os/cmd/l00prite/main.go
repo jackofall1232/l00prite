@@ -129,9 +129,11 @@ func main() {
 		db := withDB(cfg)
 		audit(db, "init", cfg.Home)
 		fmt.Printf("Initialized l00prite CLI-OS at %s\n", cfg.Home)
-		fmt.Println("Next:")
-		fmt.Println("  l00prite provider add mock --adapter mock --default   # zero-key demo upstream")
-		fmt.Println("  l00prite token mint --project demo")
+		fmt.Println("Next (easiest): start the server and finish setup in your browser —")
+		fmt.Println("  l00prite serve        # then open http://127.0.0.1:8787/")
+		fmt.Println("Or do the same from the CLI:")
+		fmt.Println("  l00prite provider add anthropic --key sk-ant-... --default")
+		fmt.Println("  l00prite token mint --project default")
 		fmt.Println("  l00prite serve")
 		return
 	}
