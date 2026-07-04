@@ -1,0 +1,353 @@
+// First-run setup API. These endpoints are a THIN layer over the exact primitives the CLI uses —
+// the vault (security.EnsureMasterKey / EncryptSecret), the providers table (same INSERT as
+// `provider add`), and token minting (security.MintToken) — so the wizard and the CLI can never
+// diverge: both write the same rows through the same code.
+//
+// SECURITY: the mutating/action endpoints (vault, provider, provider/test, token) are reachable ONLY
+// while the system is genuinely unconfigured (SetupComplete() == false). The moment setup completes
+// (vault initialized AND ≥1 provider AND ≥1 active token) they are DISABLED — every call returns 403
+// and performs no action — so a setup endpoint can never linger as an unauthenticated back door. The
+// server also refuses to boot a non-loopback bind without TLS, so first-run setup is never exposed by
+// accident. GET /v1/setup/status stays readable (booleans/counts only, no secrets), like /healthz.
+package gateway
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+
+	"github.com/jackofall1232/l00prite/cli-os/internal/config"
+	"github.com/jackofall1232/l00prite/cli-os/internal/gateway/adapters"
+	"github.com/jackofall1232/l00prite/cli-os/internal/security"
+	"github.com/jackofall1232/l00prite/cli-os/internal/state"
+	"github.com/jackofall1232/l00prite/cli-os/internal/util"
+)
+
+// SetupComplete is the single source of truth for "is the system configured": the vault is
+// initialized AND at least one provider exists AND at least one non-revoked token exists. It is
+// derived from real state (not a flag), so the CLI and the wizard agree automatically and there is
+// nothing to get out of sync.
+func (app *App) SetupComplete() bool {
+	if !config.MasterKeyPresent(app.Cfg) {
+		return false
+	}
+	return app.providerCount() >= 1 && app.activeTokenCount() >= 1
+}
+
+func (app *App) providerCount() int {
+	var n int
+	_ = app.DB.QueryRowContext(state.Ctx(), `SELECT COUNT(*) FROM providers`).Scan(&n)
+	return n
+}
+
+func (app *App) activeTokenCount() int {
+	var n int
+	_ = app.DB.QueryRowContext(state.Ctx(), `SELECT COUNT(*) FROM tokens WHERE revoked = 0`).Scan(&n)
+	return n
+}
+
+func setupAudit(app *App, action, detail string) {
+	var d any
+	if detail != "" {
+		d = detail
+	}
+	_, _ = app.DB.ExecContext(state.Ctx(), `INSERT INTO audit(id,ts,actor,action,detail) VALUES(?,?,?,?,?)`,
+		util.RID("aud"), util.NowISO(), "setup", action, d)
+}
+
+// setupGate returns true (and writes a 403) when setup is already complete, so mutating handlers can
+// short-circuit. This is the lockdown that closes the first-run window permanently.
+func (app *App) setupGate(w http.ResponseWriter) bool {
+	if app.SetupComplete() {
+		sendJSON(w, 403, map[string]any{"error": map[string]any{
+			"message": "Setup is already complete; the setup endpoints are disabled. Use the CLI or an authenticated endpoint.",
+			"type":    "permission_error", "code": "setup_complete"}})
+		return true
+	}
+	return false
+}
+
+func decodeSetupBody(r *http.Request, v any) error {
+	data, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return err
+	}
+	if len(data) == 0 {
+		return nil // empty body is allowed (all-defaults)
+	}
+	return json.Unmarshal(data, v)
+}
+
+// networkInfo describes the current bind for the wizard's network step — real, not guessed.
+func (app *App) networkInfo() map[string]any {
+	cfg := app.Cfg
+	loopback := config.IsLoopbackHost(cfg.Host)
+	tls := cfg.TLS != nil
+	scheme := "http"
+	if tls {
+		scheme = "https"
+	}
+	displayHost := cfg.Host
+	if cfg.Host == "0.0.0.0" || cfg.Host == "::" || cfg.Host == "" {
+		displayHost = "127.0.0.1" // a wildcard bind is reachable locally at loopback
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = 8787
+	}
+	base := scheme + "://" + displayHost + ":" + strconv.Itoa(port)
+	return map[string]any{
+		"host": cfg.Host, "display_host": displayHost, "port": cfg.Port, "scheme": scheme,
+		"loopback": loopback, "tls": tls, "allow_insecure": config.AllowInsecureBind(),
+		"exposed":       !loopback && !tls,
+		"chat_url":      base + "/v1/chat/completions",
+		"base_url":      base + "/v1",
+		"dashboard_url": base + "/",
+	}
+}
+
+// HandleSetupStatus is GET /v1/setup/status — always readable (no secrets).
+func (app *App) HandleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	vault := config.MasterKeyPresent(app.Cfg)
+	provCount := app.providerCount()
+	tokCount := app.activeTokenCount()
+	complete := vault && provCount >= 1 && tokCount >= 1
+	next := "done"
+	switch {
+	case !vault:
+		next = "vault"
+	case provCount == 0:
+		next = "provider"
+	case tokCount == 0:
+		next = "token"
+	}
+	sendJSON(w, 200, map[string]any{
+		"object": "l00prite.setup_status", "version": Version,
+		"setup_complete": complete, "vault_initialized": vault,
+		"provider_count": provCount, "active_token_count": tokCount,
+		"next_step": next, "network": app.networkInfo(),
+	})
+}
+
+type vaultReq struct {
+	MasterKey string `json:"master_key"` // optional base64-of-32; omitted -> generate
+}
+
+// HandleSetupVault is POST /v1/setup/vault — initialize the vault master key.
+func (app *App) HandleSetupVault(w http.ResponseWriter, r *http.Request) {
+	if app.setupGate(w) {
+		return
+	}
+	if config.MasterKeyPresent(app.Cfg) {
+		sendJSON(w, 409, map[string]any{"error": map[string]any{
+			"message": "Vault already initialized.", "type": "invalid_request_error", "code": "vault_already_initialized"}})
+		return
+	}
+	var body vaultReq
+	if err := decodeSetupBody(r, &body); err != nil {
+		oaiError(w, 400, "Invalid JSON body", "invalid_request_error", "")
+		return
+	}
+	generated := true
+	if strings.TrimSpace(body.MasterKey) != "" {
+		raw, ok := security.DecodeBase64Key(body.MasterKey)
+		if !ok {
+			oaiError(w, 400, "master_key must be base64 of exactly 32 bytes", "invalid_request_error", "invalid_master_key")
+			return
+		}
+		if err := writeMasterKey(app.Cfg.MasterKeyPath, raw); err != nil {
+			oaiError(w, 500, "Failed to write master key: "+err.Error(), "configuration_error", "")
+			return
+		}
+		generated = false
+	} else if err := security.EnsureMasterKey(app.Cfg.MasterKeyPath); err != nil {
+		oaiError(w, 500, "Failed to create master key: "+err.Error(), "configuration_error", "")
+		return
+	}
+	setupAudit(app, "setup.vault", "generated="+boolStr(generated))
+	sendJSON(w, 200, map[string]any{"vault_initialized": true, "generated": generated})
+}
+
+// writeMasterKey persists a caller-supplied 32-byte key in the same base64 form EnsureMasterKey uses.
+func writeMasterKey(path string, key []byte) error {
+	if err := os.WriteFile(path, []byte(base64.StdEncoding.EncodeToString(key)), 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
+}
+
+type providerTestReq struct {
+	Name    string `json:"name"`
+	Adapter string `json:"adapter"`
+	BaseURL string `json:"base_url"`
+	APIKey  string `json:"api_key"`
+	Model   string `json:"model"`
+}
+
+// HandleSetupProviderTest is POST /v1/setup/provider/test — validate a key with a REAL upstream call
+// (stores nothing). Returns a clear pass/fail so the wizard never accepts a bad key silently.
+func (app *App) HandleSetupProviderTest(w http.ResponseWriter, r *http.Request) {
+	if app.setupGate(w) {
+		return
+	}
+	var body providerTestReq
+	if err := decodeSetupBody(r, &body); err != nil {
+		oaiError(w, 400, "Invalid JSON body", "invalid_request_error", "")
+		return
+	}
+	adapterKind := resolveAdapterKind(body.Name, body.Adapter)
+	res := TestProviderKey(app.Cfg, adapterKind, body.Name, body.BaseURL, body.APIKey, body.Model)
+	// A failed VALIDATION is still a well-formed REQUEST (HTTP 200); ok:false carries the verdict.
+	sendJSON(w, 200, map[string]any{"ok": res.OK, "error": nilIfEmpty(res.Error), "model_used": nilIfEmpty(res.ModelUsed)})
+}
+
+type providerReq struct {
+	Name           string `json:"name"`
+	Adapter        string `json:"adapter"`
+	BaseURL        string `json:"base_url"`
+	APIKey         string `json:"api_key"`
+	Model          string `json:"model"` // optional model to probe during validation
+	Default        bool   `json:"default"`
+	SkipValidation bool   `json:"skip_validation"` // allow adding a keyless/unvalidated provider deliberately
+}
+
+// HandleSetupProvider is POST /v1/setup/provider — validate (real call) then persist a provider via
+// the same INSERT the CLI's `provider add` uses. A bad key is rejected 400 and stored nowhere.
+func (app *App) HandleSetupProvider(w http.ResponseWriter, r *http.Request) {
+	if app.setupGate(w) {
+		return
+	}
+	var body providerReq
+	if err := decodeSetupBody(r, &body); err != nil {
+		oaiError(w, 400, "Invalid JSON body", "invalid_request_error", "")
+		return
+	}
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		oaiError(w, 400, "provider name is required", "invalid_request_error", "")
+		return
+	}
+	adapterKind := resolveAdapterKind(name, body.Adapter)
+	baseURL := body.BaseURL
+	if strings.TrimSpace(baseURL) == "" {
+		baseURL = adapters.DefaultBaseURL(name)
+	}
+
+	needsKey := adapterKind != "mock"
+	if needsKey && !config.MasterKeyPresent(app.Cfg) {
+		oaiError(w, 400, "Initialize the vault first (POST /v1/setup/vault) before adding a keyed provider.", "invalid_request_error", "vault_required")
+		return
+	}
+
+	// Real key validation before we store anything — unless explicitly skipped (keyless/offline add).
+	validatedModel := ""
+	if !body.SkipValidation {
+		res := TestProviderKey(app.Cfg, adapterKind, name, baseURL, body.APIKey, body.Model)
+		if !res.OK {
+			sendJSON(w, 400, map[string]any{"error": map[string]any{
+				"message": "Provider validation failed: " + res.Error, "type": "invalid_request_error", "code": "provider_validation_failed"},
+				"ok": false, "detail": res.Error})
+			return
+		}
+		validatedModel = res.ModelUsed
+	}
+
+	// Encrypt the key (keyed adapters only) and persist — identical row shape to CLI `provider add`.
+	var encVal any
+	if needsKey && strings.TrimSpace(body.APIKey) != "" {
+		enc, err := security.EncryptSecret(app.Cfg.MasterKeyPath, body.APIKey)
+		if err != nil {
+			oaiError(w, 500, "Failed to encrypt provider key: "+err.Error(), "configuration_error", "")
+			return
+		}
+		encVal = enc
+	}
+	isDef := 0
+	if body.Default {
+		isDef = 1
+	}
+	var baseVal any
+	if baseURL != "" {
+		baseVal = baseURL
+	}
+	if _, err := app.DB.ExecContext(state.Ctx(),
+		`INSERT OR REPLACE INTO providers(name,adapter,base_url,enc_key,enabled,is_default,created_at) VALUES(?,?,?,?,1,?,?)`,
+		name, adapterKind, baseVal, encVal, isDef, util.NowISO()); err != nil {
+		oaiError(w, 500, "Failed to store provider: "+err.Error(), "configuration_error", "")
+		return
+	}
+	if body.Default {
+		_, _ = app.DB.ExecContext(state.Ctx(), `UPDATE providers SET is_default = CASE WHEN name = ? THEN 1 ELSE 0 END`, name)
+	}
+	setupAudit(app, "provider.add", name)
+	sendJSON(w, 200, map[string]any{
+		"provider": map[string]any{
+			"name": name, "adapter": adapterKind, "base_url": nilIfEmpty(baseURL),
+			"is_default": body.Default, "has_key": encVal != nil, "validated": !body.SkipValidation,
+			"validated_model": nilIfEmpty(validatedModel),
+		},
+	})
+}
+
+type tokenReq struct {
+	Project     string `json:"project"`
+	Repo        string `json:"repo"`
+	ExpiresDays *int   `json:"expires_days"`
+}
+
+// HandleSetupToken is POST /v1/setup/token — mint the first token via the same primitive as
+// `token mint`. Returned ONCE; never stored in plaintext. Minting typically finalizes setup.
+func (app *App) HandleSetupToken(w http.ResponseWriter, r *http.Request) {
+	if app.setupGate(w) {
+		return
+	}
+	var body tokenReq
+	if err := decodeSetupBody(r, &body); err != nil {
+		oaiError(w, 400, "Invalid JSON body", "invalid_request_error", "")
+		return
+	}
+	project := strings.TrimSpace(body.Project)
+	if project == "" {
+		oaiError(w, 400, "project is required to mint a token", "invalid_request_error", "")
+		return
+	}
+	var repo *string
+	if strings.TrimSpace(body.Repo) != "" {
+		r := strings.TrimSpace(body.Repo)
+		repo = &r
+	}
+	id, token, err := security.MintToken(app.DB, project, repo, body.ExpiresDays)
+	if err != nil {
+		oaiError(w, 500, "Failed to mint token: "+err.Error(), "configuration_error", "")
+		return
+	}
+	setupAudit(app, "token.mint", id)
+	sendJSON(w, 200, map[string]any{
+		"id": id, "token": token, "project": project, "repo": nilIfEmpty(strings.TrimSpace(body.Repo)),
+		"setup_complete": app.SetupComplete(),
+	})
+}
+
+// resolveAdapterKind maps a UI adapter choice to a concrete adapter kind, defaulting via the manifest
+// when unspecified (same resolution the CLI's `provider add` uses).
+func resolveAdapterKind(name, adapter string) string {
+	adapter = strings.TrimSpace(adapter)
+	if adapter == "" {
+		return adapters.DefaultAdapterKind(name)
+	}
+	if adapter == "openai-native" {
+		return "openai-compat"
+	}
+	return adapter
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}

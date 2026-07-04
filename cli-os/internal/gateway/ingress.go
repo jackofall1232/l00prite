@@ -572,7 +572,7 @@ func (app *App) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		profileNames = append(profileNames, name)
 	}
 	sendJSON(w, 200, map[string]any{
-		"status": "ok", "version": "1.0.0", "providers": providers,
+		"status": "ok", "version": Version, "providers": providers,
 		"bridge":        map[string]any{"enabled": app.Cfg.Routing.Bridge.Enabled, "max_hops": app.Cfg.Routing.Bridge.MaxHops},
 		"auto_profiles": profileNames,
 	})

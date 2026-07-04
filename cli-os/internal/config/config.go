@@ -325,11 +325,18 @@ func validBase64Key32(s string) bool {
 	return false
 }
 
-// ValidateForServe returns human-readable problems that must block startup, else nil.
-func ValidateForServe(cfg Config) []string {
+// IsLoopbackHost reports whether host is a loopback address the server may bind without TLS.
+func IsLoopbackHost(host string) bool { return loopback[host] }
+
+// AllowInsecureBind reports whether the operator opted into binding a non-loopback host without TLS.
+func AllowInsecureBind() bool { return os.Getenv("LOOPRITE_ALLOW_INSECURE_BIND") == "1" }
+
+// BindProblems returns the bind-safety problems that must ALWAYS block startup (no non-loopback bind
+// without TLS; a configured TLS pair must exist on disk). These are independent of whether the vault
+// is initialized — an unconfigured first run may still boot the setup wizard, but only on a safe bind.
+func BindProblems(cfg Config) []string {
 	var problems []string
-	allowInsecure := os.Getenv("LOOPRITE_ALLOW_INSECURE_BIND") == "1"
-	if !loopback[cfg.Host] && cfg.TLS == nil && !allowInsecure {
+	if !loopback[cfg.Host] && cfg.TLS == nil && !AllowInsecureBind() {
 		problems = append(problems, `Refusing to bind non-loopback host "`+cfg.Host+`" without TLS. Either set `+
 			`LOOPRITE_TLS_CERT + LOOPRITE_TLS_KEY, bind to 127.0.0.1, or (only behind a trusted `+
 			`reverse proxy / private network) set LOOPRITE_ALLOW_INSECURE_BIND=1.`)
@@ -341,14 +348,28 @@ func ValidateForServe(cfg Config) []string {
 			}
 		}
 	}
-	envKeyOk := false
-	if k := os.Getenv("LOOPRITE_MASTER_KEY"); k != "" {
-		envKeyOk = validBase64Key32(k) // accept std/url + padded/unpadded, like the vault loader
+	return problems
+}
+
+// MasterKeyPresent reports whether the vault master key is available (env var of 32 base64 bytes, or a
+// key file on disk). When false, the system is genuinely unconfigured and boots into first-run setup
+// instead of refusing to start. This is the single source of truth for "is the vault initialized".
+func MasterKeyPresent(cfg Config) bool {
+	if k := os.Getenv("LOOPRITE_MASTER_KEY"); k != "" && validBase64Key32(k) {
+		return true // accept std/url + padded/unpadded, like the vault loader
 	}
-	if !envKeyOk {
-		if _, err := os.Stat(cfg.MasterKeyPath); err != nil {
-			problems = append(problems, `Master key missing. Set LOOPRITE_MASTER_KEY (base64 of 32 bytes) or run "l00prite init" first.`)
-		}
+	_, err := os.Stat(cfg.MasterKeyPath)
+	return err == nil
+}
+
+// ValidateForServe returns human-readable problems that must block startup, else nil. It combines the
+// always-fatal bind-safety checks with the master-key check. Callers that support a first-run setup
+// mode (the server) use BindProblems + MasterKeyPresent directly so a missing key opens the wizard
+// rather than aborting; ValidateForServe is retained for callers that require a fully-configured host.
+func ValidateForServe(cfg Config) []string {
+	problems := BindProblems(cfg)
+	if !MasterKeyPresent(cfg) {
+		problems = append(problems, `Master key missing. Set LOOPRITE_MASTER_KEY (base64 of 32 bytes) or run "l00prite init" first.`)
 	}
 	return problems
 }

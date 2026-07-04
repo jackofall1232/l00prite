@@ -33,6 +33,7 @@ const help = `l00prite CLI-OS — control plane
   l00prite provider add <name> [--key K] [--adapter native-messages|openai-compat|mock]
                               [--base URL] [--default]
   l00prite provider list
+  l00prite provider test <name> [--key K] [--adapter A] [--base URL] [--model M]
   l00prite provider default <name>
   l00prite provider enable|disable|remove <name>
 
@@ -307,6 +308,49 @@ func providerCmd(db *sql.DB, cfg config.Config, sub, arg string, flags map[strin
 					fmt.Printf("%s %-14s %-16s key:%s %s %s\n", star, name, adapter, keyYes, st, baseURL.String)
 				}
 			}
+		}
+	case "test":
+		name := arg
+		if name == "" {
+			fmt.Fprintln(os.Stderr, "usage: provider test <name> [--key K] [--adapter A] [--base URL] [--model M]")
+			return
+		}
+		// Load the stored provider (if any) as the baseline, then apply flag overrides. This validates
+		// the SAME way the setup wizard does — one shared primitive, gateway.TestProviderKey.
+		var adapter string
+		var baseURL, encKey sql.NullString
+		_ = db.QueryRowContext(state.Ctx(), `SELECT adapter, base_url, enc_key FROM providers WHERE name = ?`, name).Scan(&adapter, &baseURL, &encKey)
+		if a, ok := flagStr(flags, "adapter"); ok {
+			adapter = a
+		}
+		if adapter == "" {
+			adapter = adapters.DefaultAdapterKind(name)
+		} else if adapter == "openai-native" {
+			adapter = "openai-compat"
+		}
+		base := baseURL.String
+		if b, ok := flagStr(flags, "base"); ok {
+			base = b
+		}
+		key := ""
+		if k, ok := flagStr(flags, "key"); ok {
+			key = k
+		} else if encKey.Valid && encKey.String != "" {
+			if k, err := security.DecryptSecret(cfg.MasterKeyPath, encKey.String); err == nil {
+				key = k
+			}
+		}
+		model, _ := flagStr(flags, "model")
+		res := gateway.TestProviderKey(cfg, adapter, name, base, key, model)
+		if res.OK {
+			suffix := ""
+			if res.ModelUsed != "" {
+				suffix = " (model " + res.ModelUsed + ")"
+			}
+			fmt.Printf("✓ provider %q validated%s\n", name, suffix)
+		} else {
+			fmt.Fprintf(os.Stderr, "✗ provider %q failed validation: %s\n", name, res.Error)
+			os.Exit(1)
 		}
 	case "default":
 		_, _ = db.ExecContext(state.Ctx(), `UPDATE providers SET is_default = CASE WHEN name = ? THEN 1 ELSE 0 END`, arg)

@@ -7,6 +7,7 @@ package gateway
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/jackofall1232/l00prite/cli-os/internal/config"
 	"github.com/jackofall1232/l00prite/cli-os/internal/gateway/adapters"
@@ -23,6 +24,10 @@ type App struct {
 	DB      *sql.DB
 	Cfg     config.Config
 	Aliases map[string]string
+	// StartedAt is the process boot time, set by server.Start, and reported as real uptime by the
+	// dashboard. A zero value (e.g. an App built directly in a test) is reported as "unknown", never
+	// as a fabricated availability figure.
+	StartedAt time.Time
 }
 
 // ProviderRow is a full providers-table row.
