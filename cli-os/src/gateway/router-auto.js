@@ -25,6 +25,7 @@ const key = (c) => `${c.provider}/${c.model}`;
 function estimatePromptTokens(messages) {
   let chars = 0, images = 0;
   for (const m of messages) {
+    if (!m) continue; // tolerate a malformed message array with null/undefined elements
     if (typeof m.content === 'string') chars += m.content.length;
     else if (Array.isArray(m.content)) {
       for (const part of m.content) {
@@ -42,7 +43,7 @@ function estimatePromptTokens(messages) {
 export function deriveRequirements(openaiReq, defaultMaxTokens = 1024) {
   const messages = openaiReq.messages || [];
   const needs_tools = Array.isArray(openaiReq.tools) && openaiReq.tools.length > 0;
-  const needs_vision = messages.some((m) => Array.isArray(m.content)
+  const needs_vision = messages.some((m) => m && Array.isArray(m.content)
     && m.content.some((part) => part && part.type === 'image_url'));
   const needs_streaming_usage = openaiReq.stream === true && !!openaiReq.stream_options?.include_usage;
   const maxOut = openaiReq.max_tokens || openaiReq.max_completion_tokens || defaultMaxTokens;
@@ -59,11 +60,20 @@ export function parseAutoSignal(s) {
 }
 
 export function resolveProfile(profileName, routing) {
-  const name = profileName || routing.autoDefaultProfile || 'balanced';
-  const p = routing.profiles?.[name];
+  const requested = profileName || routing.autoDefaultProfile || 'balanced';
+  const profiles = routing.profiles || {};
+  // parseAutoSignal is case-insensitive, so resolve profiles the same way: exact match first, then
+  // a case-insensitive fallback (so `AUTO:CHEAP` doesn't spuriously 404 while still honoring an
+  // operator who defines a mixed-case profile name).
+  let name = requested;
+  let p = profiles[name];
   if (!p) {
-    const known = Object.keys(routing.profiles || {}).join(', ');
-    throw httpError(400, `Unknown auto profile "${name}". Known profiles: ${known || '(none configured)'}.`, 'invalid_request_error');
+    const found = Object.keys(profiles).find((k) => k.toLowerCase() === String(requested).toLowerCase());
+    if (found) { name = found; p = profiles[found]; }
+  }
+  if (!p) {
+    const known = Object.keys(profiles).join(', ');
+    throw httpError(400, `Unknown auto profile "${requested}". Known profiles: ${known || '(none configured)'}.`, 'invalid_request_error');
   }
   const preference = p.preference || 'balanced';
   if (!['cost', 'quality', 'balanced'].includes(preference)) {

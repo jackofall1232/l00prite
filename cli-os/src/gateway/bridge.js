@@ -193,7 +193,10 @@ async function executeBridge(ctx, { toolCall, primaryReq, providers, project, re
 //   { denied, subCalls, totalCostUsd, hops, primaryTurn }   — a primary turn was cap-denied (402)
 export async function runBridge(ctx, { requestId, project, repoId, repoRoot, openaiReq, routeHeader, clientSignal, maxHops, paths = [] }) {
   const providers = listProviders(ctx.db);
-  let convo = { ...openaiReq, tools: [...(openaiReq.tools || []), BRIDGE_TOOL] };
+  // Inject the bridge tool exactly once: tolerate a non-array `tools`, and drop any client-supplied
+  // tool that already claims the reserved name so the primary never sees a duplicate/conflicting def.
+  const clientTools = (Array.isArray(openaiReq.tools) ? openaiReq.tools : []).filter((t) => t?.function?.name !== BRIDGE_TOOL_NAME);
+  let convo = { ...openaiReq, tools: [...clientTools, BRIDGE_TOOL] };
   let subCalls = 0;
   let totalCost = 0;
   const totalUsage = { prompt_tokens: 0, completion_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 };

@@ -23,12 +23,26 @@ export function listProviders(db) {
   return db.prepare(`SELECT name, adapter, base_url, enc_key, enabled, is_default FROM providers ORDER BY is_default DESC, name`).all();
 }
 
-// Minimal, safe projection of the request for the Memory layer (never the raw prompt).
+// Minimal, safe projection of the request for the Memory layer (never the raw prompt). The user
+// intent is TEXT ONLY, capped — image parts become an "[image]" placeholder so a base64 data URI
+// never bloats memory keywording or pulls raw attachment bytes into the memory layer.
+const INTENT_CAP = 2000;
+function userIntent(content) {
+  if (typeof content === 'string') return content.slice(0, INTENT_CAP);
+  if (Array.isArray(content)) {
+    return content
+      .map((p) => (p?.type === 'text' ? (p.text || '') : p?.type === 'image_url' ? '[image]' : ''))
+      .filter(Boolean).join(' ').slice(0, INTENT_CAP);
+  }
+  return '';
+}
+
 export function digestFrom(openaiReq, paths = []) {
-  const lastUser = [...(openaiReq.messages || [])].reverse().find((m) => m.role === 'user');
-  const toolNames = (openaiReq.messages || []).flatMap((m) => (m.tool_calls || []).map((t) => t.function?.name)).filter(Boolean);
+  const messages = openaiReq.messages || [];
+  const lastUser = [...messages].reverse().find((m) => m && m.role === 'user');
+  const toolNames = messages.flatMap((m) => (m?.tool_calls || []).map((t) => t.function?.name)).filter(Boolean);
   return {
-    user_intent: typeof lastUser?.content === 'string' ? lastUser.content : JSON.stringify(lastUser?.content || ''),
+    user_intent: userIntent(lastUser?.content),
     referenced_paths: paths, recent_tool_calls: toolNames,
   };
 }

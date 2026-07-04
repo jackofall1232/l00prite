@@ -60,6 +60,10 @@ export function startServer(overrides = {}) {
   // the exposure). Refund anything left `reserved` far longer than a legitimate call could run.
   const staleAfterMs = Math.max(10 * 60_000, cfg.retry.maxAttempts * cfg.requestTimeoutMs + 60_000);
   try { const n = reapStaleReservations(db, staleAfterMs); if (n) console.log(`  • reaped ${n} stale reservation(s)`); } catch { /* non-fatal */ }
+  // ...and periodically, so a long-running server recovers reservations stranded by crashes/
+  // timeouts/aborts (bridging multiplies the exposure) without waiting for a restart. unref() so
+  // the timer never keeps the process alive on its own.
+  setInterval(() => { try { reapStaleReservations(db, staleAfterMs); } catch { /* non-fatal */ } }, 5 * 60_000).unref();
   const ctx = { db, cfg, aliases: cfg.aliases || {} };
   const server = buildServer(ctx);
   server.listen(cfg.port, cfg.host, () => {

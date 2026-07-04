@@ -277,8 +277,12 @@ export async function handleChatCompletion(ctx, req, res) {
     } catch (e) {
       router.markFailure(route.provider);
       if (res.headersSent) {
-        pep.commit(db, resv.reservationId, 0); // stream already started; nothing more to bill
-        ledger.append(db, cfg, { request_id: requestId, project, repo: repoId, provider: route.provider, model: route.model, rule_id: route.decision.rule_id, decision: route.decision, memory_status: mem.status, outcome: 'error_midstream' });
+        // The stream already emitted bytes, so the provider likely billed for partial output but we
+        // never got a usage chunk. Fail CLOSED on the cap: commit the estimated reservation ceiling
+        // (flagged estimated) rather than $0 — committing $0 would erase the reserve and let later
+        // requests slip past the daily cap despite real spend having occurred.
+        pep.commit(db, resv.reservationId, ceiling);
+        ledger.append(db, cfg, { request_id: requestId, project, repo: repoId, provider: route.provider, model: route.model, rule_id: route.decision.rule_id, decision: route.decision, cost_usd: ceiling, cost_estimated: 1, memory_status: mem.status, outcome: 'error_midstream' });
         try { res.end(); } catch { /* already closed */ }
       } else {
         pep.refund(db, resv.reservationId);

@@ -181,3 +181,31 @@ test('a base64 image is not counted as prompt text (no context inflation)', asyn
   // Old behavior counted ~200000/3.5 ≈ 57000 prompt tokens; text-only + per-image constant is tiny.
   assert.ok(r.promptTokens < 4000, `image bytes must not inflate promptTokens, got ${r.promptTokens}`);
 });
+
+test('auto profile lookup is case-insensitive (AUTO:CHEAP resolves)', async () => {
+  cfgWith();
+  const { loadConfig } = await import('../src/config.js');
+  const router = await import('../src/gateway/router.js');
+  const r = router.pick({ providers: [{ name: 'anthropic', enabled: 1, is_default: 1 }], aliases: {}, openaiReq: mk('AUTO:CHEAP'), cfg: loadConfig() });
+  assert.equal(r.decision.rule_id, 'auto_select');
+  assert.equal(r.decision.profile, 'cheap');
+});
+
+test('malformed message arrays (null elements) do not crash requirement derivation', async () => {
+  cfgWith();
+  const { deriveRequirements } = await import('../src/gateway/router-auto.js');
+  const r = deriveRequirements({ messages: [null, { role: 'user', content: 'hi' }, undefined] }, 1024);
+  assert.equal(r.needs_vision, false);
+  assert.ok(r.promptTokens >= 0);
+});
+
+test('digestFrom projects TEXT only — no base64 image bytes reach the memory layer', async () => {
+  cfgWith();
+  const { digestFrom } = await import('../src/gateway/turn.js');
+  const bigB64 = 'A'.repeat(50000);
+  const d = digestFrom({ messages: [null, { role: 'user', content: [{ type: 'text', text: 'analyze this diagram' }, { type: 'image_url', image_url: { url: `data:image/png;base64,${bigB64}` } }] }] });
+  assert.ok(!d.user_intent.includes('AAAA'), 'base64 bytes must not appear in the digest');
+  assert.match(d.user_intent, /analyze this diagram/);
+  assert.match(d.user_intent, /\[image\]/);
+  assert.ok(d.user_intent.length < 3000, 'intent is capped');
+});
