@@ -12,6 +12,7 @@
     --text:#E7EDF5; --text-2:#9AA7B8; --text-3:#5E6B7C;
     --accent:#4F8CFF; --accent-2:#7AA8FF; --accent-ink:#CFE0FF; --glow:rgba(79,140,255,.20);
     --ok:#00C853; --warn:#FFB300; --err:#F44336;
+    --input-bg:rgba(0,0,0,.25); --input-bg-focus:rgba(0,0,0,.35); --input-bg-solid:#0A0E13;
     --font-sans:"Inter","SF Pro Text",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     --font-mono:"SFMono-Regular","JetBrains Mono","Roboto Mono",ui-monospace,Menlo,Consolas,monospace;
     --r-lg:18px; --r-md:12px; --r-sm:9px;
@@ -56,12 +57,19 @@
   .muted{color:var(--text-3);font-size:12.5px;}
   label{display:block;font-size:12px;font-weight:600;color:var(--text-2);margin:16px 0 6px;letter-spacing:.02em;}
   label .opt{color:var(--text-3);font-weight:500;text-transform:none;letter-spacing:0;}
-  input[type=text],input[type=password],input[type=number],select{
-    width:100%;padding:11px 13px;border-radius:var(--r-md);background:rgba(0,0,0,.25);
+  input[type=text],input[type=password],input[type=number],select,textarea{
+    width:100%;padding:11px 13px;border-radius:var(--r-md);background:var(--input-bg);
     border:1px solid var(--stroke);color:var(--text);font-family:var(--font-sans);font-size:14px;outline:none;
     transition:border-color .15s, background .15s;}
-  input:focus,select:focus{border-color:rgba(79,140,255,.6);background:rgba(0,0,0,.35);}
-  input::placeholder{color:var(--text-3);}
+  input:focus,select:focus,textarea:focus{border-color:rgba(79,140,255,.6);background:var(--input-bg-focus);}
+  input::placeholder,textarea::placeholder{color:var(--text-3);opacity:1;}
+  /* Native dropdown options and autofilled values don't follow the page palette on their own —
+     pin them so a field can never render its text in the same color as its background. */
+  input,select,textarea{caret-color:var(--text);}
+  select option{background:var(--input-bg-solid);color:var(--text);}
+  input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus{
+    -webkit-text-fill-color:var(--text);
+    -webkit-box-shadow:0 0 0 1000px var(--input-bg-solid) inset;}
   .mono-in{font-family:var(--font-mono);}
   .row{display:flex;gap:12px;flex-wrap:wrap;}
   .row > div{flex:1 1 200px;min-width:0;}
@@ -110,9 +118,9 @@
   .foot{margin-top:18px;text-align:center;font-size:11.5px;color:var(--text-3);}
   @media (prefers-color-scheme:light){
     :root{--bg:#F5F7FB;--panel:rgba(10,20,40,.03);--panel-2:rgba(10,20,40,.05);--stroke:rgba(10,20,40,.12);--stroke-2:rgba(10,20,40,.22);
-      --text:#0E1726;--text-2:#465064;--text-3:#7A8698;}
+      --text:#0E1726;--text-2:#465064;--text-3:#7A8698;
+      --input-bg:#fff;--input-bg-focus:#fff;--input-bg-solid:#fff;}
     body{background:radial-gradient(1100px 560px at 12% -10%, rgba(79,140,255,.14), transparent 60%), var(--bg);}
-    input[type=text],input[type=password],input[type=number],select{background:#fff;}
     pre{background:#0d1420;color:#cfe0ff;}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
@@ -267,7 +275,6 @@
       <select id="adapter">
         <option value="native-messages">Anthropic (native /v1/messages)</option>
         <option value="openai-compat">OpenAI-compatible (OpenAI, GLM, DeepSeek, Groq, Gemini-compat, …)</option>
-        <option value="mock">Mock (zero-key demo upstream)</option>
       </select>
       <div class="row">
         <div><label>Provider name</label><input type="text" id="pname" class="mono-in" placeholder="anthropic"></div>
@@ -286,28 +293,19 @@
       </div>`;
     const adapterSel=document.getElementById("adapter");
     const nameIn=document.getElementById("pname"), baseIn=document.getElementById("pbase"), baseHint=document.getElementById("basehint");
-    const keywrap=document.getElementById("keywrap"), basewrap=document.getElementById("basewrap"), modelwrap=document.getElementById("modelwrap");
     const validateBtn=document.getElementById("validate"), addBtn=document.getElementById("add"), skip=document.getElementById("pskip");
     const note=document.getElementById("pnote");
     let validated=false, epoch=0;
 
     const DEFAULTS={"native-messages":{name:"anthropic",base:"https://api.anthropic.com",baseHint:"— default shown; edit if self-hosting"},
-                    "openai-compat":{name:"openai",base:"",baseHint:"— required, e.g. https://api.openai.com/v1"},
-                    "mock":{name:"mock",base:"",baseHint:""}};
+                    "openai-compat":{name:"openai",base:"",baseHint:"— required, e.g. https://api.openai.com/v1"}};
     function syncAdapter(){
-      const a=adapterSel.value, d=DEFAULTS[a];
+      const d=DEFAULTS[adapterSel.value];
       if(!nameIn.dataset.touched) nameIn.value=d.name;
       baseIn.value=d.base; baseHint.textContent=d.baseHint;
-      const isMock=a==="mock";
-      keywrap.classList.toggle("hidden",isMock);
-      basewrap.classList.toggle("hidden",isMock);
-      modelwrap.classList.toggle("hidden",isMock);
-      validateBtn.classList.toggle("hidden",isMock);
-      skip.parentElement.classList.toggle("hidden",isMock);
       resetValidation();
-      if(isMock){ addBtn.disabled=false; note.innerHTML=`<div class="note">The mock upstream needs no key — it echoes requests so you can see the full path working.</div>`; }
     }
-    function resetValidation(){ epoch++; validated=false; addBtn.disabled = adapterSel.value!=="mock" && !skip.checked ? true : false; if(adapterSel.value!=="mock"&&!skip.checked) note.innerHTML=""; }
+    function resetValidation(){ epoch++; validated=false; addBtn.disabled = !skip.checked; if(!skip.checked) note.innerHTML=""; }
     nameIn.oninput=()=>{ nameIn.dataset.touched="1"; resetValidation(); };
     [baseIn,document.getElementById("pkey"),document.getElementById("pmodel")].forEach(el=>el.oninput=resetValidation);
     adapterSel.onchange=syncAdapter;
@@ -381,7 +379,7 @@
       <p>Clients authenticate with an opaque gateway token (not your provider keys). It's scoped to a
          project and can be revoked anytime. <b>It's shown once</b> — copy it on the next screen.</p>
       <div class="row">
-        <div><label>Project</label><input type="text" id="tproject" class="mono-in" value="demo" placeholder="demo"></div>
+        <div><label>Project</label><input type="text" id="tproject" class="mono-in" value="default" placeholder="default"></div>
         <div><label>Expires <span class="opt">— days, 0 = never</span></label><input type="number" id="texpires" class="mono-in" value="0" min="0"></div>
       </div>
       <label>Repo <span class="opt">— optional, scopes the token to one registered repo</span></label>
