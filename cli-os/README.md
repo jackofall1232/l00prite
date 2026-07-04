@@ -163,6 +163,8 @@ layer. Read the design docs for the full picture:
   — cross-provider delegation ("Codex asks Claude to use a tool").
 - [`docs/routing-rules-v1.md`](docs/routing-rules-v1.md) · [`docs/security-model.md`](docs/security-model.md)
   · [`docs/v1-scope.md`](docs/v1-scope.md) · [`docs/open-questions.md`](docs/open-questions.md)
+- [`docs/known-limitations.md`](docs/known-limitations.md) — deliberate scope caveats (e.g. single-tier
+  auth: any valid token can manage providers today).
 
 Safety posture (inherited from l00prite): safe-by-default, no auto-everything; **persisted flags
 are never authorization** — cost/retry/destructive gates are enforced by a Policy Enforcement
