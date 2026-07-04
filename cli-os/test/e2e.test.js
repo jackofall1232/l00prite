@@ -99,6 +99,24 @@ test('cost cap denies with 402 before spending', async () => {
   assert.equal(j.error.code, 'cost_cap');
 });
 
+test('repo-scoped token cannot be widened to another repo via header (403)', async () => {
+  const r = await fetch(`${base}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${tokenDemo}`, 'x-l00prite-repo': 'some-other-repo' },
+    body: JSON.stringify({ model: 'demo', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  assert.equal(r.status, 403);
+});
+
+test('unregistered repo returns 404', async () => {
+  const r = await fetch(`${base}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${tokenCapped}`, 'x-l00prite-repo': 'does-not-exist' },
+    body: JSON.stringify({ model: 'demo', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  assert.equal(r.status, 404);
+});
+
 test('/v1/models and /healthz respond', async () => {
   const h = await fetch(`${base}/healthz`); assert.equal(h.status, 200);
   const hj = await h.json(); assert.equal(hj.status, 'ok'); assert.ok(hj.providers.find((p) => p.name === 'mock'));

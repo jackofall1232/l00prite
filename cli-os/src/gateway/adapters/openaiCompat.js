@@ -35,14 +35,19 @@ export function parseFull(json, model) {
   return { openaiResponse: json, usage: normUsage(json.usage) };
 }
 
-export function newStreamState(model) { return { model, usage: null }; }
+export function newStreamState(model, opts = {}) {
+  return { model, usage: null, forwardUsage: !!opts.forwardUsage };
+}
 
 export function onEvent(st, ev) {
   if (ev.data === '[DONE]') return { deltas: [], done: true, usage: st.usage || undefined };
   let chunk;
   try { chunk = JSON.parse(ev.data); } catch { return { deltas: [] }; }
   if (chunk.usage) st.usage = normUsage(chunk.usage);
-  // A usage-only final chunk (choices=[]) carries no delta to forward downstream.
   const hasChoice = Array.isArray(chunk.choices) && chunk.choices.length;
-  return { deltas: hasChoice ? [chunk] : [], usage: chunk.usage ? normUsage(chunk.usage) : undefined };
+  // We force include_usage upstream to meter accurately. Forward the usage-only final chunk to
+  // the client only when THEY asked for it, so we honor the OpenAI usage contract without
+  // surprising clients that didn't opt in.
+  const forward = hasChoice || (st.forwardUsage && chunk.usage);
+  return { deltas: forward ? [chunk] : [], usage: chunk.usage ? normUsage(chunk.usage) : undefined };
 }

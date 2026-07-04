@@ -34,12 +34,20 @@ export function pick({ providers, aliases = {}, openaiReq, routeHeader }) {
     return { provider, model, decision: { rule_id, chosen: `${provider}/${model}`, alternatives, reason } };
   };
 
-  // Rule 1: explicit pin (header or provider-qualified model).
-  const pinned = splitTarget(routeHeader) || splitTarget(wanted);
-  if (pinned) {
-    const r = use(pinned.provider, pinned.model, 'explicit_pin', `pinned target ${pinned.provider}/${pinned.model}`);
+  // Rule 1a: explicit route header — operator intent, so an unknown provider is an error.
+  const headerPin = splitTarget(routeHeader);
+  if (headerPin) {
+    const r = use(headerPin.provider, headerPin.model, 'explicit_pin', `header pin ${headerPin.provider}/${headerPin.model}`);
     if (r) return r;
-    throw httpError(400, `Provider "${pinned.provider}" is not registered or enabled`, 'invalid_request_error');
+    throw httpError(400, `Provider "${headerPin.provider}" is not registered or enabled`, 'invalid_request_error');
+  }
+  // Rule 1b: provider-qualified model — only a pin when the provider segment is actually a
+  // registered provider. Otherwise it's a model id that merely contains '/' (e.g. OpenRouter
+  // "vendor/model"), which must fall through to the default provider unchanged.
+  const modelPin = splitTarget(wanted);
+  if (modelPin && enabled.has(modelPin.provider)) {
+    const r = use(modelPin.provider, modelPin.model, 'explicit_pin', `model pin ${modelPin.provider}/${modelPin.model}`);
+    if (r) return r;
   }
 
   // Rule 2: alias map.
@@ -58,11 +66,13 @@ export function pick({ providers, aliases = {}, openaiReq, routeHeader }) {
     }
   }
 
-  // Rule 4: default provider (+ requested model or its own default model).
-  if (isDefault) {
+  // Rule 4: default provider (+ requested model or its own default model) — but honor the
+  // circuit breaker so a flapping default falls through to Rule 5 instead of poisoning traffic.
+  if (isDefault && !isTripped(isDefault.name)) {
     const model = wanted || modelsFor(isDefault.name)[0] || 'default';
     return use(isDefault.name, model, 'default_provider', `no explicit target; default provider ${isDefault.name}`);
   }
+  if (isDefault && isTripped(isDefault.name)) alternatives.push(`${isDefault.name} (circuit open)`);
 
   // Rule 5 fallback: first enabled, non-tripped provider.
   const first = providers.find((p) => enabled.has(p.name) && !isTripped(p.name));

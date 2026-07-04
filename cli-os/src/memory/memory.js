@@ -16,10 +16,17 @@ const SOURCES = [
 
 const approxTokens = (s) => Math.ceil(s.length / 4);
 
+// Containment check that resolves symlinks (fail closed). path.resolve alone would let a
+// .l00prite file that is a symlink to /etc/passwd escape the repo root; realpathSync follows
+// the link and the resolved target must still be inside the root.
 function within(root, p) {
-  const r = path.resolve(root);
-  const c = path.resolve(p);
-  return c === r || c.startsWith(r + path.sep);
+  try {
+    const r = fs.realpathSync(root);
+    const c = fs.realpathSync(p);
+    return c === r || c.startsWith(r + path.sep);
+  } catch {
+    return false;
+  }
 }
 
 function keywordsFrom(digest) {
@@ -37,12 +44,26 @@ export function query({ repoRoot, requestDigest = {}, budgets = {}, options = {}
 
     const kws = keywordsFrom(requestDigest);
     const refPaths = (requestDigest.referenced_paths || []).map((p) => p.toLowerCase());
+    const maxBytes = budgets.maxFileBytes || 262144;
     const candidates = [];
     for (const s of SOURCES) {
       const fp = path.join(dir, s.file);
       if (!within(repoRoot, fp) || !fs.existsSync(fp)) continue;
       let text, mtime;
-      try { text = fs.readFileSync(fp, 'utf8').trim(); mtime = fs.statSync(fp).mtime; } catch { continue; }
+      try {
+        const st = fs.statSync(fp);
+        mtime = st.mtime;
+        if (st.size > maxBytes) {
+          // Bound the read so a huge/slow memory file can't block the request path past budget.
+          const fd = fs.openSync(fp, 'r');
+          const buf = Buffer.alloc(maxBytes);
+          const n = fs.readSync(fd, buf, 0, maxBytes, 0);
+          fs.closeSync(fd);
+          text = buf.subarray(0, n).toString('utf8').trim() + '\n… [truncated: file exceeds memory read cap]';
+        } else {
+          text = fs.readFileSync(fp, 'utf8').trim();
+        }
+      } catch { continue; }
       if (!text) continue;
       const lower = text.toLowerCase();
       let score = s.base;

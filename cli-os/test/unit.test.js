@@ -114,6 +114,49 @@ test('anthropic adapter: SSE events fold into OpenAI chunks + usage', async () =
   assert.equal(usage.completion_tokens, 2);
 });
 
+test('pep: rejects non-finite / negative reservation amounts (fail closed)', async () => {
+  tmpHome();
+  const { loadConfig } = await import('../src/config.js');
+  const { openDb } = await import('../src/state/db.js');
+  const pep = await import('../src/policy/pep.js');
+  const db = openDb(loadConfig().dbPath);
+  assert.equal(pep.reserve(db, { project: 'p', amountUsd: NaN, defaultCap: 10 }).ok, false);
+  assert.equal(pep.reserve(db, { project: 'p', amountUsd: -5, defaultCap: 10 }).ok, false);
+  assert.equal(pep.reserve(db, { project: 'p', amountUsd: Infinity, defaultCap: 10 }).ok, false);
+});
+
+test('config: malformed default cap falls back safe (never NaN)', async () => {
+  tmpHome();
+  process.env.LOOPRITE_DEFAULT_DAILY_CAP = 'not-a-number';
+  const { loadConfig } = await import('../src/config.js');
+  assert.equal(loadConfig().defaultDailyCapUsd, 10);
+  delete process.env.LOOPRITE_DEFAULT_DAILY_CAP;
+});
+
+test('meter: reservation ceiling scales with max_tokens (bounds output cost)', async () => {
+  tmpHome();
+  const { reservationCeiling } = await import('../src/gateway/meter.js');
+  const small = reservationCeiling('anthropic', 'claude-opus-4-8', { messages: [{ role: 'user', content: 'hi' }], max_tokens: 100 });
+  const big = reservationCeiling('anthropic', 'claude-opus-4-8', { messages: [{ role: 'user', content: 'hi' }], max_tokens: 100000 });
+  assert.ok(big > small * 10, 'a larger max_tokens must reserve a larger ceiling');
+});
+
+test('memory: symlink escaping the repo root is not read (containment)', async () => {
+  const home = tmpHome();
+  const memory = await import('../src/memory/memory.js');
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-'));
+  fs.writeFileSync(path.join(outside, 'secret.txt'), 'TOP-SECRET-OUTSIDE-ROOT');
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-'));
+  fs.mkdirSync(path.join(repo, '.l00prite'), { recursive: true });
+  fs.writeFileSync(path.join(repo, '.l00prite', 'memory.md'), '# Memory\nlegit content');
+  fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(repo, '.l00prite', 'constraints.md'));
+  const ctx = memory.query({ repoRoot: repo, requestDigest: {}, budgets: { contextTokens: 8000 }, options: {} });
+  const joined = ctx.blocks.map((b) => b.text).join('\n');
+  assert.ok(!joined.includes('TOP-SECRET-OUTSIDE-ROOT'), 'symlinked-out file must not be read');
+  assert.ok(!ctx.blocks.some((b) => b.source_path.includes('constraints')), 'escaping symlink must be skipped');
+  fs.rmSync(home, { recursive: true, force: true }); fs.rmSync(repo, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true });
+});
+
 test('memory: reads .l00prite blocks; empty when no memory dir; containment', async () => {
   const home = tmpHome();
   const memory = await import('../src/memory/memory.js');

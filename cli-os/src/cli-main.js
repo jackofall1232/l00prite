@@ -83,12 +83,16 @@ function main() {
   if (cmd === 'provider') {
     if (sub === 'add') {
       const name = arg; if (!name) return console.error('usage: provider add <name> [--key K] ...');
+      const existing = db.prepare(`SELECT enc_key, is_default FROM providers WHERE name = ?`).get(name);
       const adapter = flags.adapter || defaultAdapterKind(name);
       const base = flags.base || defaultBaseUrl(name) || null;
-      const enc = (flags.key && adapter !== 'mock') ? encryptSecret(cfg, String(flags.key)) : null;
+      // Preserve the stored key when re-running `provider add` without --key (e.g. to change
+      // --base or --default) so an existing provider isn't silently left keyless.
+      const enc = (flags.key && adapter !== 'mock') ? encryptSecret(cfg, String(flags.key)) : (existing?.enc_key ?? null);
       if (adapter !== 'mock' && !enc) console.warn(`  ! no --key given; provider "${name}" will fail real calls until a key is added.`);
+      const isDef = flags.default ? 1 : (existing?.is_default ?? 0);
       db.prepare(`INSERT OR REPLACE INTO providers(name,adapter,base_url,enc_key,enabled,is_default,created_at) VALUES(?,?,?,?,1,?,?)`)
-        .run(name, adapter, base, enc, flags.default ? 1 : 0, nowISO());
+        .run(name, adapter, base, enc, isDef, nowISO());
       if (flags.default) db.prepare(`UPDATE providers SET is_default = CASE WHEN name = ? THEN 1 ELSE 0 END`).run(name);
       audit(db, 'provider.add', name);
       console.log(`Added provider "${name}" (adapter=${adapter}${base ? `, base=${base}` : ''})${flags.default ? ' [default]' : ''}`);

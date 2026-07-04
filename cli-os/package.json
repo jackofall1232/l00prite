@@ -8,7 +8,7 @@
     "l00prite": "bin/cli.js"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.7.0"
   },
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning bin/cli.js serve",

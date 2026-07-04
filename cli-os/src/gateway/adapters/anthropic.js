@@ -11,14 +11,19 @@ const STOP_MAP = {
   tool_use: 'tool_calls', refusal: 'content_filter', pause_turn: 'stop',
 };
 
+function imageBlock(url) {
+  const m = /^data:([^;]+);base64,(.*)$/.exec(url || '');
+  if (m) return { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } };
+  return { type: 'image', source: { type: 'url', url } };
+}
+
 function toAnthropicContent(msg) {
   // OpenAI message content -> Anthropic content blocks.
   if (Array.isArray(msg.content)) {
     return msg.content.map((p) =>
       p.type === 'text' ? { type: 'text', text: p.text } :
-      p.type === 'image_url'
-        ? { type: 'image', source: { type: 'url', url: p.image_url?.url } }
-        : { type: 'text', text: typeof p === 'string' ? p : JSON.stringify(p) });
+      p.type === 'image_url' ? imageBlock(p.image_url?.url) :
+      { type: 'text', text: typeof p === 'string' ? p : JSON.stringify(p) });
   }
   return [{ type: 'text', text: msg.content ?? '' }];
 }
@@ -27,7 +32,14 @@ export function buildRequest({ model, openaiReq, stream }) {
   const systemParts = [];
   const messages = [];
   for (const m of openaiReq.messages || []) {
-    if (m.role === 'system') { systemParts.push(typeof m.content === 'string' ? m.content : toAnthropicContent(m).map((b) => b.text).join('\n')); continue; }
+    if (m.role === 'system') {
+      // System content is text-only in Anthropic; ignore any non-text blocks rather than
+      // emitting "undefined" into the joined string.
+      systemParts.push(typeof m.content === 'string'
+        ? m.content
+        : toAnthropicContent(m).filter((b) => b.type === 'text').map((b) => b.text).join('\n'));
+      continue;
+    }
     if (m.role === 'tool') {
       messages.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: m.tool_call_id, content: String(m.content ?? '') }] });
       continue;
@@ -107,7 +119,7 @@ export function parseFull(json, model) {
 }
 
 // Streaming: fold Anthropic SSE events into OpenAI chunk deltas.
-export function newStreamState(model) {
+export function newStreamState(model, _opts = {}) {
   return { id: cmplId(), model, usage: zeroUsage(), finish: null, toolIndex: -1, blockType: null };
 }
 

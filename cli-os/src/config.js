@@ -7,7 +7,8 @@ import path from 'node:path';
 // Silence only node:sqlite's ExperimentalWarning; re-emit everything else.
 const _origEmit = process.emitWarning;
 process.emitWarning = (warning, ...rest) => {
-  const name = rest[0]?.type || rest[0];
+  // Node may pass the warning name via rest[0] (string or {type}) OR as warning.name on an Error.
+  const name = rest[0]?.type || rest[0] || (warning && typeof warning === 'object' ? warning.name : undefined);
   const msg = typeof warning === 'string' ? warning : warning?.message || '';
   if (name === 'ExperimentalWarning' && /SQLite/i.test(msg)) return;
   return _origEmit.call(process, warning, ...rest);
@@ -18,10 +19,16 @@ const DEFAULTS = {
   port: 8787,
   tls: null, // { certPath, keyPath }
   defaultDailyCapUsd: 10,
+  defaultMaxTokens: 4096, // bounds output when a client omits max_tokens, so reservations hold
   retry: { maxAttempts: 3, baseMs: 250, maxMs: 4000 },
-  memory: { latencyMs: 150, contextTokens: 8000 },
+  memory: { latencyMs: 150, contextTokens: 8000, maxFileBytes: 262144 },
   requestTimeoutMs: 120000,
 };
+
+function finiteOr(v, fallback) {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
 
 function homeDir() {
   return process.env.LOOPRITE_HOME || path.join(os.homedir(), '.l00prite-cli-os');
@@ -42,10 +49,15 @@ export function loadConfig() {
     masterKeyPath: path.join(home, 'master.key'),
     ledgerPath: path.join(home, 'ledger.jsonl'),
     host: process.env.LOOPRITE_HOST || fileCfg.host || DEFAULTS.host,
-    port: Number(process.env.LOOPRITE_PORT || fileCfg.port || DEFAULTS.port),
-    defaultDailyCapUsd: Number(
-      process.env.LOOPRITE_DEFAULT_DAILY_CAP || fileCfg.defaultDailyCapUsd || DEFAULTS.defaultDailyCapUsd,
+    port: Number(process.env.LOOPRITE_PORT || fileCfg.port || DEFAULTS.port) || DEFAULTS.port,
+    // A malformed cap must fail SAFE (fall back to the default), never become NaN — a NaN cap
+    // would make every reserve() comparison false and silently disable the budget.
+    defaultDailyCapUsd: finiteOr(
+      process.env.LOOPRITE_DEFAULT_DAILY_CAP ?? fileCfg.defaultDailyCapUsd, DEFAULTS.defaultDailyCapUsd,
     ),
+    defaultMaxTokens: finiteOr(
+      process.env.LOOPRITE_DEFAULT_MAX_TOKENS ?? fileCfg.defaultMaxTokens, DEFAULTS.defaultMaxTokens,
+    ) || DEFAULTS.defaultMaxTokens,
   };
   if (process.env.LOOPRITE_TLS_CERT && process.env.LOOPRITE_TLS_KEY) {
     cfg.tls = { certPath: process.env.LOOPRITE_TLS_CERT, keyPath: process.env.LOOPRITE_TLS_KEY };
@@ -72,8 +84,13 @@ export function validateForServe(cfg) {
       if (!fs.existsSync(p)) problems.push(`TLS ${k} not found at ${p}`);
     }
   }
-  if (!fs.existsSync(cfg.masterKeyPath)) {
-    problems.push(`Master key missing (${cfg.masterKeyPath}). Run "l00prite init" first.`);
+  const envKeyOk = (() => {
+    const k = process.env.LOOPRITE_MASTER_KEY;
+    if (!k) return false;
+    try { return Buffer.from(k, 'base64').length === 32; } catch { return false; }
+  })();
+  if (!envKeyOk && !fs.existsSync(cfg.masterKeyPath)) {
+    problems.push(`Master key missing. Set LOOPRITE_MASTER_KEY (base64 of 32 bytes) or run "l00prite init" first.`);
   }
   return problems;
 }

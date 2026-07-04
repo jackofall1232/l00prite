@@ -1,9 +1,9 @@
 # l00prite CLI-OS — Architecture (v1 design)
 
 > Branch: `claude/looprite-cli-os-jntwqi` (the brief's conceptual name is `CLI-OS`).
-> Status: **design + module layout for maintainer review.** No implementation code beyond
-> what validates the adapter approach (example provider manifests). Not merged to `main`.
-> Companion docs: [`interface-contract.md`](interface-contract.md),
+> Status: **v1.0.0 implemented and tested.** This document is the design; the runnable Node
+> gateway lives under `cli-os/` (see [`../RELEASE.md`](../RELEASE.md) for shipped state and
+> caveats). Not merged to `main`. Companion docs: [`interface-contract.md`](interface-contract.md),
 > [`provider-adapters.md`](provider-adapters.md), [`routing-rules-v1.md`](routing-rules-v1.md),
 > [`security-model.md`](security-model.md), [`v1-scope.md`](v1-scope.md),
 > [`open-questions.md`](open-questions.md).

@@ -20,6 +20,11 @@ function spendRow(db, project, day) {
 
 // Atomically reserve `amountUsd`. Denies if it would breach the daily cap.
 export function reserve(db, { project, amountUsd, defaultCap }) {
+  // Fail closed on non-finite/negative amounts — they would corrupt spend totals or let a
+  // negative "reservation" bypass the cap.
+  if (!Number.isFinite(amountUsd) || amountUsd < 0) {
+    return { ok: false, reason: 'invalid_amount', requested: amountUsd };
+  }
   const day = utcDay();
   return tx(db, () => {
     const cap = capFor(db, project, defaultCap);
