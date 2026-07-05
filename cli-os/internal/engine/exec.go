@@ -24,7 +24,10 @@ func (e *Engine) callRole(ctx context.Context, run *Run, role string, req map[st
 	if err != nil {
 		return res, err
 	}
-	run.CostThisTurn = res.CostUSD
+	// Accumulate across every turn in this iteration (planner + coder loop + reviewer); the loop
+	// folds this into the run total and resets it at persist time. The gateway meters/commits each
+	// call's real cost independently through the PEP — this aggregate is the run's displayed total.
+	run.CostThisTurn += res.CostUSD
 	_, _ = e.Store.AppendEvent(run.ID, EvModelTurn, map[string]any{
 		"role": role, "provider": res.Provider, "model": res.Model,
 		"cost_usd": res.CostUSD, "cost_unconfirmed": res.Unconfirmed,
