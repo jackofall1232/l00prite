@@ -117,6 +117,38 @@ CREATE TABLE IF NOT EXISTS audit (
   action TEXT NOT NULL,
   detail TEXT
 );
+
+-- L00prite OS run-engine tables (see cli-os/docs/os-architecture.md §2.1). A run is one confirmed
+-- autonomous execution against one registered repo; run_events is the append-only, monotonically
+-- sequenced feed (dashboard live feed + machine-parseable run log); run_approvals holds per-action
+-- permission requests. Additive/idempotent (IF NOT EXISTS), so an existing DB gains them on Open
+-- without a schema_version bump.
+CREATE TABLE IF NOT EXISTS runs (
+  id TEXT PRIMARY KEY, project TEXT NOT NULL, repo TEXT NOT NULL, repo_root TEXT NOT NULL,
+  goal TEXT NOT NULL, objective TEXT NOT NULL,
+  gates TEXT NOT NULL, command_allowlist TEXT NOT NULL,          -- JSON
+  max_iterations INTEGER NOT NULL, approval_timeout_s INTEGER NOT NULL,
+  no_progress_threshold INTEGER NOT NULL,
+  status TEXT NOT NULL, boundary TEXT,
+  current_iteration INTEGER NOT NULL DEFAULT 0,
+  iterations_since_progress INTEGER NOT NULL DEFAULT 0,
+  last_progress_iteration INTEGER,
+  branch TEXT, preflight TEXT, preflight_at TEXT,
+  confirmed_by TEXT, confirmed_at TEXT,
+  cost_usd REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL, started_at TEXT, ended_at TEXT, summary TEXT
+);
+CREATE TABLE IF NOT EXISTS run_events (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL, ts TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_run_events_run ON run_events(run_id, seq);
+CREATE TABLE IF NOT EXISTS run_approvals (
+  id TEXT PRIMARY KEY, run_id TEXT NOT NULL, class TEXT NOT NULL, action TEXT NOT NULL,
+  args TEXT NOT NULL, status TEXT NOT NULL, decided_by TEXT, note TEXT,
+  created_at TEXT NOT NULL, decided_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_run_approvals_run ON run_approvals(run_id, status);
 `
 
 // Querier is satisfied by *sql.DB, *sql.Conn, and *sql.Tx — so a function can run either directly
