@@ -182,8 +182,11 @@ func (e *Engine) runVerification(ctx context.Context, run *Run, f Files, command
 
 // persistIteration is the protocol's "persist before anything else": counters, no-progress
 // telemetry, cost, the engine store, and the repo's heartbeat/state/ledger — all before the next
-// unit begins.
-func (e *Engine) persistIteration(run *Run, f Files, out iterOutcome) {
+// unit begins. Returns an error if any of these durable writes failed; the caller must stop the
+// run rather than advance to the next iteration believing state was recorded when it wasn't —
+// otherwise a disk-full or read-only .l00prite/ silently breaks persist-before-continue and
+// leaves any other agent reading the repo with stale counters.
+func (e *Engine) persistIteration(run *Run, f Files, out iterOutcome) error {
 	now := util.NowISO()
 	if out.progressed {
 		iter := run.CurrentIteration
@@ -192,22 +195,29 @@ func (e *Engine) persistIteration(run *Run, f Files, out iterOutcome) {
 	} else {
 		run.IterationsSinceProgress++
 	}
-	_ = e.Store.SaveIteration(run.ID, run.CurrentIteration, run.IterationsSinceProgress, run.LastProgressIteration, run.CostThisTurn)
+	if err := e.Store.SaveIteration(run.ID, run.CurrentIteration, run.IterationsSinceProgress, run.LastProgressIteration, run.CostThisTurn); err != nil {
+		return fmt.Errorf("engine store: %w", err)
+	}
 	run.CostUSD += run.CostThisTurn
 	run.CostThisTurn = 0
 
 	// Repo heartbeat tick (only the whitelisted counters) + ledger append.
-	snap, _ := f.ReadSnapshot()
+	snap, err := f.ReadSnapshot()
+	if err != nil {
+		return fmt.Errorf("could not read .l00prite memory: %w", err)
+	}
 	if snap.Heartbeat != nil {
 		TickHeartbeat(snap.Heartbeat, run.CurrentIteration, run.IterationsSinceProgress, run.LastProgressIteration, now)
-		_ = f.WriteHeartbeat(snap.Heartbeat)
+		if err := f.WriteHeartbeat(snap.Heartbeat); err != nil {
+			return fmt.Errorf("could not write heartbeat.json: %w", err)
+		}
 	}
 	var verifs []VerificationRecord
 	if run.lastVerification != nil {
 		verifs = []VerificationRecord{*run.lastVerification}
 		run.lastVerification = nil
 	}
-	_ = f.AppendLedger(LedgerEntry{
+	if err := f.AppendLedger(LedgerEntry{
 		Timestamp: now, RunID: run.ID,
 		Goal:            run.Config.Goal,
 		TriggeringEvent: "none",
@@ -219,11 +229,14 @@ func (e *Engine) persistIteration(run *Run, f Files, out iterOutcome) {
 		Confidence:      "recorded by the l00prite OS engine",
 		NextAction:      nextActionFor(out),
 		LockNote:        "held under lease " + run.ID + " (refreshed per iteration)",
-	})
+	}); err != nil {
+		return fmt.Errorf("could not append ledger.md: %w", err)
+	}
 	_, _ = e.Store.AppendEvent(run.ID, EvPersisted, map[string]any{
 		"iteration": run.CurrentIteration, "progressed": out.progressed,
 		"iterations_since_progress": run.IterationsSinceProgress, "cost_usd_total": run.CostUSD,
 	})
+	return nil
 }
 
 func nextActionFor(out iterOutcome) string {

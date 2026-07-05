@@ -95,7 +95,7 @@ func (tb *Toolbox) Definitions() []map[string]any {
 		fnTool("write_file",
 			"Create or overwrite a text file at a repository-relative `path`; parent directories are created. "+
 				"Paths are always repo-relative and stay inside the repository. `.l00prite/` protocol files "+
-				"(heartbeat.json, state.json, lock.json, prompts/**) are engine-owned and are NEVER writable during a "+
+				"(heartbeat.json, state.json, lock.json, constraints.md, prompts/**) are engine-owned and are NEVER writable during a "+
 				"run. A path matching the Autonomous-Edit Denylist is suspended for separate human approval.",
 			objSchema(map[string]any{
 				"path":    map[string]any{"type": "string", "description": "repository-relative path"},
@@ -129,9 +129,11 @@ func (tb *Toolbox) Definitions() []map[string]any {
 
 		fnTool("git_command",
 			"Run a git subcommand in the repository. `args` is the argument vector (e.g. [\"status\",\"--porcelain\"]); "+
-				"args[0] must be a subcommand, never a global flag. status/diff/log/add/commit/show/branch only run "+
-				"without approval; push/merge and history rewrites (rebase/reset/clean/force-push, etc.) require human "+
-				"approval. Paths inside args are repo-relative.",
+				"args[0] must be a subcommand, never a global flag. status/diff/log/add/commit/show run without "+
+				"approval; so does a bare `branch` (list) or `branch <name>` (create one) — any branch flag "+
+				"(-d/-D/-f/-m/-M/--delete/--force/--move, etc.) requires approval since it can delete, rename, or "+
+				"force-move a ref. push/merge and history rewrites (rebase/reset/clean/force-push, etc.) require "+
+				"human approval. Paths inside args are repo-relative.",
 			objSchema(map[string]any{
 				"args": mergeSchema(strArr, map[string]any{"description": "git argument vector; args[0] is the subcommand"}),
 			}, "args")),
@@ -262,10 +264,16 @@ func policyRel(raw string) string {
 }
 
 // protocolProtected reports whether rel (forward-slash, repo-relative) is an engine-owned
-// protocol file that is never writable during a run. Case-sensitive by design.
+// protocol file that is never writable during a run — not gate-then-approvable like a Denylist
+// hit, an unconditional hard-deny. constraints.md carries the Autonomous-Edit Denylist itself
+// and its own doc block calls it "protocol-adjacent and loop-immutable... edit it yourself,
+// before you arm a run": if it were only Denylist-gated (or ungated, since it wouldn't match its
+// own globs), a run could edit constraints.md to remove/loosen entries and then, next iteration,
+// freely edit whatever it just unprotected — defeating the self-modification guard entirely.
+// Case-sensitive by design.
 func protocolProtected(rel string) bool {
 	switch rel {
-	case ".l00prite/heartbeat.json", ".l00prite/state.json", ".l00prite/lock.json":
+	case ".l00prite/heartbeat.json", ".l00prite/state.json", ".l00prite/lock.json", ".l00prite/constraints.md":
 		return true
 	}
 	return rel == ".l00prite/prompts" || strings.HasPrefix(rel, ".l00prite/prompts/")
@@ -463,6 +471,14 @@ func (tb *Toolbox) searchFiles(args map[string]any) ToolOutcome {
 			}
 			return nil
 		}
+		// A symlink is reported as a non-dir entry with its own type (WalkDir already doesn't
+		// descend into a symlinked directory as if it were one). os.ReadFile below follows
+		// symlinks like a normal open(), so without this check a symlink pointing outside Root
+		// would let search_files read arbitrary host files that resolvePath's containment check
+		// (used by read_file/write_file/list_dir) would have rejected.
+		if d.Type()&fs.ModeSymlink != 0 {
+			return nil
+		}
 		info, err := d.Info()
 		if err != nil || info.Size() > searchFileCap {
 			return nil
@@ -559,7 +575,17 @@ func (tb *Toolbox) runCommand(ctx context.Context, args map[string]any, approved
 	return ToolOutcome{Result: formatCmdResult(out, runErr, cctx, cmdOutputCap, timeout)}
 }
 
-// commandAllowed matches a command against the allowlist on whole-token prefixes.
+// shellChainChars are the shell metacharacters that can chain, pipe, redirect, or substitute an
+// extra command onto an allowlisted prefix. A prefix-extended command (one that starts with
+// "<allowlisted-entry> ") is only honored when its APPENDED suffix contains none of them —
+// otherwise "go test ./..." on the allowlist would let a run smuggle
+// "go test ./... ; rm -rf /" straight to the shell, since it too starts with "go test ./... ".
+// An EXACT match against the allowlist is always honored regardless of metacharacters: a human
+// approved that literal string at pre-flight, compound command or not.
+var shellChainChars = regexp.MustCompile("[;&|`$<>\n]")
+
+// commandAllowed matches a command against the allowlist: exactly, or as an allowlisted prefix
+// extended with additional plain arguments (no shell-chaining metacharacters in the extension).
 func (tb *Toolbox) commandAllowed(command string) bool {
 	c := strings.TrimSpace(command)
 	for _, p := range tb.Allowlist {
@@ -567,7 +593,10 @@ func (tb *Toolbox) commandAllowed(command string) bool {
 		if p == "" {
 			continue
 		}
-		if c == p || strings.HasPrefix(c, p+" ") {
+		if c == p {
+			return true
+		}
+		if strings.HasPrefix(c, p+" ") && !shellChainChars.MatchString(c[len(p):]) {
 			return true
 		}
 	}
@@ -609,10 +638,21 @@ func (tb *Toolbox) gitCommand(ctx context.Context, args map[string]any, approved
 			"ERROR: refusing git global flag %q as args[0]; pass a subcommand (status/diff/log/add/commit/show/branch)", sub)}
 	}
 	if !approved {
+		gated := false
 		switch sub {
-		case "status", "diff", "log", "add", "commit", "show", "branch":
+		case "status", "diff", "log", "add", "commit", "show":
 			// runs without approval
+		case "branch":
+			// A bare `branch` (list) or `branch <name>` (create one) touches nothing existing.
+			// Any flag — -d/-D/-f/-m/-M/--delete/--force/--move, etc. — can delete, rename, or
+			// force-move a ref, so it needs the same approval as any other destructive git op.
+			if !gitBranchArgsAreSafe(list[1:]) {
+				gated = true
+			}
 		default:
+			gated = true
+		}
+		if gated {
 			return ToolOutcome{
 				Result: fmt.Sprintf("GATE: git %s requires human approval", sub),
 				Gate: &GateRequest{
@@ -631,6 +671,21 @@ func (tb *Toolbox) gitCommand(ctx context.Context, args map[string]any, approved
 	cmd.Env = os.Environ()
 	out, runErr := cmd.CombinedOutput()
 	return ToolOutcome{Result: formatCmdResult(out, runErr, cctx, gitOutputCap, gitTimeoutSec)}
+}
+
+// gitBranchArgsAreSafe reports whether `git branch <rest...>` only lists (no args) or creates one
+// new branch (a single bare name), the only forms that touch nothing already in the repo. Any
+// flag at all — short or long, combined or not — routes to approval instead of being enumerated,
+// so a new destructive branch flag never has to be added here to stay covered.
+func gitBranchArgsAreSafe(rest []string) bool {
+	switch len(rest) {
+	case 0:
+		return true
+	case 1:
+		return !strings.HasPrefix(rest[0], "-")
+	default:
+		return false
+	}
 }
 
 func classifyGitSub(sub string) string {

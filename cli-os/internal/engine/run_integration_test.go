@@ -278,3 +278,56 @@ func TestReconcileOrphansAfterCrash(t *testing.T) {
 		t.Fatalf("want interrupted, got %s", got.Status)
 	}
 }
+
+// A caller must not be able to decide an approval that belongs to a different run (PR #24
+// review): approval ids are global, so without this check a token could both authorize an
+// action outside its own run and strand the actual waiting run until its timeout.
+func TestDecideRejectsCrossRunApproval(t *testing.T) {
+	caller := &scriptedCaller{
+		planner: []map[string]any{
+			{"action": "unit", "description": "write the env file", "target_paths": []string{".env"}, "verification_command": "true"},
+		},
+		coder: [][]step{
+			{{name: "write_file", args: map[string]any{"path": ".env", "content": "SECRET=x\n"}}},
+		},
+	}
+	e := newEngine(t, caller)
+	root := newRepo(t)
+	run := startRun(t, e, root, "write secrets", func(rc *RunConfig) { rc.ApprovalTimeoutSec = 30 })
+
+	var approvalID string
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		pending, _ := e.Store.PendingApprovals(run.ID)
+		if len(pending) > 0 {
+			approvalID = pending[0].ID
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if approvalID == "" {
+		t.Fatal("expected a pending approval for the denylist-gated write")
+	}
+
+	otherRoot := newRepo(t)
+	other, err := e.Store.CreateRun("proj", otherRoot, RunConfig{RepoID: "r2", Goal: "unrelated", CommandAllowlist: []string{"true"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Decide(other.ID, approvalID, "allow", "attacker", ""); err == nil {
+		t.Fatal("Decide must reject an approval that does not belong to the given run")
+	}
+
+	appr, err := e.Store.GetApproval(approvalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if appr.Status != ApprovalPending {
+		t.Fatalf("a cross-run Decide attempt must not change the real approval's status, got %s", appr.Status)
+	}
+
+	// The owning run can still decide its own approval afterward.
+	if err := e.Decide(run.ID, approvalID, "deny", "owner", ""); err != nil {
+		t.Fatalf("the owning run should be able to decide its own approval: %v", err)
+	}
+}

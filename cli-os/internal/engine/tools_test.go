@@ -333,3 +333,132 @@ func tail(s string, n int) string {
 	}
 	return s[len(s)-n:]
 }
+
+// ---- allowlist shell-chaining regression (PR #24 review) ----
+
+func TestCommandAllowlistRejectsShellChaining(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell")
+	}
+	ctx := context.Background()
+	tb := &Toolbox{Root: t.TempDir(), Allowlist: []string{"echo hi"}}
+
+	// A benign extension with no shell metacharacters still runs without approval.
+	o := tb.Execute(ctx, "run_command", map[string]any{"command": "echo hi there"}, false)
+	if o.Gate != nil {
+		t.Fatalf("plain-argument extension of an allowlisted command should not gate, got %+v", o.Gate)
+	}
+
+	// Smuggling an extra command past the allowlisted prefix must gate, not execute silently.
+	for _, chained := range []string{
+		"echo hi ; touch pwned",
+		"echo hi && touch pwned",
+		"echo hi | tee pwned",
+		"echo hi `touch pwned`",
+		"echo hi $(touch pwned)",
+	} {
+		o := tb.Execute(ctx, "run_command", map[string]any{"command": chained}, false)
+		if o.Gate == nil {
+			t.Fatalf("chained command %q must gate (not bypass the allowlist), got %+v", chained, o)
+		}
+		if _, err := os.Stat(filepath.Join(tb.Root, "pwned")); err == nil {
+			t.Fatalf("chained command %q executed despite gating: pwned file exists", chained)
+		}
+	}
+
+	// An exact match against a compound allowlisted entry is still honored regardless of
+	// metacharacters IN THE APPROVED STRING ITSELF — a human pre-approved that literal command.
+	tb2 := &Toolbox{Root: t.TempDir(), Allowlist: []string{"echo a && echo b"}}
+	o = tb2.Execute(ctx, "run_command", map[string]any{"command": "echo a && echo b"}, false)
+	if o.Gate != nil {
+		t.Fatalf("an exact-match compound allowlist entry should run without gating, got %+v", o.Gate)
+	}
+}
+
+// ---- constraints.md self-modification guard (PR #24 review) ----
+
+func TestConstraintsMdIsProtocolProtected(t *testing.T) {
+	ctx := context.Background()
+	tb := &Toolbox{Root: t.TempDir()}
+
+	// Even approved=true must not write it: the Autonomous-Edit Denylist lives in this file,
+	// so gate-then-approve would let a run loosen its own denylist and then exploit that on the
+	// next iteration.
+	o := tb.Execute(ctx, "write_file", map[string]any{"path": ".l00prite/constraints.md", "content": "tampered"}, true)
+	if o.Gate != nil {
+		t.Fatalf("constraints.md must NOT be gateable, got gate %+v", o.Gate)
+	}
+	if !strings.Contains(o.Result, "DENIED") {
+		t.Fatalf("constraints.md write must be DENIED, got %q", o.Result)
+	}
+	if _, err := os.Stat(filepath.Join(tb.Root, ".l00prite", "constraints.md")); err == nil {
+		t.Fatal("constraints.md was written despite hard-deny")
+	}
+}
+
+// ---- search_files symlink jail escape (PR #24 review) ----
+
+func TestSearchFilesSkipsSymlinkedFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs elevated privileges on Windows")
+	}
+	root := t.TempDir()
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "secret.txt")
+	writeFileRaw(t, secret, "needle-outside-the-repo\n")
+
+	if err := os.Symlink(secret, filepath.Join(root, "linked.txt")); err != nil {
+		t.Skipf("could not create symlink: %v", err)
+	}
+
+	tb := &Toolbox{Root: root}
+	o := tb.Execute(context.Background(), "search_files", map[string]any{"query": "needle-outside-the-repo"}, false)
+	if strings.Contains(o.Result, "needle-outside-the-repo") {
+		t.Fatalf("search_files followed a symlink outside the repo jail, got %q", o.Result)
+	}
+}
+
+// ---- destructive git branch gating (PR #24 review) ----
+
+func TestGitBranchDestructiveFlagsGate(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	writeFileRaw(t, filepath.Join(dir, "f.txt"), "x")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-q", "-m", "init")
+
+	tb := &Toolbox{Root: dir}
+	ctx := context.Background()
+
+	// A bare listing and a plain single-name create are both safe (no existing ref touched).
+	for _, args := range [][]string{{"branch"}, {"branch", "feature-x"}} {
+		o := tb.Execute(ctx, "git_command", map[string]any{"args": toAnySlice(args)}, false)
+		if o.Gate != nil {
+			t.Fatalf("git %v should not gate, got %+v", args, o.Gate)
+		}
+	}
+
+	// Any flag on branch — delete, force-move, etc. — can destroy or rewrite a ref, so it must gate.
+	for _, args := range [][]string{
+		{"branch", "-D", "feature-x"},
+		{"branch", "-d", "feature-x"},
+		{"branch", "-f", "main", "HEAD"},
+		{"branch", "-m", "main", "renamed"},
+	} {
+		o := tb.Execute(ctx, "git_command", map[string]any{"args": toAnySlice(args)}, false)
+		if o.Gate == nil {
+			t.Fatalf("git %v must gate as destructive, got %+v", args, o)
+		}
+		if o.Gate.Class != GateDestructive {
+			t.Fatalf("git %v gate class should be %s, got %s", args, GateDestructive, o.Gate.Class)
+		}
+	}
+}
+
+func toAnySlice(ss []string) []any {
+	out := make([]any, len(ss))
+	for i, s := range ss {
+		out[i] = s
+	}
+	return out
+}

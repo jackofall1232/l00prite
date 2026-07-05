@@ -172,8 +172,20 @@ func (e *Engine) BuildPreflight(run *Run) (*Preflight, error) {
 	needsBackfill := snap.Heartbeat != nil && dig(snap.Heartbeat, "execution") != nil &&
 		dig(snap.Heartbeat, "execution", "iterations_since_progress") == nil
 	if staleArmed || needsMigration || needsBackfill {
-		if _, prior, lerr := f.AcquireLock(run.ID, "execute-loop pre-flight recovery/migration (l00prite OS engine)", 300); lerr != nil {
-			pf.Blockers = append(pf.Blockers, "could not acquire the .l00prite lock for recovery: "+lerr.Error())
+		// If we already hold this exact lease (re-pre-flighting the SAME run — e.g. after a
+		// crash-and-restart reconciliation, well within its own TTL — avail is "mine"),
+		// AcquireLock correctly refuses to re-acquire a lock its caller already owns; refresh
+		// it instead. Anything else (free/stale) goes through Acquire as before, which also
+		// yields `prior` for the stale-reclamation note below.
+		var prior *LockInfo
+		var lerr error
+		if avail == "mine" {
+			lerr = f.RefreshLock(run.ID, 300)
+		} else {
+			_, prior, lerr = f.AcquireLock(run.ID, "execute-loop pre-flight recovery/migration (l00prite OS engine)", 300)
+		}
+		if lerr != nil {
+			pf.Blockers = append(pf.Blockers, "could not acquire/refresh the .l00prite lock for recovery: "+lerr.Error())
 		} else {
 			var did []string
 			if prior != nil && (prior.Status == "expired" || prior.Status == "active") {

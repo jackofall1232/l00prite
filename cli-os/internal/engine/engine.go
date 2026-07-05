@@ -261,7 +261,13 @@ func (e *Engine) loop(ctx context.Context, run *Run, h *runHandle) {
 		out := e.iterate(ctx, run, f)
 
 		// Persist before anything else (iteration rule 5): counters, telemetry, ledger, repo files.
-		e.persistIteration(run, f, out)
+		// A failure here means the iteration's outcome was never durably recorded — continuing
+		// (even to report the boundary iterate() computed) would advance the run past state
+		// nothing else can see, so it stops and escalates instead.
+		if err := e.persistIteration(run, f, out); err != nil {
+			e.exitRun(run, f, BoundaryHumanReview, "failed to persist iteration "+fmt.Sprint(run.CurrentIteration)+": "+err.Error(), StatusStopped)
+			return
+		}
 
 		if out.boundary != "" {
 			status := StatusStopped
@@ -380,8 +386,16 @@ func (e *Engine) iterate(ctx context.Context, run *Run, f Files) iterOutcome {
 		}
 	}
 
-	// Commit the unit on the run branch (a local commit; pushing is a gated action).
-	if hash, cerr := CommitUnit(run.RepoRoot, "l00prite-os: "+truncate(sel.Description, 72)); cerr == nil && hash != "" {
+	// Commit the unit on the run branch (a local commit; pushing is a gated action). A commit
+	// FAILURE (no author identity configured, a hook rejection, etc.) is not the same as
+	// "nothing to commit" (hash=="", cerr==nil, a legitimate no-op for a docs-only/investigation
+	// unit) — it means real changes are sitting uncommitted with no record on the run branch, so
+	// it must stop for a human rather than being reported as a successfully progressed unit.
+	hash, cerr := CommitUnit(run.RepoRoot, "l00prite-os: "+truncate(sel.Description, 72))
+	if cerr != nil {
+		return iterOutcome{boundary: BoundaryHumanReview, summary: fmt.Sprintf("unit %q finished but committing its changes failed: %s", sel.Description, cerr.Error())}
+	}
+	if hash != "" {
 		_, _ = e.Store.AppendEvent(run.ID, EvStatus, map[string]any{"committed": hash[:min(len(hash), 12)]})
 	}
 	run.lastOutcome = "completed unit: " + sel.Description
