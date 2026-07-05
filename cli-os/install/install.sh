@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # One-command install for a local (non-Docker) run. Builds the single static Go binary, initializes
-# the data dir, and prints the next steps.
+# the data dir, and prints the next steps. On Windows use install/install.ps1 (same flow, installs
+# to %LOCALAPPDATA%\l00prite\bin). Prebuilt static binaries for Linux/macOS/Windows are produced
+# by scripts/dist.sh — releases come from it; there is no hosted download service.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if ! command -v go >/dev/null 2>&1; then
   echo "l00prite CLI-OS is built from Go source and needs the Go toolchain (>= 1.24)." >&2
-  echo "Install Go from https://go.dev/dl and re-run, or use the Docker image (docker compose up)." >&2
+  echo "Install Go from https://go.dev/dl and re-run, or use the Docker image (docker compose up)," >&2
+  echo "or use a prebuilt binary produced by scripts/dist.sh (Linux/macOS/Windows)." >&2
   exit 1
 fi
 
