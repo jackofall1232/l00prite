@@ -7,14 +7,20 @@
 //   - The clone destination is ALWAYS inside <data home>/workspaces/<repo id>, never a
 //     caller-supplied path, so a clone can't write outside the managed area.
 //   - Only https:// and ssh (git@host:...) URLs are accepted; file://, ext::, and other
-//     git transports that can execute local commands are rejected.
+//     git transports that can execute local commands are rejected. An https URL carrying
+//     embedded userinfo (a credential) is also rejected — it would otherwise be echoed back
+//     in this endpoint's response.
 //   - Same project-scope rule as /v1/repos: the repo lands in the acting token's project.
-//   - git runs with credential prompting disabled so a private URL fails fast instead of
-//     hanging the request waiting for a password.
+//   - git runs fully non-interactively, cross-platform: GIT_TERMINAL_PROMPT=0 disables git's
+//     own https credential prompt, and GIT_SSH_COMMAND forces ssh into BatchMode (no
+//     password/passphrase prompt) with a short connect timeout, so an unreachable or
+//     credential-requiring URL fails fast instead of hanging the request on a TTY prompt that
+//     nothing here can ever answer.
 package gateway
 
 import (
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,7 +42,20 @@ func acceptableGitURL(u string) bool {
 	if strings.HasPrefix(u, "-") { // never let the URL look like a git flag
 		return false
 	}
-	return httpsGitURL.MatchString(u) || sshGitURL.MatchString(u)
+	if !httpsGitURL.MatchString(u) && !sshGitURL.MatchString(u) {
+		return false
+	}
+	if strings.HasPrefix(u, "https://") {
+		// Reject a credential embedded in the URL (https://user:token@host/...): the URL is
+		// echoed back verbatim in this endpoint's response ("cloned_from") and could otherwise
+		// leak a token into client-side logs or storage. Private repos should use SSH (already
+		// supported below) or a credential helper configured on the gateway host.
+		parsed, err := url.Parse(u)
+		if err != nil || parsed.User != nil {
+			return false
+		}
+	}
+	return true
 }
 
 type repoCloneReq struct {
@@ -93,9 +112,15 @@ func (app *App) HandleRepoClone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// git clone with prompting disabled (a private URL fails fast, never hangs).
+	// git clone with prompting disabled cross-platform (a private/unreachable URL fails fast,
+	// never hangs waiting on a TTY nothing here can answer). GIT_ASKPASS=/bin/true would be a
+	// no-op-or-worse on Windows and doesn't cover ssh anyway; GIT_TERMINAL_PROMPT handles https,
+	// GIT_SSH_COMMAND's BatchMode handles ssh passphrase/host-key prompts on every platform.
 	cmd := exec.CommandContext(r.Context(), "git", "clone", "--depth", "1", "--", url, dest)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/true")
+	cmd.Env = append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_SSH_COMMAND=ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15",
+	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		_ = os.RemoveAll(dest) // don't leave a half-clone behind

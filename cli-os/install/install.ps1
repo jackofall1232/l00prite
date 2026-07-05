@@ -21,8 +21,10 @@ $binDir = Join-Path $env:LOCALAPPDATA 'l00prite\bin'
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 Copy-Item -Force l00prite.exe (Join-Path $binDir 'l00prite.exe')
 
-# Add the bin dir to the USER PATH once (never duplicate the entry).
+# Add the bin dir to the USER PATH once (never duplicate the entry). A brand-new Windows user
+# account can have no User Path entry at all, which GetEnvironmentVariable returns as $null.
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if ($null -eq $userPath) { $userPath = '' }
 if (-not ($userPath -split ';' | Where-Object { $_ -eq $binDir })) {
   [Environment]::SetEnvironmentVariable('Path', ($userPath.TrimEnd(';') + ';' + $binDir), 'User')
   Write-Host "Added $binDir to your user PATH — open a NEW terminal for it to take effect."

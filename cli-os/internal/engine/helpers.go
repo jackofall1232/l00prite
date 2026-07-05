@@ -31,18 +31,31 @@ func asStrEng(v any) string {
 	return ""
 }
 
-// parseArgs accepts a tool-call "arguments" value that may be a JSON string or an already-decoded
-// object (providers differ), returning a map (empty on anything unparseable — never nil).
-func parseArgs(raw string) map[string]any {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+// parseArgs accepts a tool-call "arguments" value that may be a JSON-encoded string (the OpenAI
+// spec shape, and what every adapter this repo ships produces) or an already-decoded object (some
+// non-compliant openai-compat upstreams do this) — returning a map (empty on anything
+// unparseable — never nil). Coercing both shapes here, rather than at the one call site, means a
+// non-string "arguments" value can never silently degrade into an empty-args tool call.
+func parseArgs(raw any) map[string]any {
+	switch v := raw.(type) {
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return map[string]any{}
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(v), &m); err != nil || m == nil {
+			return map[string]any{}
+		}
+		return m
+	case map[string]any:
+		if v == nil {
+			return map[string]any{}
+		}
+		return v
+	default:
 		return map[string]any{}
 	}
-	var m map[string]any
-	if err := json.Unmarshal([]byte(raw), &m); err != nil || m == nil {
-		return map[string]any{}
-	}
-	return m
 }
 
 // parseExitCode reads the "exit_code: N" line the Toolbox's run_command prepends to its result.

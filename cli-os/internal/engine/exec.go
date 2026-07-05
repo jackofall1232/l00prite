@@ -72,7 +72,7 @@ func (e *Engine) runCoder(ctx context.Context, run *Run, f Files, tb *Toolbox, p
 			id := asStrEng(tc["id"])
 			fn := asMapEng(tc["function"])
 			name := asStrEng(fn["name"])
-			args := parseArgs(asStrEng(fn["arguments"]))
+			args := parseArgs(fn["arguments"])
 
 			switch name {
 			case "unit_done":
@@ -132,6 +132,11 @@ func (e *Engine) awaitApproval(ctx context.Context, run *Run, gate GateRequest) 
 	e.mu.Lock()
 	h := e.active[run.ID]
 	e.mu.Unlock()
+	if h == nil {
+		// The run is no longer registered as active (stopped/removed out from under us) —
+		// there is nowhere to deliver a decision, so stop rather than block on a nil channel.
+		return false, BoundaryStopSignal
+	}
 
 	timeout := time.Duration(run.Config.ApprovalTimeoutSec) * time.Second
 	timer := time.NewTimer(timeout)

@@ -23,7 +23,9 @@ import (
 
 // Version is the single source of truth for the reported server version (healthz + dashboard).
 // It is a var (not a const) so a release build can override it via
-//   -ldflags "-X 'github.com/jackofall1232/l00prite/cli-os/internal/gateway.Version=<version>'"
+//
+//	-ldflags "-X 'github.com/jackofall1232/l00prite/cli-os/internal/gateway.Version=<version>'"
+//
 // A plain `go build` / `go test` keeps this in-source default.
 var Version = "1.0.0"
 

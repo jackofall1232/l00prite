@@ -86,9 +86,15 @@ func runEngineServer(t *testing.T) (*httptest.Server, string, string) {
 			t.Fatalf("git %v: %v: %s", a, err, out)
 		}
 	}
-	os.WriteFile(filepath.Join(repo, "README.md"), []byte("# r\n"), 0o644)
-	exec.Command("git", "-C", repo, "add", "-A").Run()
-	exec.Command("git", "-C", repo, "commit", "-q", "-m", "init").Run()
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("# r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", repo, "add", "-A").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v: %s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", repo, "commit", "-q", "-m", "init").CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v: %s", err, out)
+	}
 	if _, err := db.Exec(`INSERT INTO repos(id,root,project,created_at) VALUES('r1',?,?,?)`, repo, "ops", time.Now().UTC().Format(time.RFC3339)); err != nil {
 		t.Fatal(err)
 	}

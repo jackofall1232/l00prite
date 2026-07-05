@@ -471,6 +471,9 @@ func (tb *Toolbox) searchFiles(args map[string]any) ToolOutcome {
 		if err != nil {
 			return nil
 		}
+		if !utf8.Valid(data) {
+			return nil // binary file (image, archive, compiled artifact, ...) — never search/return raw bytes to the model
+		}
 		rel, err := filepath.Rel(tb.Root, p)
 		if err != nil {
 			return nil

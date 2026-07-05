@@ -67,8 +67,14 @@ func (e *Engine) StartRun(ctx context.Context, runID, confirmedBy, confirm strin
 	if run.Status != StatusReady || run.PreflightJSON == "" {
 		return fmt.Errorf("%w: run is %q; rebuild the pre-flight (it must be ready and blocker-free) before Start", ErrBadState, run.Status)
 	}
-	// One active run per repo (the runtime realization of single-writer memory).
-	if other, _ := e.Store.ActiveRunForRepo(run.Project, run.Config.RepoID); other != nil && other.ID != run.ID {
+	// One active run per repo (the runtime realization of single-writer memory). A lookup
+	// failure must not be treated as "no active run" — that would let two runs race the same
+	// repo — so it fails closed as a plain error rather than falling through to arm.
+	other, err := e.Store.ActiveRunForRepo(run.Project, run.Config.RepoID)
+	if err != nil {
+		return fmt.Errorf("could not check for an active run against this repo: %w", err)
+	}
+	if other != nil && other.ID != run.ID {
 		return fmt.Errorf("%w: run %s is already active against repo %q", ErrBadState, other.ID, run.Config.RepoID)
 	}
 
@@ -93,8 +99,14 @@ func (e *Engine) StartRun(ctx context.Context, runID, confirmedBy, confirm strin
 		return fmt.Errorf("%w: %v", ErrBadState, err)
 	}
 
-	// Arm the repo files exactly per step 7, then the engine store.
-	snap, _ := f.ReadSnapshot()
+	// Arm the repo files exactly per step 7, then the engine store. A snapshot read failure
+	// (e.g. a corrupt heartbeat.json/state.json) must stop here — treating it as "absent" would
+	// silently clobber whatever the human needs to see, instead of failing closed as designed.
+	snap, err := f.ReadSnapshot()
+	if err != nil {
+		_ = f.ReleaseLock(run.ID)
+		return fmt.Errorf("could not read .l00prite memory to arm the run: %w", err)
+	}
 	hb := snap.Heartbeat
 	if hb == nil {
 		hb = map[string]any{}
@@ -158,7 +170,18 @@ func (e *Engine) Stop(runID string) error {
 }
 
 // Decide records an approval decision and, if the run is waiting on it, releases the loop.
+// The approval must belong to runID: without this check a caller could decide an approval
+// belonging to a different run (even a different project, since approval ids are global),
+// which would both authorize an action outside the caller's own run and leave the actual
+// waiting run's approval undecided until it times out.
 func (e *Engine) Decide(runID, approvalID, decision, decidedBy, note string) error {
+	existing, err := e.Store.GetApproval(approvalID)
+	if err != nil {
+		return err
+	}
+	if existing == nil || existing.RunID != runID {
+		return fmt.Errorf("%w: no such approval on this run", ErrNotFound)
+	}
 	appr, err := e.Store.DecideApproval(approvalID, decision, decidedBy, note)
 	if err != nil {
 		return err
@@ -212,15 +235,25 @@ func (e *Engine) loop(ctx context.Context, run *Run, h *runHandle) {
 		}
 
 		// Refresh the lease; a foreign lease appearing is lock_lease_conflict — write nothing.
+		// A read failure must NOT be treated as "no foreign lock": that would let the loop keep
+		// writing without a verified lease, exactly the mutual-exclusion violation the lock
+		// exists to prevent — so it stops and asks for review instead of guessing.
 		lock, err := f.ReadLock()
-		if err == nil && LockAvailability(lock, run.ID) == "foreign" {
+		if err != nil {
+			e.exitRun(run, f, BoundaryHumanReview, "could not read .l00prite/lock.json: "+err.Error(), StatusStopped)
+			return
+		}
+		if LockAvailability(lock, run.ID) == "foreign" {
 			_, _ = e.Store.AppendEvent(run.ID, EvBoundary, map[string]any{
 				"boundary": BoundaryLockConflict, "owner": lock.OwnerAgent, "note": "wrote nothing to protected memory",
 			})
 			e.Store.FinishRun(run.ID, StatusStopped, BoundaryLockConflict, "another agent acquired the .l00prite lock mid-run; stopped without writing")
 			return
 		}
-		_ = f.RefreshLock(run.ID, e.LeaseTTLSec)
+		if err := f.RefreshLock(run.ID, e.LeaseTTLSec); err != nil {
+			e.exitRun(run, f, BoundaryHumanReview, "could not refresh the .l00prite lease: "+err.Error(), StatusStopped)
+			return
+		}
 
 		run.CurrentIteration++
 		_, _ = e.Store.AppendEvent(run.ID, EvIteration, map[string]any{"iteration": run.CurrentIteration, "max": run.Config.MaxIterations})
@@ -255,7 +288,12 @@ func (e *Engine) iterate(ctx context.Context, run *Run, f Files) iterOutcome {
 	ictx, cancel := context.WithTimeout(ctx, e.IterationTimeout)
 	defer cancel()
 
-	snap, _ := f.ReadSnapshot()
+	// A snapshot read failure (corrupt/malformed heartbeat.json or state.json) must stop the
+	// run rather than plan against stale or half-populated memory.
+	snap, err := f.ReadSnapshot()
+	if err != nil {
+		return iterOutcome{boundary: BoundaryHumanReview, summary: "could not read .l00prite memory: " + err.Error()}
+	}
 	plan, err := PlanForObjective(run.Config.Objective)
 	if err != nil {
 		return iterOutcome{boundary: BoundaryAmbiguous, summary: err.Error()}
