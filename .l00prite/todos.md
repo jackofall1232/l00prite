@@ -1,5 +1,34 @@
 # Prioritized TODOs
 
+## Active — L00prite OS build pass (maintainer brief, branch `OS-APK`, 2026-07-05)
+
+Maintainer brief: evolve the repo toward "L00prite OS" — an installable, vendor-neutral
+autonomous software-engineering application (add keys → connect repo → prompt → Start).
+Build on `cli-os/`; do not discard existing work; zero edits to the two review-gated files;
+maintainer opens the PR. Units, in order:
+
+- [ ] `cli-os/docs/os-architecture.md` — L00prite OS design: run engine that mechanically
+      embodies `execute-loop.md` (pre-flight display, Start-click = in-session confirmation,
+      one-unit iterations, nine run boundaries in code, Autonomous-Edit Denylist enforcement,
+      resumable exits), role-aware multi-provider team assembly over the existing
+      auto-routing, configurable approval gates, packaging plan, multi-version roadmap.
+- [ ] Capability/routing v2 — role task-rank maps in config (opinions) + role profiles
+      (`plan`/`code`/`review`/`summarize`) + run objectives (cost/speed/quality/privacy/
+      balanced) resolving deterministically through the existing auto-router. No ML.
+- [ ] `internal/engine/` — run aggregate + SQLite persistence, target-repo `.l00prite/`
+      persistence per the protocol (scaffold if missing, lock lease, heartbeat arming,
+      ledger append, stale-run recovery), iteration loop (plan → execute tool-loop via
+      `runTurn` → verify → persist → boundary check), engine tool registry (repo-jailed fs,
+      git, allowlisted commands), approval-gate queue.
+- [ ] `/v1/runs*` API — create/preflight/start(confirm)/status/events/approve/stop, same
+      auth + flat-action conventions as `/v1/providers*`.
+- [ ] Dashboard Runs view — create wizard, pre-flight + Start, live run view, approvals
+      inbox, stop; GitHub-clone option on repo connect.
+- [ ] Packaging — pure-Go cross-compile dist matrix (win/mac/linux), `install.ps1`,
+      extend `install.sh`, INSTALL/GETTING_STARTED updates.
+- [ ] Tests — engine against the mock adapter (boundaries, gates, denylist, resume),
+      `go test ./...`, validator zero FAIL, doctor HEALTHY.
+
 ## Next
 - [ ] Maintainer decisions on l00prite CLI-OS design (branch `claude/looprite-cli-os-jntwqi`,
       `cli-os/`): answer `cli-os/docs/open-questions.md` — esp. Q1 (which providers in v1),
