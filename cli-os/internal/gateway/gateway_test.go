@@ -209,6 +209,127 @@ func TestConfigQualityOverride(t *testing.T) {
 	}
 }
 
+func TestAutoRoleRankMapOverridesQuality(t *testing.T) {
+	// The built-in "review" profile ranks by roleRanks["review"]; a role rank above the qualityRanks
+	// winner (opus 96) must win, and the decision records the rank source.
+	cfg := cfgWith(t, map[string]any{"roleRanks": map[string]any{"review": map[string]any{"zhipu/glm-5.2": 99}}})
+	r, err := Pick(testProviders, map[string]string{}, mk("auto:review", nil), "", cfg)
+	if err != nil {
+		t.Fatalf("pick: %v", err)
+	}
+	if r.Provider+"/"+r.Model != "zhipu/glm-5.2" {
+		t.Fatalf("roleRanks.review (99) must outrank the qualityRanks winner opus (96), got %s/%s", r.Provider, r.Model)
+	}
+	if r.Decision["rank_source"] != "roleRanks.review" {
+		t.Fatalf("rank_source want roleRanks.review, got %v", r.Decision["rank_source"])
+	}
+}
+
+func TestAutoRoleRankMapFallsBackPerModel(t *testing.T) {
+	// glm-5v-turbo is ranked high ONLY in qualityRanks and is absent from the review role map; a
+	// different model (opus) sits in the role map at a lower rank. The absent model keeps its
+	// qualityRanks value and still wins — per-model fallback, not a wholesale map swap.
+	cfg := cfgWith(t, map[string]any{
+		"qualityRanks": map[string]any{"zhipu/glm-5v-turbo": 100},
+		"roleRanks":    map[string]any{"review": map[string]any{"anthropic/claude-opus-4-8": 60}},
+	})
+	r, err := Pick(testProviders, map[string]string{}, mk("auto:review", nil), "", cfg)
+	if err != nil {
+		t.Fatalf("pick: %v", err)
+	}
+	if r.Provider+"/"+r.Model != "zhipu/glm-5v-turbo" {
+		t.Fatalf("a model absent from the role map must keep its qualityRanks rank (100) and win, got %s/%s", r.Provider, r.Model)
+	}
+	if r.Decision["rank_source"] != "roleRanks.review" {
+		t.Fatalf("rank_source want roleRanks.review, got %v", r.Decision["rank_source"])
+	}
+}
+
+func TestAutoProviderRestriction(t *testing.T) {
+	restrictReason := `profile restricts providers to zhipu; "anthropic" is not allowed`
+	cfg := cfgWith(t, map[string]any{"profiles": map[string]any{
+		"onlyzhipu": map[string]any{"preference": "quality", "providers": []any{"zhipu"}},
+	}})
+
+	// A capable model exists within the restriction: anthropic is rejected with the exact reason,
+	// the winner is within zhipu, and the decision surfaces the restriction.
+	r, err := Pick(testProviders, map[string]string{}, mk("auto:onlyzhipu", nil), "", cfg)
+	if err != nil {
+		t.Fatalf("pick: %v", err)
+	}
+	if r.Provider != "zhipu" {
+		t.Fatalf("restricted profile must pick within zhipu, got %s", r.Provider)
+	}
+	foundReason := false
+	for _, x := range asArr(r.Decision["rejected"]) {
+		xm := asMap(x)
+		if asStr(xm["target"]) == "anthropic/claude-opus-4-8" {
+			for _, reason := range asArr(xm["reasons"]) {
+				if asStr(reason) == restrictReason {
+					foundReason = true
+				}
+			}
+		}
+	}
+	if !foundReason {
+		t.Fatalf("anthropic must be rejected with the exact provider-restriction reason")
+	}
+	if pr, ok := r.Decision["provider_restriction"].([]string); !ok || len(pr) != 1 || pr[0] != "zhipu" {
+		t.Fatalf("provider_restriction must list [zhipu], got %v", r.Decision["provider_restriction"])
+	}
+
+	// No capable model within the restriction (only anthropic enabled) -> no_capable_model 400 with the
+	// restriction rejection listed.
+	_, err = Pick([]ProviderInfo{{Name: "anthropic", Enabled: true, IsDefault: true}}, map[string]string{}, mk("auto:onlyzhipu", nil), "", cfg)
+	e := apierr.As(err)
+	if e == nil || e.Status != 400 || e.Code != "no_capable_model" {
+		t.Fatalf("want 400 no_capable_model, got %v", err)
+	}
+	listed := false
+	for _, x := range asArr(e.Decision["rejected"]) {
+		for _, reason := range asArr(asMap(x)["reasons"]) {
+			if asStr(reason) == restrictReason {
+				listed = true
+			}
+		}
+	}
+	if !listed {
+		t.Fatalf("the provider-restriction rejection must be listed on the no_capable_model error")
+	}
+}
+
+func TestAutoCodeProfileRequiresTools(t *testing.T) {
+	// The built-in "code" profile requires tools; a model whose manifest lacks tools:true is rejected
+	// even when the request itself carries no tools.
+	cfg := cfgWith(t, nil)
+	profile, err := resolveProfile("code", cfg.Routing)
+	if err != nil {
+		t.Fatalf("resolve code profile: %v", err)
+	}
+	if profile.Preference != "balanced" || len(profile.Require) != 1 || profile.Require[0] != "tools" {
+		t.Fatalf("built-in code profile must be balanced + require tools, got %+v", profile)
+	}
+	tooled := adapters.Candidate{Provider: "p", Model: "hastools", Capabilities: map[string]any{"tools": true}}
+	toolless := adapters.Candidate{Provider: "p", Model: "notools", Capabilities: map[string]any{"tools": false}}
+	capable, rejected := filterByCapability([]adapters.Candidate{tooled, toolless}, Requirements{}, profile)
+	if len(capable) != 1 || capable[0].Model != "hastools" {
+		t.Fatalf("only the tools-capable model must survive the code profile, got %+v", capable)
+	}
+	found := false
+	for _, rj := range rejected {
+		if rj.Target == "p/notools" {
+			for _, reason := range rj.Reasons {
+				if strings.Contains(reason, `profile requires "tools"`) {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("the code profile must reject a model lacking tools:true")
+	}
+}
+
 func TestCapabilityFilterDropsNonVision(t *testing.T) {
 	cfg := cfgWith(t, nil)
 	req := map[string]any{"model": "auto:cheap", "messages": []any{map[string]any{"role": "user", "content": []any{

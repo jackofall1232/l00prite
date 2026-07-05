@@ -117,6 +117,8 @@ type profileResolved struct {
 	Name       string
 	Preference string
 	Require    []string
+	RankMap    string
+	Providers  []string
 }
 
 func resolveProfile(profileName string, routing config.Routing) (profileResolved, error) {
@@ -157,7 +159,11 @@ func resolveProfile(profileName string, routing config.Routing) (profileResolved
 	if require == nil {
 		require = []string{}
 	}
-	return profileResolved{Name: name, Preference: preference, Require: require}, nil
+	providers := p.Providers
+	if providers == nil {
+		providers = []string{}
+	}
+	return profileResolved{Name: name, Preference: preference, Require: require, RankMap: p.RankMap, Providers: providers}, nil
 }
 
 func sortedKeys(m map[string]config.Profile) []string {
@@ -234,6 +240,9 @@ func filterByCapability(cand []adapters.Candidate, req Requirements, profile pro
 			if !capStrictTrue(caps, r) {
 				reasons = append(reasons, fmt.Sprintf(`profile requires "%s"; model lacks it`, r))
 			}
+		}
+		if len(profile.Providers) > 0 && !contains(profile.Providers, c.Provider) {
+			reasons = append(reasons, fmt.Sprintf(`profile restricts providers to %s; "%s" is not allowed`, strings.Join(profile.Providers, "+"), c.Provider))
 		}
 		contextUnverified := false
 		if c.Context != nil {
@@ -481,7 +490,24 @@ func selectAuto(providers []ProviderInfo, routing config.Routing, req map[string
 		pool = priced
 	}
 
-	scoredList := scoreCandidates(pool, profile.Preference, reqs, routing.QualityRanks)
+	ranks := routing.QualityRanks
+	rankSource := "qualityRanks"
+	if profile.RankMap != "" {
+		if rm := routing.RoleRanks[profile.RankMap]; len(rm) > 0 {
+			// per-model fallback: a model absent from the role map falls back to its qualityRanks value, then neutral
+			merged := make(map[string]int, len(routing.QualityRanks)+len(rm))
+			for k, v := range routing.QualityRanks {
+				merged[k] = v
+			}
+			for k, v := range rm {
+				merged[k] = v
+			}
+			ranks = merged
+			rankSource = "roleRanks." + profile.RankMap
+		}
+	}
+
+	scoredList := scoreCandidates(pool, profile.Preference, reqs, ranks)
 	winner := scoredList[0]
 
 	candidates := make([]any, 0, len(scoredList))
@@ -507,11 +533,15 @@ func selectAuto(providers []ProviderInfo, routing config.Routing, req map[string
 		"chosen":       key(winner.Candidate),
 		"profile":      profile.Name,
 		"preference":   profile.Preference,
+		"rank_source":  rankSource,
 		"requirements": reqs,
 		"reason":       fmt.Sprintf("auto:%s — %s", profile.Name, reasonFor(winner, profile.Preference)),
 		"candidates":   candidates,
 		"alternatives": alternatives,
 		"rejected":     rejectedToAny(rejected),
+	}
+	if len(profile.Providers) > 0 {
+		decision["provider_restriction"] = profile.Providers
 	}
 	return RouteResult{Provider: winner.Provider, Model: winner.Model, Decision: decision}, nil
 }
