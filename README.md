@@ -25,6 +25,11 @@
 > Claude can plan. Codex can execute. Gemini can verify, respond to review comments, and update the ledger before stopping — and a future agent can resume all of it from files.
 
 # l00prite
+The operating system for AI software engineering.
+Connect every major AI coding agent.
+Give them shared memory.
+Route work to the models that do it best.
+Resume any project from where the last agent stopped.
 
 **An operating system for autonomous software engineering — persistent loop memory and a
 deterministic execution protocol for AI coding agents.**
