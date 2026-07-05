@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
   "project_name": "l00prite",
-  "current_goal": "L00prite OS build pass (branch OS-APK): evolve CLI-OS into the installable autonomous engineering OS — run engine mechanically embodying execute-loop.md (pre-flight/Start gate, iteration protocol, nine boundaries, denylist enforcement, approval gates), role-aware multi-provider routing over capability manifests, Runs dashboard, GitHub clone connect, cross-platform packaging",
-  "current_phase": "in_progress",
-  "active_agent": "claude",
+  "current_goal": "L00prite OS build pass (branch OS-APK): run engine mechanically embodying execute-loop.md, role-aware routing, /v1/runs* API, clone connect, cross-platform packaging — engine/API/routing/packaging complete and tested; dashboard Runs view queued as the next unit",
+  "current_phase": "in_review",
+  "active_agent": null,
   "last_agent": "claude",
-  "last_updated": "2026-07-05T13:47:33Z",
-  "status": "in_progress",
+  "last_updated": "2026-07-05T19:10:34Z",
+  "status": "awaiting_review",
   "blocked": false,
   "blocker_reason": null,
   "active_event_id": null,
@@ -16,5 +16,5 @@
   "ci_status": "unknown",
   "execution_active": false,
   "execution_stop_reason": null,
-  "next_recommended_action": "complete the OS-APK build pass units in order (design doc, capability/routing v2, run engine, run API, dashboard Runs view, packaging, tests); maintainer opens the PR when pushed"
+  "next_recommended_action": "maintainer reviews the OS-APK pull request; next pass starts with the dashboard Runs view (todos.md Active section)"
 }
