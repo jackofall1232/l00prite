@@ -515,3 +515,110 @@ Append one entry per agent run. Do not overwrite prior runs.
 - **Do-not-retry notes:** none.
 - **Lock:** lock-20260705-134733 (session start) and lock-20260705-191034 (session end)
   acquired/released for the protected-path writes; no stale reclamation needed.
+
+### Run 2026-07-05T19:16:00Z to 2026-07-05T20:15:00Z — Claude (Fable 5), PR #24 review-response round
+- **Goal:** Address automated review findings on PR #24 (jackofall1232/l00prite#24) from three
+  bots (gemini-code-assist, copilot-pull-request-reviewer, chatgpt-codex-connector) across two
+  review passes, without weakening any protocol invariant the engine exists to enforce.
+- **Triggering event:** GitHub PR review webhook activity (21 review comments across the two
+  passes).
+- **Decision:** Valid — every finding was verified against the actual current code before
+  fixing; none were speculative or already-stale by the time they were read.
+- **Completed work — round 1 (Gemini + Copilot, commit `ce0b11c`):** fail-closed on
+  previously-ignored errors that could compromise the lock/mutual-exclusion guarantee
+  (`ActiveRunForRepo`, `ReadSnapshot` in `StartRun` and `iterate`, `ReadLock`); fixed a
+  nil-pointer panic in `awaitApproval` when a run's handle is no longer registered;
+  `parseArgs` now accepts a tool-call `arguments` value as either a JSON string or an
+  already-decoded object; `search_files` skips non-UTF-8 (binary) files; `repos_clone.go`
+  rejects credential-bearing `https://user:token@host/...` clone URLs and replaces the
+  Windows-incompatible `GIT_ASKPASS` with a cross-platform `GIT_SSH_COMMAND` BatchMode config;
+  `install.ps1` handles a null User Path on a fresh Windows account; a test-setup nit fixed.
+- **Completed work — round 2 (Codex, commit `ff24aac`):** three genuine security-critical
+  gate bypasses closed — (1) the command allowlist's prefix match let a command append shell
+  metacharacters past an allowlisted prefix and run unapproved (`"go test ./..."` allowlisted
+  → `"go test ./... ; rm -rf /"` ran silently); now the appended suffix must be free of
+  chaining/redirection/substitution characters, while an exact match against a compound
+  allowlisted string is unaffected. (2) `.l00prite/constraints.md` — which carries the
+  Autonomous-Edit Denylist itself — was neither hard-denied nor covered by the default
+  denylist, so a run could loosen its own denylist and exploit that the next iteration; it is
+  now hard-denied like heartbeat/state/lock/prompts, never gate-then-approvable. (3)
+  `search_files` followed a symlink outside the repo root via `os.ReadFile`, unlike
+  `read_file`'s `resolvePath` containment; symlinked entries are now skipped. Also fixed:
+  destructive `git branch` flags (`-D`/`-f`/`-m`/etc.) now require approval instead of running
+  in the always-safe set; a failed unit commit now stops the run for review instead of being
+  reported as a successfully progressed unit; `Decide()` now rejects an approval that doesn't
+  belong to the given run (closing a cross-run, even cross-project, authorization gap); an
+  interrupted run's own still-unexpired lease is now refreshed instead of failing
+  `AcquireLock` (which correctly refuses to re-acquire an already-owned lock), which previously
+  blocked crash recovery until the TTL lapsed.
+- **Changed files:** `cli-os/internal/engine/{engine.go,exec.go,preflight.go,tools.go,
+  helpers.go}`, `cli-os/internal/gateway/{dashboard.go,repos_clone.go}`,
+  `cli-os/install/install.ps1`, `cli-os/internal/server/runs_api_test.go`; new tests
+  `cli-os/internal/engine/{helpers_test.go,preflight_test.go}` plus additions to
+  `tools_test.go` and `run_integration_test.go` (7 new regression tests targeting exactly
+  these scenarios, verified they would have failed against the pre-fix code).
+- **Tests run / Verification:**
+  - `command: go build ./...` · `exit_code: 0` · `summary: clean after both rounds`.
+  - `command: go vet ./...` · `exit_code: 0` · `summary: clean`.
+  - `command: gofmt -l .` · `exit_code: 0` · `summary: no output (clean), incl. a pre-existing
+    comment-reflow nit in dashboard.go fixed opportunistically`.
+  - `command: go test ./...` · `exit_code: 0` · `summary: all packages pass both rounds,
+    including the engine suite with 7 new regression tests`.
+  - `command: node scripts/validate-l00prite.js` · `exit_code: 0` · `summary: 519 PASS, 0 FAIL`.
+  - `command: node scripts/l00prite-doctor.js .` · `exit_code: 0` · `summary: HEALTHY`.
+- **Response drafted/sent:** none — fixes pushed directly; the diff and this ledger entry are
+  the reply. All 22 review threads are bot-authored; none required a human-facing reply.
+- **Event status:** completed — both review rounds addressed, no further bot activity pending.
+- **Failures:** none blocking. One judgement call flagged for the maintainer: the shell-chaining
+  fix to `commandAllowed` is a conservative metachar denylist (`;&|` + backtick + `$<>` +
+  newline) on the appended suffix only — an exact match against the allowlist string itself is
+  never blocked, even if that string itself contains metacharacters (a human pre-approved that
+  literal compound command at pre-flight).
+- **Decisions:** `.l00prite/constraints.md` is now unconditionally hard-denied (not
+  gate-then-approvable) during a run, matching heartbeat/state/lock/prompts — since the whole
+  point of a loop-immutable denylist is that nothing inside the run, approved or not, can
+  loosen it; only a human editing it outside the run is legitimate.
+- **Confidence:** High — every finding verified against the actual code before fixing (not
+  taken on faith from the bot text), each has a dedicated regression test, and the full
+  verification suite is green.
+- **Next action:** none pending on this PR — it merged to `main` (see the following entry).
+  Next build units queued in `todos.md` (dashboard Runs view first).
+- **Do-not-retry notes:** none.
+- **Lock:** lock-20260705-134733 (session start) and lock-20260705-191034 (session end)
+  cover this run's writes too — no protected-path lock was acquired mid-review-response since
+  all writes in this run were to `cli-os/` source/test files, not `.l00prite/` protected paths.
+
+### Run 2026-07-05T20:17:23Z — Claude (Fable 5), PR #24 merge close-out
+- **Goal:** Record PR #24's merge to `main`, close out the OS-APK build session, and restart
+  the `OS-APK` branch for the next unit of work.
+- **Triggering event:** GitHub webhook — PR #24 merged (squash-merge into `main` as `e6c9e2e`).
+- **Decision:** Valid — confirmed via `git fetch origin main` that `e6c9e2e` is a
+  single-parent (squash) commit, and `git diff origin/main origin/OS-APK` was empty, so no
+  commit on `OS-APK` was orphaned by the squash.
+- **Completed work:** Cancelled the stale ~hourly PR-watch check-in trigger
+  (`trig_017SpfMLCSA21pjS9toFXTvz`), now unnecessary since the PR is closed. Confirmed GitHub
+  had auto-deleted the `OS-APK` head branch on merge (`git ls-remote` returned nothing); per
+  the merged-branch protocol, recreated it fresh from `origin/main`
+  (`git checkout -B OS-APK origin/main && git push -u origin OS-APK`) rather than
+  force-pushing over a branch that no longer existed. Updated `state.json` (phase back to
+  `planning`, goal reflects the merge) and `todos.md` (Active section notes the merge and the
+  branch recreation; unchanged item list otherwise — dashboard Runs view remains the next
+  unit).
+- **Changed files:** `.l00prite/{state.json,todos.md,ledger.md,lock.json}`; `OS-APK` branch
+  ref (recreated from `main`, no source changes).
+- **Tests run / Verification:**
+  - `command: git diff origin/main origin/OS-APK --stat` (before restart) · `exit_code: 0` ·
+    `summary: empty diff, confirming no orphaned commits before restarting the branch`.
+- **Response drafted/sent:** none — this is bookkeeping only, no PR is open.
+- **Event status:** completed.
+- **Failures:** none. One transient hiccup: the first `git push --force-with-lease` was
+  rejected as "stale info" because the local remote-tracking ref for `OS-APK` predated GitHub's
+  auto-delete; a re-fetch surfaced the real state (ref gone), and a plain `push -u` (no force
+  needed, nothing to overwrite) succeeded.
+- **Confidence:** High — branch-restart protocol followed exactly (fetch main, checkout -B,
+  verify no orphaned work, push), per the merged-branch handling rule.
+- **Next action:** start the dashboard Runs view (todos.md Active section) on the freshly
+  restarted `OS-APK` branch.
+- **Do-not-retry notes:** none.
+- **Lock:** lock-20260705-201723 acquired for this entry plus the `state.json`/`todos.md`
+  writes above; released immediately after.
