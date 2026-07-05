@@ -454,3 +454,64 @@ Append one entry per agent run. Do not overwrite prior runs.
 - **Failures:** none.
 - **Next action:** watch PR #22 (subscription active, ~1h self check-ins) until merge/close.
 - **Lock:** none acquired — single-agent session; `lock.json` remains `released`.
+
+### Run 2026-07-05T19:10:34Z — Claude (Fable 5), branch OS-APK (L00prite OS build pass)
+- **Goal:** Maintainer brief "L00prite OS": evolve CLI-OS into the installable autonomous
+  software-engineering OS — build on the existing gateway, follow the protocol, zero edits to
+  the two review-gated files, maintainer merges the PR.
+- **Triggering event:** none — direct maintainer brief in-session.
+- **Reviewer/comment reference:** none.
+- **Decision:** normal roadmap work; the run engine realizes the "runtime harness" roadmap item
+  by mechanically embodying `execute-loop.md`. Fable 5 authored the design, the engine
+  loop/pre-flight/exec core, and all reviews; Opus subagents wrote the peripheral units to
+  file-level specs (routing, store, protocol-file IO, tools, roles, packaging).
+- **Completed work:** `cli-os/docs/os-architecture.md` (v2 design); role-aware auto-routing
+  (`roleRanks`, profile `rankMap`/`providers`, built-in plan/code/review/summarize profiles);
+  `internal/engine/` (pre-flight steps 1-5 in code incl. scaffold/stale-run recovery/schema
+  migration, Start-as-in-session-confirmation with confirm:EXECUTE, one-unit iteration loop,
+  nine run boundaries as code, repo-jailed tools with protocol-file hard-deny + Autonomous-Edit
+  Denylist + command-allowlist gates, per-action approvals fail-closed on timeout, dual
+  persistence: engine SQLite runs/run_events/run_approvals + target-repo .l00prite files);
+  gateway seam (`EngineCaller` over runTurn/RunBridge — every autonomous call routed, PEP
+  budget-reserved, metered, ledgered; engine names only `auto:<role-profile>`); `/v1/runs*`
+  API (create/preflight/start/list/get/events/approve/stop) + `/v1/repos/clone`;
+  cross-platform packaging (`scripts/dist.sh` 5-target static matrix + SHA256SUMS, stamped
+  `gateway.Version`, `l00prite version`, `install/install.ps1`, install.sh updates).
+- **Fix implemented:** not applicable (feature pass).
+- **Changed files:** cli-os/{docs/os-architecture.md, internal/engine/* (new pkg),
+  internal/gateway/{enginecaller.go,runs.go,repos_clone.go,turn.go,routerauto.go,dashboard.go},
+  internal/config/config.go, internal/server/server.go, internal/state/db.go,
+  cmd/l00prite/main.go, scripts/dist.sh, install/{install.sh,install.ps1}}; .l00prite/
+  {state.json,todos.md,ledger.md,lock.json}; CLAUDE.md (§7 row). Zero-line diff to
+  `.claude/commands/build-loop.md` and `scripts/validate-l00prite.js` held.
+- **Tests run / Verification:**
+  - `command: go test ./...` · `exit_code: 0` · `summary: all packages pass incl. new engine
+    suite (store, protocol-file IO, denylist matcher, tools jail, roles) and 4 end-to-end run
+    tests: definition-of-done with real writes + disarmed exit + released lock, denylist gate
+    fail-closing to destructive_operation_required, Start refused without fresh
+    pre-flight/confirm, crash reconciliation` · `timestamp: 2026-07-05T19:09Z`.
+  - `command: node scripts/validate-l00prite.js` · `exit_code: 0` · `summary: 519 PASS, 0 FAIL` ·
+    `timestamp: 2026-07-05T19:10Z`.
+  - `command: node scripts/l00prite-doctor.js .` · `exit_code: 0` · `summary: HEALTHY, 25 ok /
+    0 warn / 0 fail` · `timestamp: 2026-07-05T19:10Z`.
+  - `command: bash scripts/dist.sh vtest` · `exit_code: 0` · `summary: 5 static artifacts
+    (linux/darwin amd64+arm64, windows/amd64, ~4.4-4.9MB) + SHA256SUMS; dist/ removed after` ·
+    `timestamp: 2026-07-05T19:07Z`.
+- **Response drafted/sent:** PR opened at the maintainer's request ("PR please").
+- **Event status:** not applicable.
+- **Failures:** the 16-agent adversarial review workflow and the dashboard-Runs-view writer
+  were cut off by a session usage limit — the multi-agent adversarial pass did NOT complete
+  (its empty findings list is an artifact of the failure, not a clean bill); review coverage =
+  Fable line-by-line review of every unit + the full test suite. Dashboard Runs UI not built.
+- **Decisions:** Start-click = the protocol's explicit in-session confirmation (anticipated in
+  todos.md); engine scaffolds memory files only, never the 7-way-mirrored prompts; clean-tree
+  gate exempts .l00prite/ (protects user work, not engine memory); approval timeout = deny +
+  boundary stop; "privacy" objective requires an operator-defined providers-restricted profile,
+  never a silent cloud fallback.
+- **Confidence:** High on engine/API/routing/packaging (validator + full suite + e2e tests);
+  the incomplete adversarial pass is queued to re-run.
+- **Next action:** maintainer reviews the OS-APK PR; next build units queued in todos.md
+  (dashboard Runs view first).
+- **Do-not-retry notes:** none.
+- **Lock:** lock-20260705-134733 (session start) and lock-20260705-191034 (session end)
+  acquired/released for the protected-path writes; no stale reclamation needed.

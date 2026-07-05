@@ -120,3 +120,94 @@ func TestBindSafetyStaysFatal(t *testing.T) {
 		t.Fatalf("LOOPRITE_ALLOW_INSECURE_BIND=1 must clear the non-loopback bind problem")
 	}
 }
+
+func TestDefaultRoleProfiles(t *testing.T) {
+	// The four built-in role profiles ship alongside cheap/quality/balanced; roleRanks ships empty.
+	profiles := defaults().Routing.Profiles
+	cases := []struct {
+		name       string
+		preference string
+		rankMap    string
+		require    []string
+	}{
+		{"plan", "quality", "plan", nil},
+		{"code", "balanced", "code", []string{"tools"}},
+		{"review", "quality", "review", nil},
+		{"summarize", "cost", "", nil},
+	}
+	for _, c := range cases {
+		p, ok := profiles[c.name]
+		if !ok {
+			t.Fatalf("default profile %q missing", c.name)
+		}
+		if p.Preference != c.preference {
+			t.Fatalf("%s preference want %q got %q", c.name, c.preference, p.Preference)
+		}
+		if p.RankMap != c.rankMap {
+			t.Fatalf("%s rankMap want %q got %q", c.name, c.rankMap, p.RankMap)
+		}
+		if len(p.Require) != len(c.require) {
+			t.Fatalf("%s require want %v got %v", c.name, c.require, p.Require)
+		}
+		for i := range c.require {
+			if p.Require[i] != c.require[i] {
+				t.Fatalf("%s require[%d] want %q got %q", c.name, i, c.require[i], p.Require[i])
+			}
+		}
+	}
+	if rr := defaults().Routing.RoleRanks; rr == nil || len(rr) != 0 {
+		t.Fatalf("RoleRanks must ship as an empty (non-nil) map, got %v", rr)
+	}
+}
+
+func TestRoleRanksOverrideMerge(t *testing.T) {
+	// (config.json path) a roleRanks override lands without disturbing other routing defaults.
+	writeConfig(t, `{"routing":{"roleRanks":{"code":{"zhipu/glm-5.2":90}}}}`)
+	cfg := Load()
+	if cfg.Routing.RoleRanks["code"]["zhipu/glm-5.2"] != 90 {
+		t.Fatalf("roleRanks.code override must land, got %v", cfg.Routing.RoleRanks["code"])
+	}
+	if cfg.Routing.QualityRanks["anthropic/claude-opus-4-8"] != 96 {
+		t.Fatalf("qualityRanks defaults must stay intact alongside a roleRanks override")
+	}
+	if _, ok := cfg.Routing.Profiles["code"]; !ok {
+		t.Fatalf("default profiles must stay intact alongside a roleRanks override")
+	}
+
+	// (merge semantics) an override role map REPLACES that role's map wholesale; sibling roles keep theirs.
+	base := defaults().Routing
+	base.RoleRanks = map[string]map[string]int{
+		"plan": {"anthropic/claude-opus-4-8": 91},
+		"code": {"anthropic/claude-sonnet-5": 40, "zhipu/glm-5.2": 55},
+	}
+	mergeRouting(&base, &routingOverride{RoleRanks: map[string]map[string]int{"code": {"x/y": 90}}})
+	if got := base.RoleRanks["code"]; len(got) != 1 || got["x/y"] != 90 {
+		t.Fatalf("code role map must be replaced wholesale, got %v", got)
+	}
+	if base.RoleRanks["plan"]["anthropic/claude-opus-4-8"] != 91 {
+		t.Fatalf("untouched role map (plan) must keep its entries, got %v", base.RoleRanks["plan"])
+	}
+}
+
+func TestProfileProvidersRankMapRoundTrip(t *testing.T) {
+	// A config.json profile carrying providers + rankMap round-trips whole (the per-key profile merge
+	// replaces the value, so the new fields survive), and default profiles remain.
+	writeConfig(t, `{"routing":{"profiles":{"privacy":{"preference":"quality","providers":["local","zhipu"],"rankMap":"review"}}}}`)
+	cfg := Load()
+	p, ok := cfg.Routing.Profiles["privacy"]
+	if !ok {
+		t.Fatalf("override profile must be present")
+	}
+	if p.Preference != "quality" {
+		t.Fatalf("preference want quality got %q", p.Preference)
+	}
+	if p.RankMap != "review" {
+		t.Fatalf("rankMap want review got %q", p.RankMap)
+	}
+	if len(p.Providers) != 2 || p.Providers[0] != "local" || p.Providers[1] != "zhipu" {
+		t.Fatalf("providers want [local zhipu] got %v", p.Providers)
+	}
+	if _, ok := cfg.Routing.Profiles["balanced"]; !ok {
+		t.Fatalf("default profiles must remain after an override adds a new profile")
+	}
+}

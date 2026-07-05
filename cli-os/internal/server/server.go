@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackofall1232/l00prite/cli-os/internal/config"
+	"github.com/jackofall1232/l00prite/cli-os/internal/engine"
 	"github.com/jackofall1232/l00prite/cli-os/internal/gateway"
 	pep "github.com/jackofall1232/l00prite/cli-os/internal/policy"
 	"github.com/jackofall1232/l00prite/cli-os/internal/state"
@@ -105,6 +106,25 @@ func Handler(app *gateway.App) http.Handler {
 			app.HandleRepoRegister(w, r)
 		case r.Method == http.MethodPost && p == "/v1/repos/remove":
 			app.HandleRepoRemove(w, r)
+		case r.Method == http.MethodPost && p == "/v1/repos/clone":
+			app.HandleRepoClone(w, r)
+		// L00prite OS run engine — the "enter a prompt, press Start" autonomous surface.
+		case r.Method == http.MethodPost && p == "/v1/runs":
+			app.HandleRunCreate(w, r)
+		case r.Method == http.MethodGet && p == "/v1/runs/list":
+			app.HandleRunList(w, r)
+		case r.Method == http.MethodGet && p == "/v1/runs/get":
+			app.HandleRunGet(w, r)
+		case r.Method == http.MethodPost && p == "/v1/runs/preflight":
+			app.HandleRunPreflight(w, r)
+		case r.Method == http.MethodPost && p == "/v1/runs/start":
+			app.HandleRunStart(w, r)
+		case r.Method == http.MethodGet && p == "/v1/runs/events":
+			app.HandleRunEvents(w, r)
+		case r.Method == http.MethodPost && p == "/v1/runs/approve":
+			app.HandleRunApprove(w, r)
+		case r.Method == http.MethodPost && p == "/v1/runs/stop":
+			app.HandleRunStop(w, r)
 		case r.Method == http.MethodPost && p == "/v1/chat/completions":
 			app.HandleChatCompletion(w, r)
 		default:
@@ -178,6 +198,14 @@ func Start(ov Overrides) {
 	}()
 
 	app := &gateway.App{DB: db, Cfg: cfg, Aliases: cfg.Aliases, StartedAt: time.Now()}
+	// Wire the L00prite OS run engine to this App (over the same runTurn/router primitives), and
+	// reconcile any run left "running" by a crash: the engine store marks it interrupted, and the
+	// next pre-flight for that repo performs repo-side stale-run recovery per execute-loop.md.
+	eng := engine.New(&engine.Store{DB: db}, gateway.NewEngineCaller(app))
+	if n, _ := eng.Store.ReconcileOrphans(); n > 0 {
+		fmt.Printf("  • reconciled %d interrupted run(s) from a previous boot\n", n)
+	}
+	app.Engine = eng
 	// Latch setup-complete at boot if the install is already configured (e.g. provisioned entirely via
 	// the CLI). This makes the lockdown durable: a later `token revoke` / `provider remove` can never
 	// re-open the unauthenticated setup endpoints.

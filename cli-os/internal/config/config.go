@@ -33,6 +33,8 @@ type Memory struct {
 type Profile struct {
 	Preference string   `json:"preference"`
 	Require    []string `json:"require"`
+	RankMap    string   `json:"rankMap,omitempty"`   // named roleRanks map to rank by (falls back to qualityRanks)
+	Providers  []string `json:"providers,omitempty"` // non-empty: restrict candidates to these providers
 }
 
 type Bridge struct {
@@ -41,10 +43,11 @@ type Bridge struct {
 }
 
 type Routing struct {
-	AutoDefaultProfile string             `json:"autoDefaultProfile"`
-	Profiles           map[string]Profile `json:"profiles"`
-	QualityRanks       map[string]int     `json:"qualityRanks"`
-	Bridge             Bridge             `json:"bridge"`
+	AutoDefaultProfile string                    `json:"autoDefaultProfile"`
+	Profiles           map[string]Profile        `json:"profiles"`
+	QualityRanks       map[string]int            `json:"qualityRanks"`
+	RoleRanks          map[string]map[string]int `json:"roleRanks"` // role-map-name -> "provider/model" -> 0-100 rank
+	Bridge             Bridge                    `json:"bridge"`
 }
 
 type Config struct {
@@ -77,9 +80,13 @@ func defaults() Config {
 		Routing: Routing{
 			AutoDefaultProfile: "balanced",
 			Profiles: map[string]Profile{
-				"cheap":    {Preference: "cost"},
-				"quality":  {Preference: "quality"},
-				"balanced": {Preference: "balanced"},
+				"cheap":     {Preference: "cost"},
+				"quality":   {Preference: "quality"},
+				"balanced":  {Preference: "balanced"},
+				"plan":      {Preference: "quality", RankMap: "plan"},
+				"code":      {Preference: "balanced", Require: []string{"tools"}, RankMap: "code"},
+				"review":    {Preference: "quality", RankMap: "review"},
+				"summarize": {Preference: "cost"},
 			},
 			QualityRanks: map[string]int{
 				"anthropic/claude-opus-4-8":  96,
@@ -90,7 +97,9 @@ func defaults() Config {
 				"zhipu/glm-5.1":              78,
 				"zhipu/glm-5v-turbo":         70,
 			},
-			Bridge: Bridge{Enabled: false, MaxHops: 3},
+			// roleRanks ships empty — operators fill it; an absent role map falls back to qualityRanks.
+			RoleRanks: map[string]map[string]int{},
+			Bridge:    Bridge{Enabled: false, MaxHops: 3},
 		},
 	}
 }
@@ -129,10 +138,11 @@ type tlsOverride struct {
 }
 
 type routingOverride struct {
-	AutoDefaultProfile *string            `json:"autoDefaultProfile"`
-	Profiles           map[string]Profile `json:"profiles"`
-	QualityRanks       map[string]int     `json:"qualityRanks"`
-	Bridge             *bridgeOverride    `json:"bridge"`
+	AutoDefaultProfile *string                   `json:"autoDefaultProfile"`
+	Profiles           map[string]Profile        `json:"profiles"`
+	QualityRanks       map[string]int            `json:"qualityRanks"`
+	RoleRanks          map[string]map[string]int `json:"roleRanks"`
+	Bridge             *bridgeOverride           `json:"bridge"`
 }
 
 // bridgeOverride uses pointer fields so a config.json bridge override deep-merges (a field absent
@@ -301,6 +311,12 @@ func mergeRouting(base *Routing, o *routingOverride) {
 	}
 	for k, v := range o.QualityRanks {
 		base.QualityRanks[k] = v
+	}
+	if base.RoleRanks == nil {
+		base.RoleRanks = map[string]map[string]int{}
+	}
+	for k, v := range o.RoleRanks { // per role key: an override role map REPLACES that role's map wholesale
+		base.RoleRanks[k] = v
 	}
 	if o.Bridge != nil { // deep-merge: only fields present in the override replace the defaults
 		if o.Bridge.Enabled != nil {

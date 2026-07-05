@@ -1,5 +1,38 @@
 # Prioritized TODOs
 
+## Active — L00prite OS build pass (maintainer brief, branch `OS-APK`, 2026-07-05)
+
+Maintainer brief: evolve the repo toward "L00prite OS" — an installable, vendor-neutral
+autonomous software-engineering application (add keys → connect repo → prompt → Start).
+Build on `cli-os/`; do not discard existing work; zero edits to the two review-gated files.
+Status after the 2026-07-05 pass (PR open on `OS-APK`, ledger entry of the same date):
+
+- [x] `cli-os/docs/os-architecture.md` — L00prite OS v2 design (run engine embodying
+      `execute-loop.md`, role team assembly, approval gates, packaging, roadmap) — 2026-07-05.
+- [x] Capability/routing v2 — `roleRanks`, profile `rankMap`/`providers` restriction,
+      built-in `plan`/`code`/`review`/`summarize` profiles, explainable decisions — 2026-07-05.
+- [x] `internal/engine/` — protocol-mechanical run engine (pre-flight steps 1-5, Start =
+      in-session confirmation, one-unit iterations, nine boundaries in code, repo jail +
+      protocol-file hard-deny + Denylist/allowlist gates, per-action approvals fail-closed,
+      dual persistence, crash recovery) — 2026-07-05.
+- [x] `/v1/runs*` API + `/v1/repos/clone` — same auth/scoping as the rest — 2026-07-05.
+- [x] Packaging — `scripts/dist.sh` 5-target static matrix + SHA256SUMS, stamped version,
+      `l00prite version`, `install.ps1`, install.sh updates — 2026-07-05.
+- [x] Tests — engine unit + 4 end-to-end run tests against a scripted caller; go test,
+      validator (519 PASS), doctor HEALTHY — 2026-07-05.
+- [ ] **Dashboard Runs view** (create wizard → pre-flight display → Start → live event feed →
+      approvals inbox → stop/resume; clone-from-GitHub in repo connect). The API is complete
+      and curl-able; the UI writer was cut off by a session usage limit. FIRST unit of the
+      next pass — spec in `cli-os/docs/os-architecture.md` §4.
+- [ ] Re-run the adversarial multi-agent review of `internal/engine/` + the gateway seam
+      (the 2026-07-05 attempt was cut off by the usage limit; do not treat its empty findings
+      as a clean pass).
+- [ ] Docs sweep for the OS layer: cli-os README/INSTALL + root README/GETTING_STARTED
+      quickstart ("prompt → Start" flow), security-model.md note on the engine's write model
+      (run-branch + jail + gates supersede "read-only except .l00prite/" for confirmed runs),
+      os-architecture §2.8 wording (rank-map example vs the four roles).
+- [ ] Playwright end-to-end of the Runs UI against the real binary once the view exists.
+
 ## Next
 - [ ] Maintainer decisions on l00prite CLI-OS design (branch `claude/looprite-cli-os-jntwqi`,
       `cli-os/`): answer `cli-os/docs/open-questions.md` — esp. Q1 (which providers in v1),

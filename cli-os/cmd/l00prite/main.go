@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -29,6 +30,7 @@ const help = `l00prite CLI-OS — control plane
   l00prite init                                 Initialize data dir, database, master key
   l00prite serve [--host H] [--port N]          Start the gateway + dashboard
   l00prite health                               Print provider + spend status
+  l00prite version                              Print version + platform (os/arch)
 
   l00prite provider add <name> [--key K] [--adapter native-messages|openai-compat|mock]
                               [--base URL] [--default]
@@ -149,6 +151,14 @@ func main() {
 			}
 		}
 		server.Start(ov)
+		return
+	}
+
+	if cmd == "version" {
+		// Normalize to a single leading "v": the in-source default is "1.0.0", while a release
+		// build stamps git-describe output (often already "vX.Y.Z"), so trim any leading "v"
+		// before re-adding one — no "vv2.0.0".
+		fmt.Printf("l00prite v%s (%s/%s)\n", strings.TrimPrefix(gateway.Version, "v"), runtime.GOOS, runtime.GOARCH)
 		return
 	}
 

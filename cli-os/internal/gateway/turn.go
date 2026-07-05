@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackofall1232/l00prite/cli-os/internal/config"
+	"github.com/jackofall1232/l00prite/cli-os/internal/engine"
 	"github.com/jackofall1232/l00prite/cli-os/internal/gateway/adapters"
 	"github.com/jackofall1232/l00prite/cli-os/internal/ledger"
 	"github.com/jackofall1232/l00prite/cli-os/internal/memory"
@@ -29,6 +30,9 @@ type App struct {
 	// dashboard. A zero value (e.g. an App built directly in a test) is reported as "unknown", never
 	// as a fabricated availability figure.
 	StartedAt time.Time
+	// Engine is the L00prite OS run engine (nil in tests that don't exercise runs). It drives
+	// autonomous runs through this same App via the EngineCaller seam.
+	Engine *engine.Engine
 }
 
 // ProviderRow is a full providers-table row.
