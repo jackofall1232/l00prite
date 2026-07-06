@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "lock_id": "lock-20260705-201723-claude-os-apk-merge-close",
+  "lock_id": "lock-20260706-111219-claude-prompt-caching",
   "owner_agent": null,
   "owner_session": null,
-  "acquired_at": "2026-07-05T20:17:23Z",
-  "expires_at": "2026-07-05T20:47:23Z",
+  "acquired_at": "2026-07-06T11:12:19Z",
+  "expires_at": "2026-07-06T11:42:19Z",
   "ttl_seconds": 1800,
   "purpose": null,
   "protected_paths": [

@@ -70,6 +70,18 @@ fresh from the new `main` (squash-merge, so no commits were orphaned) for the ne
 - [ ] Ledger growth management (archival/rotation conventions).
 - [ ] Stack-specific skeleton packs.
 - [ ] Release packaging so setup isn't fully manual.
+- [ ] **Planner-turn cache hits** (`cli-os`): `InjectMemory` prepends a per-request memory
+      digest to `system`, so the planner's cache breakpoint usually misses. Split stable vs
+      volatile system content into separate blocks (stable first, breakpoint on it, digest
+      after) so planner turns can read the cached tools+system prefix too. Follow-up to the
+      2026-07-06 prompt-caching pass.
+- [ ] **Repo-state-hash gateway response caching** (`cli-os`): deliberately deferred from the
+      2026-07-06 prompt-caching pass — build only after a loop/memory/resume benchmark arm
+      exists, so whether serving a cached response changes agent behavior is measurable
+      rather than assumed.
+- [ ] **Date-gated Sonnet intro cache pricing** (`cli-os`): the anthropic manifest carries
+      steady-state Sonnet rates; intro pricing (incl. cache rates) through 2026-08-31 is a
+      known unshipped follow-up (see `docs/pricing-confirmation.md`).
 
 ## v1.2 gated batch (maintainer review required — review together, do not start piecemeal)
 

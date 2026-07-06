@@ -622,3 +622,56 @@ Append one entry per agent run. Do not overwrite prior runs.
 - **Do-not-retry notes:** none.
 - **Lock:** lock-20260705-201723 acquired for this entry plus the `state.json`/`todos.md`
   writes above; released immediately after.
+
+### Run 2026-07-06T11:12:19Z — Claude (Fable 5), prompt-caching worth-it analysis + gateway implementation
+- **Goal:** Decide whether provider prompt caching (Anthropic + OpenAI) is worth implementing
+  in the `cli-os` gateway to save tokens; implement it if worth-it = true.
+- **Decision:** Worth it = TRUE for Anthropic (implemented); OpenAI caching is automatic
+  server-side and already metered, so the only work there was an accounting fix. Repo-state-hash
+  gateway response caching deferred (no benchmark arm exists to measure behavior impact —
+  queued in todos.md).
+- **Why (economics):** the engine's coder loop re-sends a growing conversation on every tool
+  turn (up to `MaxToolCalls` = 40 per unit, up to 25 units per run). Anthropic cache reads bill
+  at ~0.1x input and 5m writes at 1.25x (break-even at 2 requests); the loop's calls are seconds
+  apart, well inside the 5-minute TTL, so the repeated prefix drops from 1x per call to ~0.1x.
+  The metering pipeline (`oai.Usage` cache fields, ledger columns, `CostOf` cache pricing,
+  per-model manifest cache rates) was already fully plumbed — nothing set `cache_control` on
+  outgoing requests.
+- **Completed work:**
+  - `cli-os/internal/gateway/adapters/anthropic.go` — the native-messages adapter now emits
+    `system` as a block array carrying `cache_control:{type:"ephemeral"}` (caches tools+system,
+    since tools render first) and marks the last content block of the last message (multi-turn
+    incremental caching), gated on the model's manifest `prompt_cache` capability (unknown
+    models fail closed). Explicit inbound `cache_control` on content parts (OpenRouter
+    convention) passes through verbatim and disables auto-injection so client placement wins
+    and the 4-breakpoint API cap can't be blown.
+  - `cli-os/internal/gateway/adapters/openaicompat.go` — `normUsage` now subtracts
+    `prompt_tokens_details.cached_tokens` from `prompt_tokens` (clamped), keeping internal
+    Usage disjoint (Anthropic convention) so `CostOf` prices cached tokens exactly once. This
+    was a latent double-count: it costs nothing today (OpenAI/GLM prices are null pending
+    first-party confirmation) but would have double-billed the moment prices land.
+  - `cli-os/internal/oai/oai.go` + `ingress.go` — new `oai.UsageMap`: client-facing
+    `prompt_tokens`/`total_tokens` now include cache read+write tokens (OpenAI semantics:
+    cached_tokens is a subset of prompt_tokens), so response usage stays truthful instead of
+    collapsing ~90% when a cache hits; used by both `Response` and the stream usage chunk.
+- **Changed files:** `cli-os/internal/gateway/adapters/{anthropic.go,openaicompat.go,adapters_test.go}`,
+  `cli-os/internal/oai/{oai.go,oai_test.go}`, `cli-os/internal/gateway/ingress.go`,
+  `.l00prite/{ledger.md,todos.md,lock.json}`, `CLAUDE.md` (run ledger row). Zero edits to the
+  two review-gated files.
+- **Tests run / Verification:**
+  - `command: go test ./...` · `exit_code: 0` · `summary: all packages pass, incl. 5 new tests
+    (cache injection, unknown-model fail-closed, explicit-marker precedence, disjoint cached
+    tokens + clamp, UsageMap totals) and the pre-existing engine e2e suites`.
+  - `command: node scripts/validate-l00prite.js` · `exit_code: 0` · `summary: 519 PASS, 0 FAIL`.
+  - `command: node scripts/l00prite-doctor.js .` · `exit_code: 0` · `summary: HEALTHY`.
+- **Known limits:** planner turns prepend a per-request memory digest to `system`
+  (`InjectMemory`), so the planner's system breakpoint usually misses; the waste is bounded
+  (prefixes under the model's cacheable minimum silently no-op at no premium). Splitting
+  stable/volatile system content into separate blocks is queued in todos.md.
+- **Failures:** none.
+- **Confidence:** High — capability-gated, fail-closed, covered by unit tests; the OpenAI path
+  behavior is unchanged on the wire (passthrough) and only internal accounting moved.
+- **Next action:** maintainer review of branch `claude/token-caching-analysis-y2zp35`.
+- **Do-not-retry notes:** none.
+- **Lock:** lock-20260706-111219-claude-prompt-caching acquired for this entry plus the
+  todos.md update; released immediately after.
