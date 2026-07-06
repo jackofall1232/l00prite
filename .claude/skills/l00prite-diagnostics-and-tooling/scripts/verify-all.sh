@@ -78,7 +78,11 @@ else
       echo "go test: PASS  (exit $go_exit)"
     else
       echo "go test: FAIL  (exit $go_exit)"
-      printf '%s\n' "$go_out" | grep -E '^(--- FAIL|FAIL[[:space:]])'
+      # A compile/build error produces no '--- FAIL'/'FAIL ' lines — fall back to the full
+      # output so the cause is never hidden.
+      if ! printf '%s\n' "$go_out" | grep -E '^(--- FAIL|FAIL[[:space:]])'; then
+        printf '%s\n' "$go_out"
+      fi
       overall=1
     fi
   fi

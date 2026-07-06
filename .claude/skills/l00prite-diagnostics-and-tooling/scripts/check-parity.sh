@@ -60,9 +60,12 @@ declare -a drift_lines=()
 
 compare() {
   local canonical="$1" mirror="$2"
-  if [[ -f "$canonical" && -f "$mirror" ]]; then
+  if [[ -f "$canonical" ]]; then
     checked=$((checked + 1))
-    if ! cmp -s "$canonical" "$mirror"; then
+    if [[ ! -f "$mirror" ]]; then
+      drift=$((drift + 1))
+      drift_lines+=("$mirror  (missing — copy from $canonical)")
+    elif ! cmp -s "$canonical" "$mirror"; then
       drift=$((drift + 1))
       drift_lines+=("$mirror  (differs from $canonical — inspect with: diff \"$canonical\" \"$mirror\")")
     fi
