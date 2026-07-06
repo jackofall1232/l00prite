@@ -31,7 +31,9 @@ func imageBlock(url string) map[string]any {
 	return map[string]any{"type": "image", "source": map[string]any{"type": "url", "url": url}}
 }
 
-// toAnthropicContent converts an OpenAI message content into Anthropic content blocks.
+// toAnthropicContent converts an OpenAI message content into Anthropic content blocks. Explicit
+// cache_control markers on inbound parts (the OpenRouter convention for OpenAI-shaped requests)
+// are carried through so clients keep control of their own breakpoint placement.
 func toAnthropicContent(content any) []any {
 	if arr := asArr(content); arr != nil {
 		out := make([]any, 0, len(arr))
@@ -39,9 +41,17 @@ func toAnthropicContent(content any) []any {
 			pm := asMap(p)
 			switch {
 			case pm != nil && asStr(pm["type"]) == "text":
-				out = append(out, map[string]any{"type": "text", "text": pm["text"]})
+				block := map[string]any{"type": "text", "text": pm["text"]}
+				if cc := asMap(pm["cache_control"]); cc != nil {
+					block["cache_control"] = cc
+				}
+				out = append(out, block)
 			case pm != nil && asStr(pm["type"]) == "image_url":
-				out = append(out, imageBlock(asStr(asMap(pm["image_url"])["url"])))
+				block := imageBlock(asStr(asMap(pm["image_url"])["url"]))
+				if cc := asMap(pm["cache_control"]); cc != nil {
+					block["cache_control"] = cc
+				}
+				out = append(out, block)
 			default:
 				if s, ok := p.(string); ok {
 					out = append(out, map[string]any{"type": "text", "text": s})
@@ -132,8 +142,33 @@ func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bo
 		"max_tokens": maxTokens, // REQUIRED by Anthropic
 		"messages":   messages,
 	}
+	// Prompt-cache breakpoints: only for models whose manifest row declares prompt_cache, and only
+	// when the client placed no explicit cache_control of its own (client placement wins — the API
+	// caps a request at 4 breakpoints, so stacking auto markers on top could 400).
+	autoCache := promptCacheable(model) && !hasCacheControl(messages)
 	if len(systemParts) > 0 {
-		body["system"] = strings.Join(systemParts, "\n\n")
+		joined := strings.Join(systemParts, "\n\n")
+		if autoCache {
+			// Block form so the tools+system prefix can carry a breakpoint (Anthropic renders
+			// tools before system, so this one marker caches both). Reads bill at ~0.1x input,
+			// 5m writes at 1.25x — see the manifest's per-model cache pricing.
+			body["system"] = []any{map[string]any{
+				"type": "text", "text": joined,
+				"cache_control": map[string]any{"type": "ephemeral"},
+			}}
+		} else {
+			body["system"] = joined
+		}
+	}
+	if autoCache && len(messages) > 0 {
+		// Second breakpoint on the last content block: multi-turn/tool-loop requests re-send the
+		// whole conversation, so each call reads the previous call's prefix and writes only the
+		// new tail. Prefixes below the model's cacheable minimum silently no-op at no premium.
+		if blocks := asArr(asMap(messages[len(messages)-1])["content"]); len(blocks) > 0 {
+			if bm := asMap(blocks[len(blocks)-1]); bm != nil {
+				bm["cache_control"] = map[string]any{"type": "ephemeral"}
+			}
+		}
 	}
 	if stream {
 		body["stream"] = true
@@ -169,6 +204,26 @@ func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bo
 		}
 	}
 	return body
+}
+
+// promptCacheable reports whether the model's manifest row (anthropic manifest — the only
+// native-messages provider) declares prompt_cache support. Unknown models fail closed: a
+// Claude-compatible endpoint serving non-Claude ids never gets speculative cache markers.
+func promptCacheable(model string) bool {
+	return CapabilitiesFor("anthropic", model)["prompt_cache"] == true
+}
+
+// hasCacheControl reports whether any built content block carries an explicit cache_control
+// marker (i.e. the client is managing its own breakpoints).
+func hasCacheControl(messages []any) bool {
+	for _, mm := range messages {
+		for _, b := range asArr(asMap(mm)["content"]) {
+			if bm := asMap(b); bm != nil && bm["cache_control"] != nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func translateToolChoice(tc any) map[string]any {

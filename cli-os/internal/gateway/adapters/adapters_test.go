@@ -84,6 +84,104 @@ func TestAnthropicSSEFold(t *testing.T) {
 	}
 }
 
+func TestAnthropicPromptCacheInjection(t *testing.T) {
+	a := anthropicAdapter{}
+	req := map[string]any{
+		"messages": []any{
+			map[string]any{"role": "system", "content": "be terse"},
+			map[string]any{"role": "user", "content": "hi"},
+			map[string]any{"role": "assistant", "content": "hello"},
+			map[string]any{"role": "user", "content": "again"},
+		},
+	}
+	body := a.BuildRequest("claude-opus-4-8", req, false)
+
+	sys := asArr(body["system"])
+	if len(sys) != 1 {
+		t.Fatalf("cache-capable model must get system as a block array, got %v", body["system"])
+	}
+	sysBlock := asMap(sys[0])
+	if asStr(sysBlock["text"]) != "be terse" {
+		t.Fatalf("system text want %q got %v", "be terse", sysBlock["text"])
+	}
+	if cc := asMap(sysBlock["cache_control"]); asStr(cc["type"]) != "ephemeral" {
+		t.Fatalf("system block must carry an ephemeral cache_control, got %v", sysBlock["cache_control"])
+	}
+
+	msgs := asArr(body["messages"])
+	lastBlocks := asArr(asMap(msgs[len(msgs)-1])["content"])
+	lastBlock := asMap(lastBlocks[len(lastBlocks)-1])
+	if cc := asMap(lastBlock["cache_control"]); asStr(cc["type"]) != "ephemeral" {
+		t.Fatalf("last content block must carry an ephemeral cache_control, got %v", lastBlock)
+	}
+	firstBlock := asMap(asArr(asMap(msgs[0])["content"])[0])
+	if firstBlock["cache_control"] != nil {
+		t.Fatalf("only the last block gets the auto marker, first block got %v", firstBlock)
+	}
+}
+
+func TestAnthropicUnknownModelGetsNoCacheMarkers(t *testing.T) {
+	a := anthropicAdapter{}
+	req := map[string]any{
+		"messages": []any{
+			map[string]any{"role": "system", "content": "be terse"},
+			map[string]any{"role": "user", "content": "hi"},
+		},
+	}
+	body := a.BuildRequest("claude-x", req, false)
+	if body["system"] != "be terse" {
+		t.Fatalf("unknown model must keep the flat-string system, got %v", body["system"])
+	}
+	msgs := asArr(body["messages"])
+	lastBlock := asMap(asArr(asMap(msgs[len(msgs)-1])["content"])[0])
+	if lastBlock["cache_control"] != nil {
+		t.Fatalf("unknown model must get no cache markers, got %v", lastBlock)
+	}
+}
+
+func TestAnthropicExplicitCacheControlWins(t *testing.T) {
+	a := anthropicAdapter{}
+	req := map[string]any{
+		"messages": []any{
+			map[string]any{"role": "system", "content": "be terse"},
+			map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "text", "text": "big context", "cache_control": map[string]any{"type": "ephemeral", "ttl": "1h"}},
+				map[string]any{"type": "text", "text": "question"},
+			}},
+		},
+	}
+	body := a.BuildRequest("claude-opus-4-8", req, false)
+	msgs := asArr(body["messages"])
+	blocks := asArr(asMap(msgs[0])["content"])
+	if cc := asMap(asMap(blocks[0])["cache_control"]); asStr(cc["ttl"]) != "1h" {
+		t.Fatalf("explicit cache_control must pass through verbatim, got %v", blocks[0])
+	}
+	if asMap(blocks[1])["cache_control"] != nil {
+		t.Fatalf("auto-injection must be skipped when the client placed its own markers, got %v", blocks[1])
+	}
+	if body["system"] != "be terse" {
+		t.Fatalf("auto system breakpoint must be skipped when the client placed markers, got %v", body["system"])
+	}
+}
+
+func TestOpenAICompatCachedTokensDisjoint(t *testing.T) {
+	u := normUsage(map[string]any{
+		"prompt_tokens": float64(1000), "completion_tokens": float64(10),
+		"prompt_tokens_details": map[string]any{"cached_tokens": float64(900)},
+	})
+	if u.PromptTokens != 100 || u.CacheReadTokens != 900 {
+		t.Fatalf("prompt_tokens must exclude the cached portion (disjoint accounting), got %+v", u)
+	}
+	// A provider reporting cached > prompt is malformed; clamp instead of going negative.
+	u = normUsage(map[string]any{
+		"prompt_tokens": float64(50),
+		"prompt_tokens_details": map[string]any{"cached_tokens": float64(80)},
+	})
+	if u.PromptTokens != 0 || u.CacheReadTokens != 50 {
+		t.Fatalf("cached tokens must clamp to prompt_tokens, got %+v", u)
+	}
+}
+
 func TestOpenAICompatDropsStreamOptions(t *testing.T) {
 	oc := openaiCompatAdapter{}
 	body := oc.BuildRequest("gpt-x", map[string]any{
