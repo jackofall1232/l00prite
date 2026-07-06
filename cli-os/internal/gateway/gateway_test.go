@@ -13,6 +13,7 @@ import (
 	"github.com/jackofall1232/l00prite/cli-os/internal/apierr"
 	"github.com/jackofall1232/l00prite/cli-os/internal/config"
 	"github.com/jackofall1232/l00prite/cli-os/internal/gateway/adapters"
+	"github.com/jackofall1232/l00prite/cli-os/internal/memory"
 	"github.com/jackofall1232/l00prite/cli-os/internal/oai"
 )
 
@@ -567,5 +568,46 @@ func TestEnvelopeNeutralizesUnicodeWhitespaceCloser(t *testing.T) {
 	// whitespace before the tag name too
 	if out := neutralizeClosers("a</"+string(rune(0xa0))+"memory>b", []string{"memory"}); !strings.Contains(out, "&lt;/memory&gt;") {
 		t.Fatalf("leading-NBSP closer not neutralized: %q", out)
+	}
+}
+
+// ---- memory injection / volatile-system hint ----
+
+func TestInjectMemoryTagsVolatileSystemHint(t *testing.T) {
+	req := map[string]any{
+		"messages": []any{map[string]any{"role": "user", "content": "plan the next unit"}},
+	}
+	mem := memory.Context{Status: "ok", Blocks: []memory.Block{
+		{Kind: "ledger", SourcePath: ".l00prite/ledger.md", Text: "run entry"},
+	}}
+	out := InjectMemory(req, mem)
+
+	msgs := asArr(out["messages"])
+	if len(msgs) != 2 || asStr(asMap(msgs[0])["role"]) != "system" {
+		t.Fatalf("digest must be prepended as a system message, got %v", out["messages"])
+	}
+	digest := asStr(asMap(msgs[0])["content"])
+	if !strings.Contains(digest, "<repository_context>") || !strings.Contains(digest, "run entry") {
+		t.Fatalf("digest must wrap the memory blocks, got %q", digest)
+	}
+	if asStr(asMap(msgs[1])["content"]) != "plan the next unit" {
+		t.Fatalf("original messages must follow unchanged, got %v", msgs[1])
+	}
+	// The hint must carry the digest text verbatim so the anthropic adapter can classify exactly
+	// this system part as volatile (and keep it out of the cached stable prefix).
+	if asStr(asMap(out["l00prite"])["volatile_system"]) != digest {
+		t.Fatalf("volatile_system hint must equal the injected digest")
+	}
+	// The input request is copied, not mutated.
+	if _, mutated := req["l00prite"]; mutated || len(asArr(req["messages"])) != 1 {
+		t.Fatalf("InjectMemory must not mutate its input, got %v", req)
+	}
+}
+
+func TestInjectMemoryNothingToInjectSetsNoHint(t *testing.T) {
+	req := map[string]any{"messages": []any{map[string]any{"role": "user", "content": "hi"}}}
+	out := InjectMemory(req, memory.Context{Status: "empty"})
+	if _, ok := out["l00prite"]; ok {
+		t.Fatalf("no injection must mean no hint, got %v", out["l00prite"])
 	}
 }
