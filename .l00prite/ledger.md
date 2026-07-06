@@ -730,3 +730,28 @@ Append one entry per agent run. Do not overwrite prior runs.
 - **Do-not-retry notes:** none.
 - **Lock:** lock-20260706-113549-claude-planner-cache-split acquired for this entry plus the
   todos.md update; released immediately after.
+
+### Run 2026-07-06T11:47:24Z — Claude (Fable 5), PR #26 merge close-out
+- **Goal:** Record PR #26's merge to `main` and close out the prompt-caching session.
+- **Triggering event:** GitHub webhook — PR #26 ("Implement prompt caching for Anthropic
+  models in gateway") squash-merged into `main` as `c6dee9a`.
+- **Completed work:** Cancelled the hourly PR-watch check-in trigger
+  (`trig_01VAXPjKY5u2XkmNBfbmAn7N`), unnecessary now the PR is closed. Verified via
+  `git diff origin/main <branch-head>` (empty) that the squash orphaned no commits, then —
+  GitHub having auto-deleted the head branch on merge — recreated
+  `claude/token-caching-analysis-y2zp35` fresh from `origin/main` per the merged-branch
+  protocol and pushed it. Both prompt-caching passes (worth-it analysis + implementation,
+  and the planner cache-miss stable/volatile split) plus Gemini's clean recheck are now in
+  `main`; their run-ledger rows and todos updates landed with the merge.
+- **Changed files:** `.l00prite/{ledger.md,lock.json}`; branch ref recreated from `main`.
+- **Tests run / Verification:**
+  - `command: git diff origin/main HEAD --stat` (before restart) · `exit_code: 0` ·
+    `summary: empty diff, no orphaned commits before restarting the branch`.
+- **Failures:** none.
+- **Confidence:** High — bookkeeping only.
+- **Next action:** none pending for this session; the deferred caching follow-ups
+  (repo-state-hash response caching behind a benchmark arm, date-gated Sonnet intro cache
+  pricing) remain queued in `todos.md`.
+- **Do-not-retry notes:** none.
+- **Lock:** lock-20260706-114724-claude-pr26-merge-close acquired for this entry; released
+  immediately after.
