@@ -530,11 +530,7 @@ func synthesizeStream(w http.ResponseWriter, finalResponse map[string]any, inclu
 	}
 	write(oai.Chunk(id, model, map[string]any{}, finish))
 	if includeUsage {
-		u := map[string]any{"prompt_tokens": usage.PromptTokens, "completion_tokens": usage.CompletionTokens, "total_tokens": usage.PromptTokens + usage.CompletionTokens}
-		if usage.CacheReadTokens != 0 {
-			u["prompt_tokens_details"] = map[string]any{"cached_tokens": usage.CacheReadTokens}
-		}
-		write(map[string]any{"id": id, "object": "chat.completion.chunk", "created": oai.Created(), "model": model, "choices": []any{}, "usage": u})
+		write(map[string]any{"id": id, "object": "chat.completion.chunk", "created": oai.Created(), "model": model, "choices": []any{}, "usage": oai.UsageMap(usage)})
 	}
 	w.Write([]byte("data: [DONE]\n\n"))
 	if flusher != nil {

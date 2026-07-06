@@ -41,5 +41,13 @@ func InjectMemory(req map[string]any, mem memory.Context) map[string]any {
 	newMsgs = append(newMsgs, contextMsg)
 	newMsgs = append(newMsgs, msgs...)
 	out["messages"] = newMsgs
+	// Tag the digest as per-request-volatile through the top-level gateway-hint channel: the
+	// anthropic adapter reads it to keep the digest out of (and rendered after) the cached stable
+	// system prefix, so the prefix breakpoint can actually hit across turns. The hint never
+	// reaches the wire — the openai-compat adapter strips "l00prite" and the native adapter
+	// rebuilds its body field-by-field.
+	hints := copyMap(asMap(out["l00prite"]))
+	hints["volatile_system"] = contextMsg["content"]
+	out["l00prite"] = hints
 	return out
 }

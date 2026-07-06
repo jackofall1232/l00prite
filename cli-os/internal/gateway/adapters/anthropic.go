@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jackofall1232/l00prite/cli-os/internal/oai"
+	"github.com/jackofall1232/l00prite/cli-os/internal/util"
 )
 
 type anthropicAdapter struct{}
@@ -31,7 +32,9 @@ func imageBlock(url string) map[string]any {
 	return map[string]any{"type": "image", "source": map[string]any{"type": "url", "url": url}}
 }
 
-// toAnthropicContent converts an OpenAI message content into Anthropic content blocks.
+// toAnthropicContent converts an OpenAI message content into Anthropic content blocks. Explicit
+// cache_control markers on inbound parts (the OpenRouter convention for OpenAI-shaped requests)
+// are carried through so clients keep control of their own breakpoint placement.
 func toAnthropicContent(content any) []any {
 	if arr := asArr(content); arr != nil {
 		out := make([]any, 0, len(arr))
@@ -39,9 +42,17 @@ func toAnthropicContent(content any) []any {
 			pm := asMap(p)
 			switch {
 			case pm != nil && asStr(pm["type"]) == "text":
-				out = append(out, map[string]any{"type": "text", "text": pm["text"]})
+				block := map[string]any{"type": "text", "text": pm["text"]}
+				if cc := asMap(pm["cache_control"]); cc != nil {
+					block["cache_control"] = cc
+				}
+				out = append(out, block)
 			case pm != nil && asStr(pm["type"]) == "image_url":
-				out = append(out, imageBlock(asStr(asMap(pm["image_url"])["url"])))
+				block := imageBlock(asStr(asMap(pm["image_url"])["url"]))
+				if cc := asMap(pm["cache_control"]); cc != nil {
+					block["cache_control"] = cc
+				}
+				out = append(out, block)
 			default:
 				if s, ok := p.(string); ok {
 					out = append(out, map[string]any{"type": "text", "text": s})
@@ -61,7 +72,12 @@ func toAnthropicContent(content any) []any {
 }
 
 func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bool) map[string]any {
-	var systemParts []string
+	// Per-request-volatile system text (the gateway's memory digest), tagged by InjectMemory via
+	// the top-level "l00prite" hint channel. The hint never reaches the wire: this adapter
+	// rebuilds the body field-by-field, and the openai-compat adapter strips the key.
+	volatileSystem := asStr(asMap(req["l00prite"])["volatile_system"])
+
+	var sysBlocks []map[string]any
 	var messages []any
 	for _, mm := range asArr(req["messages"]) {
 		m := asMap(mm)
@@ -72,16 +88,26 @@ func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bo
 		switch {
 		case role == "system":
 			if s, ok := m["content"].(string); ok {
-				systemParts = append(systemParts, s)
+				sysBlocks = append(sysBlocks, map[string]any{"type": "text", "text": s})
 			} else {
+				// One block per system message ("\n"-joined parts, matching the old flat form);
+				// an explicit client cache_control on any part stays on the block.
 				var texts []string
+				var cc map[string]any
 				for _, b := range toAnthropicContent(m["content"]) {
 					bm := asMap(b)
 					if asStr(bm["type"]) == "text" {
 						texts = append(texts, asStr(bm["text"]))
+						if c := asMap(bm["cache_control"]); c != nil {
+							cc = c
+						}
 					}
 				}
-				systemParts = append(systemParts, strings.Join(texts, "\n"))
+				blk := map[string]any{"type": "text", "text": strings.Join(texts, "\n")}
+				if cc != nil {
+					blk["cache_control"] = cc
+				}
+				sysBlocks = append(sysBlocks, blk)
 			}
 		case role == "tool":
 			messages = append(messages, map[string]any{
@@ -132,9 +158,6 @@ func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bo
 		"max_tokens": maxTokens, // REQUIRED by Anthropic
 		"messages":   messages,
 	}
-	if len(systemParts) > 0 {
-		body["system"] = strings.Join(systemParts, "\n\n")
-	}
 	if stream {
 		body["stream"] = true
 	}
@@ -148,6 +171,7 @@ func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bo
 			body["stop_sequences"] = []any{stop}
 		}
 	}
+	toolsJSONLen := 0
 	if tools := asArr(req["tools"]); len(tools) > 0 {
 		outTools := []any{} // matches Node: a client `tools` present but all-non-function yields []
 		for _, tRaw := range tools {
@@ -164,11 +188,114 @@ func (anthropicAdapter) BuildRequest(model string, req map[string]any, stream bo
 			outTools = append(outTools, map[string]any{"name": fn["name"], "description": desc, "input_schema": schema})
 		}
 		body["tools"] = outTools
+		toolsJSONLen = len(jsonStringify(outTools))
 		if tcRaw := req["tool_choice"]; jsTruthy(tcRaw) {
 			body["tool_choice"] = translateToolChoice(tcRaw)
 		}
 	}
+
+	// Prompt-cache breakpoints: only for models whose manifest row declares prompt_cache, and only
+	// when the client placed no explicit cache_control of its own (client placement wins — the API
+	// caps a request at 4 breakpoints, so stacking auto markers on top could 400).
+	explicitSystem := false
+	for _, b := range sysBlocks {
+		if b["cache_control"] != nil {
+			explicitSystem = true
+		}
+	}
+	autoCache := promptCacheable(model) && !explicitSystem && !hasCacheControl(messages)
+	switch {
+	case len(sysBlocks) == 0:
+		// no system content
+	case explicitSystem:
+		// Client manages its own breakpoints: forward the system blocks verbatim.
+		arr := make([]any, 0, len(sysBlocks))
+		for _, b := range sysBlocks {
+			arr = append(arr, b)
+		}
+		body["system"] = arr
+	case autoCache:
+		// Split stable protocol content from per-request-volatile content (the memory digest).
+		// cache_control is a prefix match: a volatile part sitting ahead of (or merged into) the
+		// stable text invalidates the cache on every call. Stable goes first and carries the
+		// breakpoint (caching tools+system, since tools render first; reads ~0.1x input, 5m
+		// writes 1.25x — see manifest cache pricing); volatile goes last and is never marked —
+		// a marker there would pay the write premium with no read ever hitting it.
+		var stableParts, volatileParts []string
+		for _, b := range sysBlocks {
+			if t := asStr(b["text"]); volatileSystem != "" && t == volatileSystem {
+				volatileParts = append(volatileParts, t)
+			} else {
+				stableParts = append(stableParts, t)
+			}
+		}
+		stable := strings.Join(stableParts, "\n\n")
+		volatile := strings.Join(volatileParts, "\n\n")
+		// The cacheable prefix is tools+system. Below the model's minimum the API silently
+		// ignores markers, so don't emit dead ones. The estimator rounds up (ceil(chars/3.5)),
+		// which errs toward emitting — a harmless no-op — over suppressing a live marker.
+		markStable := stable != "" &&
+			util.EstimateTokensFromChars(len(stable)+toolsJSONLen) >= promptCacheMinTokens(model)
+		stableBlock := map[string]any{"type": "text", "text": stable}
+		if markStable {
+			stableBlock["cache_control"] = map[string]any{"type": "ephemeral"}
+		}
+		switch {
+		case volatile == "" && markStable:
+			body["system"] = []any{stableBlock}
+		case volatile == "":
+			body["system"] = stable // no marker to carry — keep the plain-string form
+		case stable == "":
+			body["system"] = volatile // all volatile: nothing cacheable
+		default:
+			body["system"] = []any{stableBlock, map[string]any{"type": "text", "text": volatile}}
+		}
+	default:
+		// Not cache-capable: flat string join in inbound order — the pre-caching wire shape.
+		var texts []string
+		for _, b := range sysBlocks {
+			texts = append(texts, asStr(b["text"]))
+		}
+		body["system"] = strings.Join(texts, "\n\n")
+	}
+	if autoCache && len(messages) > 0 {
+		// Second breakpoint on the last content block: multi-turn/tool-loop requests re-send the
+		// whole conversation, so each call reads the previous call's prefix and writes only the
+		// new tail. Prefixes below the model's cacheable minimum silently no-op at no premium.
+		if blocks := asArr(asMap(messages[len(messages)-1])["content"]); len(blocks) > 0 {
+			if bm := asMap(blocks[len(blocks)-1]); bm != nil {
+				bm["cache_control"] = map[string]any{"type": "ephemeral"}
+			}
+		}
+	}
 	return body
+}
+
+// promptCacheable reports whether the model's manifest row (anthropic manifest — the only
+// native-messages provider) declares prompt_cache support. Unknown models fail closed: a
+// Claude-compatible endpoint serving non-Claude ids never gets speculative cache markers.
+func promptCacheable(model string) bool {
+	return CapabilitiesFor("anthropic", model)["prompt_cache"] == true
+}
+
+// promptCacheMinTokens returns the model's minimum cacheable prefix size (manifest capability
+// prompt_cache_min_tokens); 0 — never suppress — when the manifest doesn't declare one, since
+// a marker below the real minimum is a free no-op while a suppressed live marker costs money.
+func promptCacheMinTokens(model string) int {
+	return numToInt(CapabilitiesFor("anthropic", model)["prompt_cache_min_tokens"])
+}
+
+// hasCacheControl reports whether any built content block carries an explicit cache_control
+// marker (i.e. the client is managing its own breakpoints).
+func hasCacheControl(messages []any) bool {
+	for _, mm := range messages {
+		for _, b := range asArr(asMap(mm)["content"]) {
+			if bm := asMap(b); bm != nil && bm["cache_control"] != nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func translateToolChoice(tc any) map[string]any {

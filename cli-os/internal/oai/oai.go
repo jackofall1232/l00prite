@@ -33,17 +33,27 @@ func CmplID() string {
 	return "chatcmpl-" + hex.EncodeToString(b)
 }
 
-// Response builds an OpenAI chat.completion object. cache_write is intentionally NOT surfaced in
-// the response usage (matching OpenAI's shape); cache_read becomes prompt_tokens_details.cached_tokens.
-func Response(id, model string, message map[string]any, finishReason string, u Usage) map[string]any {
+// UsageMap renders Usage in the OpenAI response shape. prompt_tokens carries the FULL input size
+// (uncached + cache reads + cache writes) per OpenAI semantics, where cached_tokens is a subset of
+// prompt_tokens; cache writes have no OpenAI field of their own, so they fold into the total
+// (they are still real input tokens the provider processed).
+func UsageMap(u Usage) map[string]any {
+	prompt := u.PromptTokens + u.CacheReadTokens + u.CacheWriteTokens
 	usage := map[string]any{
-		"prompt_tokens":     u.PromptTokens,
+		"prompt_tokens":     prompt,
 		"completion_tokens": u.CompletionTokens,
-		"total_tokens":      u.PromptTokens + u.CompletionTokens,
+		"total_tokens":      prompt + u.CompletionTokens,
 	}
 	if u.CacheReadTokens != 0 {
 		usage["prompt_tokens_details"] = map[string]any{"cached_tokens": u.CacheReadTokens}
 	}
+	return usage
+}
+
+// Response builds an OpenAI chat.completion object. Usage is rendered via UsageMap, so cached
+// tokens stay inside prompt_tokens instead of making the total collapse when a cache hits.
+func Response(id, model string, message map[string]any, finishReason string, u Usage) map[string]any {
+	usage := UsageMap(u)
 	return map[string]any{
 		"id":      id,
 		"object":  "chat.completion",

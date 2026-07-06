@@ -70,6 +70,19 @@ fresh from the new `main` (squash-merge, so no commits were orphaned) for the ne
 - [ ] Ledger growth management (archival/rotation conventions).
 - [ ] Stack-specific skeleton packs.
 - [ ] Release packaging so setup isn't fully manual.
+- [x] **Planner-turn cache hits** (`cli-os`) — DONE 2026-07-06: system now splits into
+      [stable block with breakpoint, volatile digest last without one], tagged via the
+      `l00prite.volatile_system` gateway hint from `InjectMemory`; per-model
+      `prompt_cache_min_tokens` gate stops dead markers below the cacheable minimum.
+      NOT measured against the live API (no benchmark harness) — hit-rate improvement is
+      asserted from byte-identical stable prefixes, verified in unit tests only.
+- [ ] **Repo-state-hash gateway response caching** (`cli-os`): deliberately deferred from the
+      2026-07-06 prompt-caching pass — build only after a loop/memory/resume benchmark arm
+      exists, so whether serving a cached response changes agent behavior is measurable
+      rather than assumed.
+- [ ] **Date-gated Sonnet intro cache pricing** (`cli-os`): the anthropic manifest carries
+      steady-state Sonnet rates; intro pricing (incl. cache rates) through 2026-08-31 is a
+      known unshipped follow-up (see `docs/pricing-confirmation.md`).
 
 ## v1.2 gated batch (maintainer review required — review together, do not start piecemeal)
 

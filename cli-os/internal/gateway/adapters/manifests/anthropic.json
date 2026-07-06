@@ -3,11 +3,15 @@
   "display_name": "Anthropic (Claude)",
   "adapter": "native-messages",
   "base_url": "https://api.anthropic.com",
-  "endpoints": { "chat": "/v1/messages" },
+  "endpoints": {
+    "chat": "/v1/messages"
+  },
   "auth": {
     "scheme": "header",
     "header": "x-api-key",
-    "extra_headers": { "anthropic-version": "2023-06-01" }
+    "extra_headers": {
+      "anthropic-version": "2023-06-01"
+    }
   },
   "streaming": "anthropic-sse-blocks",
   "tool_schema": "anthropic-input-schema",
@@ -17,7 +21,8 @@
     "SSE: message_start > content_block_start > content_block_delta(text/thinking/input_json) > content_block_stop > message_delta(stop_reason+usage) > message_stop; rebuild into OpenAI chunks + [DONE].",
     "stop_reason map: end_turn->stop, max_tokens->length, tool_use->tool_calls, stop_sequence->stop, refusal->content_filter.",
     "An OpenAI-compatible /v1/ base exists but is labeled test/eval-only, non-production -> use the native adapter.",
-    "prompt caching via cache_control{type:ephemeral,ttl?}; cache_read =0.1x input, 5m cache_write =1.25x, 1h cache_write =2x base input."
+    "prompt caching via cache_control{type:ephemeral,ttl?}; cache_read =0.1x input, 5m cache_write =1.25x, 1h cache_write =2x base input.",
+    "prompt_cache_min_tokens (capabilities) is the model's minimum cacheable prefix per first-party docs (4096 Opus-tier + Haiku 4.5, 2048 Fable 5; Sonnet 5 assumed 2048 = its family tier, unconfirmed first-party). The API silently ignores markers below the real minimum, so an understated value is a free no-op while an overstated one suppresses live caching -- when unsure, go lower. The gateway uses it only to avoid emitting dead markers."
   ],
   "verification": {
     "shape": "high",
@@ -30,27 +35,66 @@
   "models": [
     {
       "id": "claude-fable-5",
-      "context": 1000000, "max_output": 128000,
-      "capabilities": { "tools": true, "vision": true, "streaming_usage": true, "prompt_cache": true },
-      "price_per_mtok": { "input": 10.00, "output": 50.00, "cache_write_5m": 12.50, "cache_write_1h": 20.00, "cache_read": 1.00 },
+      "context": 1000000,
+      "max_output": 128000,
+      "capabilities": {
+        "tools": true,
+        "vision": true,
+        "streaming_usage": true,
+        "prompt_cache": true,
+        "prompt_cache_min_tokens": 2048
+      },
+      "price_per_mtok": {
+        "input": 10.0,
+        "output": 50.0,
+        "cache_write_5m": 12.5,
+        "cache_write_1h": 20.0,
+        "cache_read": 1.0
+      },
       "price_confidence": "high",
       "price_source": "https://platform.claude.com/docs/en/about-claude/pricing",
       "price_checked": "2026-07-04"
     },
     {
       "id": "claude-opus-4-8",
-      "context": 1000000, "max_output": 128000,
-      "capabilities": { "tools": true, "vision": true, "streaming_usage": true, "prompt_cache": true },
-      "price_per_mtok": { "input": 5.00, "output": 25.00, "cache_write_5m": 6.25, "cache_write_1h": 10.00, "cache_read": 0.50 },
+      "context": 1000000,
+      "max_output": 128000,
+      "capabilities": {
+        "tools": true,
+        "vision": true,
+        "streaming_usage": true,
+        "prompt_cache": true,
+        "prompt_cache_min_tokens": 4096
+      },
+      "price_per_mtok": {
+        "input": 5.0,
+        "output": 25.0,
+        "cache_write_5m": 6.25,
+        "cache_write_1h": 10.0,
+        "cache_read": 0.5
+      },
       "price_confidence": "high",
       "price_source": "https://platform.claude.com/docs/en/about-claude/pricing",
       "price_checked": "2026-07-04"
     },
     {
       "id": "claude-sonnet-5",
-      "context": 1000000, "max_output": 128000,
-      "capabilities": { "tools": true, "vision": true, "streaming_usage": true, "prompt_cache": true },
-      "price_per_mtok": { "input": 3.00, "output": 15.00, "cache_write_5m": 3.75, "cache_write_1h": 6.00, "cache_read": 0.30 },
+      "context": 1000000,
+      "max_output": 128000,
+      "capabilities": {
+        "tools": true,
+        "vision": true,
+        "streaming_usage": true,
+        "prompt_cache": true,
+        "prompt_cache_min_tokens": 2048
+      },
+      "price_per_mtok": {
+        "input": 3.0,
+        "output": 15.0,
+        "cache_write_5m": 3.75,
+        "cache_write_1h": 6.0,
+        "cache_read": 0.3
+      },
       "price_confidence": "high",
       "price_source": "https://platform.claude.com/docs/en/about-claude/pricing",
       "price_checked": "2026-07-04",
@@ -58,9 +102,22 @@
     },
     {
       "id": "claude-haiku-4-5",
-      "context": 200000, "max_output": 64000,
-      "capabilities": { "tools": true, "vision": true, "streaming_usage": true, "prompt_cache": true },
-      "price_per_mtok": { "input": 1.00, "output": 5.00, "cache_write_5m": 1.25, "cache_write_1h": 2.00, "cache_read": 0.10 },
+      "context": 200000,
+      "max_output": 64000,
+      "capabilities": {
+        "tools": true,
+        "vision": true,
+        "streaming_usage": true,
+        "prompt_cache": true,
+        "prompt_cache_min_tokens": 4096
+      },
+      "price_per_mtok": {
+        "input": 1.0,
+        "output": 5.0,
+        "cache_write_5m": 1.25,
+        "cache_write_1h": 2.0,
+        "cache_read": 0.1
+      },
       "price_confidence": "high",
       "price_source": "https://platform.claude.com/docs/en/about-claude/pricing",
       "price_checked": "2026-07-04"

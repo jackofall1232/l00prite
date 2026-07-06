@@ -51,7 +51,14 @@ func normUsage(u map[string]any) oai.Usage {
 		CompletionTokens: numToInt(u["completion_tokens"]),
 	}
 	if details := asMap(u["prompt_tokens_details"]); details != nil {
+		// OpenAI-shaped prompt_tokens INCLUDES the cached portion; the internal Usage keeps the
+		// Anthropic convention (disjoint fields) so CostOf prices cached tokens exactly once —
+		// at the cache_read rate, never also at the full input rate.
 		usage.CacheReadTokens = numToInt(details["cached_tokens"])
+		if usage.CacheReadTokens > usage.PromptTokens {
+			usage.CacheReadTokens = usage.PromptTokens
+		}
+		usage.PromptTokens -= usage.CacheReadTokens
 	}
 	return usage
 }
