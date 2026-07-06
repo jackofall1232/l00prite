@@ -45,6 +45,7 @@ build it, in any codebase.
 | A function-level map of `cli-os` internals to find where to add a new gate/adapter/check | `l00prite-cli-os-internals` |
 | The procedure and gates for editing a review-gated file in the l00prite repo itself | `l00prite-change-control` |
 | The four SOTA research axes and l00prite's concrete next steps toward them | `l00prite-research-frontier` |
+| WHO holds the advisor/reviewer/executor seats for a multi-agent pass using these recipes | `l00prite-subagent-delegation` |
 
 ---
 

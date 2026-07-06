@@ -21,9 +21,11 @@ setup wizard, providers/repos/runs over curl, the dashboard — load **l00prite-
 instead. This skill is for the session that is about to read or change `cli-os/internal/**` Go
 source.
 
-All facts below were re-verified against the source on 2026-07-06 (repo tip `d4c6518`, branch
-`claude/beautiful-gauss-bxlzbs`) unless marked otherwise. Counts, test names, and manifest values
-are volatile — see **Provenance and maintenance** at the end for one-line re-check commands.
+All facts below were re-verified against the source on 2026-07-06 at an authoring-time checkpoint
+(repo tip `d4c6518`, branch `claude/beautiful-gauss-bxlzbs`; HEAD has since moved — re-verify with
+`git rev-parse HEAD` / `git log --oneline -1` rather than trusting this hash as the current tip)
+unless marked otherwise. Counts, test names, and manifest values are volatile — see **Provenance
+and maintenance** at the end for one-line re-check commands.
 
 ## When NOT to use this
 
@@ -60,8 +62,8 @@ and each package's doc comment):
 | `memory` | Repo Memory (Track 2): answers a query with ranked, token-budgeted blocks from a repo's `.l00prite/` files; returns blocks, never a finished prompt. |
 | `apierr` | The typed HTTP error (`*apierr.Error`: status, OpenAI-style `type`, optional `code`, optional routing `Decision`) threaded through routing/upstream. |
 | `util` | Cross-cutting helpers: `NowISO()`/`ISOFromTime` (millisecond ISO, string-comparable), `RID` (random ids), token-char estimation. |
-| `public` | Embedded static assets: `dashboard.html`, `setup.html`, `embed.go`. |
-| `cmd/l00prite` | The CLI entrypoint (`main.go`) — `init`/`serve`/`version` etc. |
+| `public` (cli-os/public/, not under internal/) | Embedded static assets: `dashboard.html`, `setup.html`, `embed.go`. |
+| `cmd/l00prite` (cli-os/cmd/l00prite/, not under internal/) | The CLI entrypoint (`main.go`) — `init`/`serve`/`version` etc. |
 
 ## 2. Gateway request flow (function names)
 

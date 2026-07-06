@@ -46,6 +46,7 @@ If you already know the cause and just need the fix procedure for a specific cla
 | The full stale-docs inventory and the doc-update ritual, once you've confirmed a drift here | `l00prite-docs-and-claims` |
 | The change-classification table and procedure once you know what class your fix is | `l00prite-change-control` |
 | Bringing l00prite into a new project, or what build-loop scaffolds | `l00prite-adopting` |
+| Codified rules for staffing/running the multi-agent pass itself (checkpoint discipline, empty-results-as-artifact, reviewer-never-writer) | `l00prite-subagent-delegation` |
 
 ---
 
@@ -158,38 +159,18 @@ debugging *your own* adopted project instead, you want Part A.
 
 ### B1. The validator "prints FAIL but grep shows none" trap
 
-`scripts/validate-l00prite.js`'s `check()` function (source, verified):
+**Symptom:** you pipe `node scripts/validate-l00prite.js` into `grep FAIL` (or capture only
+stdout) and see zero matches, yet the process exits `1` — a real FAIL is hiding from you.
 
-```js
-function check(condition, message) {
-  if (condition) {
-    console.log(`PASS ${message}`);   // stdout
-  } else {
-    console.error(`FAIL ${message}`); // stderr
-    failed = true;
-  }
-}
-```
+**Correct invocation:** `node scripts/validate-l00prite.js 2>&1 | grep FAIL` (merge streams
+*before* filtering).
 
-**PASS goes to stdout, FAIL goes to stderr.** If you pipe or capture only stdout, a real FAIL
-disappears from what you're looking at even though the process still exits 1. I reproduced this
-directly: I injected one guaranteed-failing check into a scratch copy of the validator (an
-extra required-file path that doesn't exist) and ran it against this repo.
+**Why:** `check()` writes `PASS` to stdout and `FAIL` to stderr, so a stdout-only pipe silently
+drops every FAIL line while the exit code still reports the truth.
 
-```
-$ node validate-broken.js > out.txt 2> err.txt; echo $?
-1
-$ grep FAIL out.txt | wc -l      # stdout only — the trap
-0
-$ cat err.txt
-FAIL THIS-FILE-DOES-NOT-EXIST.md exists
-$ node validate-broken.js 2>&1 | grep FAIL     # correct form
-FAIL THIS-FILE-DOES-NOT-EXIST.md exists
-```
-
-Always run it as `node scripts/validate-l00prite.js 2>&1 | <whatever you're piping into>`. As of
-2026-07-06 the real (unmodified) validator reports `519 PASS`, `0 FAIL`, exit `0` — the count is
-volatile and will legitimately grow; `0 FAIL` is the actual contract.
+For the full reproduction (the injected-failure proof, the exact source lines, the current
+PASS/FAIL count) see `l00prite-diagnostics-and-tooling` §B1 — that skill is the home of the
+interpretation guide; this entry is only the recognition/triage step.
 
 ### B2. Validator FAIL after editing a prompt or doc
 

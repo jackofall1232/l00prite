@@ -246,7 +246,7 @@ all three should still pass), the doctor's `prompt mirrors are byte-identical` /
 
 ## 8. Vendor adapter notes an adopter needs
 
-Every adapter is copied verbatim in Step 4 with no placeholders — you don't fill anything in,
+Every adapter except the generated AGENTS.md is copied verbatim in Step 4 with no placeholders — you don't fill anything in,
 but you should know what each one is for and its limits (all facts below are project-recorded
 in `templates/vendors.json` in the l00prite source repo, dated 2026-07-06; third-party tool
 behavior can rot — re-check before relying on it for a tool update you weren't expecting):

@@ -323,7 +323,7 @@ Every volatile fact above, with a one-line command to re-check it yourself:
 | Go version / toolchain | `go version` (compare against `go 1.24` in `cli-os/go.mod`) |
 | Node version | `node --version` |
 | No root `go.mod` | `go build ./... ` from repo root → expect the "directory prefix . does not contain main module" error |
-| No `package.json` anywhere | `find /home/user/l00prite -iname "package*.json"` → expect no output |
+| No `package.json` anywhere | `find . -iname "package*.json" -not -path "./node_modules/*"` (run from repo root) → expect no output |
 | `npm test` is dead | `npm test` from repo root or from `cli-os/` → expect `ENOENT ... package.json` |
 | Orphaned Node suite fails on import, not assertion | `node --test cli-os/test/unit.test.js` → expect `ERR_MODULE_NOT_FOUND` for `src/config.js` |
 | `go test` count (144 top-level / 170 incl. subtests) | `cd cli-os && grep -rE '^func Test' --include='*_test.go' . \| wc -l; go test -count=1 -v ./... 2>&1 \| grep -c -- '--- PASS'` |
@@ -334,5 +334,5 @@ Every volatile fact above, with a one-line command to re-check it yourself:
 | `goimports` absent | `which goimports; echo exit=$?` (expect exit 1) |
 | GOPROXY default / no_proxy allow-list for proxy.golang.org | `go env GOPROXY`; `curl -sS "$HTTPS_PROXY/__agentproxy/status"` (sandbox-specific; irrelevant outside a Claude Code Remote sandbox) |
 | Playwright browser path exists, no harness committed | `ls /opt/pw-browsers`; `find /home/user/l00prite -iname "uitest*"` (expect no output) |
-| No CI workflow in this repo's own `.github/` | `ls /home/user/l00prite/.github/` (expect only `copilot-instructions.md`) |
-| Current branch / HEAD (context only, expect drift) | `git rev-parse --abbrev-ref HEAD && git rev-parse --short HEAD` — was `claude/beautiful-gauss-bxlzbs` at `d4c6518` on 2026-07-06 |
+| No CI workflow in this repo's own `.github/` | `ls .github/` (run from repo root; expect only `copilot-instructions.md`) |
+| Current branch / HEAD (authoring-time checkpoint (2026-07-06): `claude/beautiful-gauss-bxlzbs` at `d4c6518` — HEAD has since moved, do not treat that hash as the current tip) | `git rev-parse --abbrev-ref HEAD && git rev-parse --short HEAD` |

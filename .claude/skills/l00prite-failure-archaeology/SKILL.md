@@ -43,6 +43,7 @@ relying on them for anything consequential; see "Provenance and maintenance" at 
 | How an idea moves from hunch to accepted result here (the research pipeline itself) | `l00prite-research-methodology` |
 | To actually build the Dashboard Runs view | `l00prite-runs-view-campaign` |
 | Deep Go runtime internals (routing, engine internals, package map) | `l00prite-cli-os-internals` |
+| Codified rules for staffing/running the multi-agent pass itself (checkpoint discipline, empty-results-as-artifact, reviewer-never-writer) | `l00prite-subagent-delegation` |
 
 ## How to read this chronicle
 
@@ -377,7 +378,7 @@ them for a decision, a PR description, or another skill's cross-reference.
 |---|---|
 | Validator: 519 PASS, 0 FAIL | `node scripts/validate-l00prite.js 2>&1 \| grep -c PASS` and `... \| grep -c FAIL` |
 | Doctor: 25 ok / 0 warn / 0 fail, HEALTHY | `node scripts/l00prite-doctor.js .` |
-| `HEAD` == `origin/main`, tip `c6dee9a` | `git rev-parse HEAD origin/main` |
+| `HEAD` == `origin/main` at authoring-time checkpoint (2026-07-06), tip `c6dee9a` — HEAD has since moved; do not treat that hash as the current tip | `git rev-parse HEAD origin/main` |
 | PR ghost refs (#3/#4/#12/#13) still resolvable | `git fetch origin 'refs/pull/*/head:refs/pr/*' && git for-each-ref refs/pr/` |
 | `refs/pr/12` and `refs/pr/13` are the same commit | `git for-each-ref refs/pr/12 refs/pr/13` (compare the hash column) |
 | `sandbox` branch exists, forked at `5daf92b`, never merged to `main` | `git merge-base origin/main origin/sandbox` (expect `5daf92b7ae0c1e8fd579e281a24abe2947b4728f`) |

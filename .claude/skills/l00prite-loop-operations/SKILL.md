@@ -333,7 +333,7 @@ Volatile facts stated above, each with a one-line re-check:
 | Event ID format and the anti-example | `sed -n '/Event ID format/,/anti-example/p' .l00prite/events/README.md` |
 | Ledger evidence-field requirement (`command`/`exit_code`/`summary`) | `sed -n '/Entry Template/,/## Runs/p' .l00prite/ledger.md` |
 | README precedence-rules wording | `sed -n '/## Precedence rules/,/## Not a distributed system/p' .l00prite/README.md` |
-| `heartbeat.json` schema (fresh-scaffold defaults, disarmed) | `cat templates/l00prite/heartbeat.json` |
+| `heartbeat.json` schema (fresh-scaffold defaults, disarmed) | `cat templates/l00prite/heartbeat.json` (l00prite repo) or your own project's `.l00prite/heartbeat.json` |
 
 This skill describes the protocol layer; it does not track this repo's own current
 iteration count, branch state, or in-flight goal — those are this project's own

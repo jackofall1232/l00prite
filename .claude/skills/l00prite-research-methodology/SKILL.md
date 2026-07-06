@@ -159,8 +159,9 @@ that never got generalized into a rule.
 
 The maintainer's standing rule (fully specified in `l00prite-subagent-delegation`; the gated-edit
 angle is in `l00prite-change-control` §7) applies directly to research: **unless the maintainer
-says otherwise, a Fable-class session decomposes the hunch into a testable hypothesis, adjudicates
-which findings are real, and renders the final adopted/retired verdict; Opus/Sonnet-class sessions
+says otherwise, the highest-capability model available to the session decomposes the hunch into a
+testable hypothesis, adjudicates which findings are real, and renders the final adopted/retired
+verdict (Fable when available, otherwise the next ceiling down, e.g. Opus); lower-tier sessions
 execute the build and run the checks against that spec.** For a research pass specifically, add
 one more role split: **assign adversarial verification to a session that did not write the code
 under review** — the PR #24 story above is exactly the case where the author's own review missed
@@ -169,9 +170,10 @@ session that was cut off (usage limit, timeout) as unknown, never as a clean bil
 2026-07-05T19:10:34Z OS-APK ledger entry states this as policy, not apology: *"the 16-agent
 adversarial review workflow... was cut off by a session usage limit — the multi-agent adversarial
 pass did NOT complete (its empty findings list is an artifact of the failure, not a clean bill)."*
-This library (the 19 skills, authored the same way) is itself a standing instance of the pattern:
-a top-tier session specs the inventory and scope boundaries, execution sessions write each skill
-to spec, and a review pass checks the set adversarially before anyone treats it as done.
+This library (this skill library, authored the same way) is itself a standing instance of the
+pattern: a top-tier session specs the inventory and scope boundaries, execution sessions write
+each skill to spec, and a review pass checks the set adversarially before anyone treats it as
+done.
 
 ---
 

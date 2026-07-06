@@ -134,25 +134,25 @@ anything about cli-os itself (the doctor only reads files, never calls the gatew
    replace it with a fresh copy of `scripts/l00prite-doctor.js` from a current l00prite checkout.
 
 ```
-bash scripts/run-doctor.sh [path-to-project]     # default: current directory
+bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/run-doctor.sh [path-to-project]     # default: current directory
 ```
 
 Verified all three resolution paths plus the two error paths in this session:
 
 ```
-$ bash scripts/run-doctor.sh /home/user/l00prite
+$ bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/run-doctor.sh /home/user/l00prite
 running: node ".../scripts/l00prite-doctor.js" ...   (doctor source: project's own vendored copy)
 ... 25 ok · 0 warn · 0 fail ... exit 0
 
-$ bash scripts/run-doctor.sh /path/with/no/vendored/doctor   # only .l00prite/, no scripts/
+$ bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/run-doctor.sh /path/with/no/vendored/doctor   # only .l00prite/, no scripts/
 running: ... (doctor source: bundled snapshot (dated 2026-07-06 ...))
 ... 24 ok · 0 warn · 0 fail ... exit 0
 
-$ bash scripts/run-doctor.sh /path/with/no/dot-l00prite-at-all
+$ bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/run-doctor.sh /path/with/no/dot-l00prite-at-all
 l00prite-doctor: no .l00prite/ folder found at ...
 exit 2
 
-$ L00PRITE_DOCTOR_PATH=/some/other/copy.js bash scripts/run-doctor.sh .
+$ L00PRITE_DOCTOR_PATH=/some/other/copy.js bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/run-doctor.sh .
 running: ... (doctor source: explicit override ($L00PRITE_DOCTOR_PATH)) ...
 ```
 
@@ -328,8 +328,10 @@ the mechanics to produce the evidence, not the policy for what's acceptable.
 node scripts/validate-l00prite.js
 ```
 
-Verified in this session: **519 PASS, 0 FAIL, exit 0** (as of 2026-07-06, tip `d4c6518`, branch
-`claude/beautiful-gauss-bxlzbs`). The count is expected to grow as checks are added — 0 FAIL is
+Verified in this session: **519 PASS, 0 FAIL, exit 0** (authoring-time checkpoint 2026-07-06, tip
+`d4c6518`, branch `claude/beautiful-gauss-bxlzbs` — HEAD has since moved; re-verify with
+`git rev-parse HEAD` rather than trusting this hash as the current tip). The count is expected to
+grow as checks are added — 0 FAIL is
 the actual contract, not any specific PASS number. The validator always validates the repo it
 lives in (`path.resolve(__dirname, '..')`); it takes no arguments and cannot be pointed at
 another directory.
@@ -418,7 +420,7 @@ for f in templates/l00prite/prompts/execute-loop.md \
 done
 ```
 
-Or just run `scripts/check-parity.sh` (§B4) — it does this for all six prompts plus
+Or just run `bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/check-parity.sh` (§B4) — it does this for all six prompts plus
 `prompts/README.md`/`LOCKING.md` in one pass and reports drift with exact `diff` commands.
 
 **Files beyond the six prompts that are also parity-checked**: `templates/l00prite/prompts/
@@ -508,12 +510,12 @@ sync by hand if the validator's list ever changes). Verified real output, both c
 injected drift in a disposable scratch copy (never the real repo):
 
 ```
-$ bash scripts/check-parity.sh
+$ bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/check-parity.sh
 Checked 40 file(s) against their canonical source.
 PARITY OK — 0 drifted
 
 # (in a disposable scratch copy, with one byte appended to .claude/prompts/execute-loop.md)
-$ bash scripts/check-parity.sh
+$ bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/check-parity.sh
 Checked 40 file(s) against their canonical source.
 
 PARITY FAIL — 1 of 40 file(s) drifted from canonical:
@@ -531,7 +533,7 @@ Read-only (aside from whatever `go test` itself does, e.g. populate the Go build
 this repo's tracked files). Verified real output:
 
 ```
-$ bash scripts/verify-all.sh
+$ bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/verify-all.sh
 == validator: node scripts/validate-l00prite.js ==
 validator: PASS  (519 PASS, 0 FAIL, exit 0)
 
@@ -559,7 +561,7 @@ itself. Verified dry-run output for real (no files touched — confirmed with `g
 afterward):
 
 ```
-$ bash scripts/sync-prompt-mirrors.sh execute-loop
+$ bash .claude/skills/l00prite-diagnostics-and-tooling/scripts/sync-prompt-mirrors.sh execute-loop
 DRY RUN — no files will be written. Pass --apply to actually copy.
 
 would copy templates/l00prite/prompts/execute-loop.md -> .claude/prompts/execute-loop.md
@@ -588,7 +590,7 @@ whether it needs its own review) is `l00prite-change-control`'s byte-parity proc
 | Doctor (this repo): 25 ok, 0 warn, 0 fail, HEALTHY | 2026-07-06 | `node scripts/l00prite-doctor.js . \| tail -1` |
 | Doctor (example output): 24 ok (no vendor prompt mirrors there) | 2026-07-06 | `node scripts/l00prite-doctor.js examples/vendor-neutral-output \| tail -3` |
 | `go test ./...`: all pass, 144 top-level `Test` funcs | 2026-07-06 | `cd cli-os && go test ./... && grep -rh '^func Test' --include='*_test.go' . \| wc -l` |
-| Repo tip `d4c6518`, branch `claude/beautiful-gauss-bxlzbs` | 2026-07-06 | `git rev-parse HEAD && git branch --show-current` |
+| Repo tip `d4c6518` (authoring-time checkpoint — HEAD moves; this hash is not the current tip), branch `claude/beautiful-gauss-bxlzbs` | 2026-07-06 | `git rev-parse HEAD && git branch --show-current` |
 | `sqlite3` CLI absent in this environment; `python3`'s `sqlite3` module present | 2026-07-06 | `which sqlite3; python3 -c "import sqlite3; print(sqlite3.sqlite_version)"` |
 | refs/pr/12 == refs/pr/13 (same commit) | 2026-07-06 | `git fetch origin 'refs/pull/*/head:refs/pr/*' && git rev-parse refs/pr/12 refs/pr/13` |
 | refs/pr/4 tree == refs/pr/5 tree == `main`'s "Add codex (#5)" commit tree | 2026-07-06 | `git diff --stat refs/pr/4 refs/pr/5` (expect no output), then `git log origin/main --format='%H %T %s' \| grep $(git rev-parse refs/pr/5^{tree})` |

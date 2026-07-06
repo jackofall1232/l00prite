@@ -408,6 +408,14 @@ $ curl -s http://127.0.0.1:8799/v1/runs/start -H "authorization: Bearer $TOKEN" 
 {"run":{...,"status":"running","started_at":"...","confirmed_by":"<token-id>"},"started":true}
 ```
 
+**Doctrine caveat, not just a syntax rule:** `confirm:"EXECUTE"` must be typed by a human who has
+just reviewed *this run's* fresh pre-flight, *in this session* — never hardcoded, scripted,
+scheduled, or auto-filled from a config value or a previous run's approval. A headless/automated
+caller must not supply it. The API accepting the literal string is a mechanical gate, not
+evidence that a human actually looked at the pre-flight it's gating — see
+`l00prite-execution-mode-ops` for the full pre-flight-confirmation doctrine this call is
+mechanizing.
+
 Polling `/v1/runs/events` on that real run produced this exact event `kind` sequence:
 `preflight_built` -> `armed` -> `iteration_started` -> `model_turn` -> `persisted` -> `boundary`.
 Because the mock adapter replies with plain text instead of the expected `select_unit` tool
@@ -548,7 +556,7 @@ binary and, where shown, a scratch `LOOPRITE_HOME` you don't mind writing test d
 | Removing the last/only provider is allowed; next request 503s `no_providers_configured` | (source) `grep -n "no_providers_configured" -B3 cli-os/internal/gateway/router.go` |
 | `POST /v1/repos` 409s on duplicate id; CLI `repo register` is `INSERT OR REPLACE`; `POST /v1/repos/clone` exists and rejects credential-bearing/non-https-or-ssh URLs | (source) `grep -n "INSERT OR REPLACE\|repo_exists" cli-os/cmd/l00prite/main.go cli-os/internal/gateway/repos.go`; `sed -n '1,60p' cli-os/internal/gateway/repos_clone.go` |
 | `cli-os/INSTALL.md`'s "no git-URL support today" line is stale relative to `/v1/repos/clone` | (source) `git log --oneline -1 -- cli-os/INSTALL.md` vs `git log --oneline -1 -- cli-os/internal/gateway/repos_clone.go` (INSTALL.md's PR predates repos_clone.go's PR) |
-| 8 run statuses | (source) `grep -n "Status[A-Z][a-z]* *=" cli-os/internal/engine/types.go` |
+| 8 run statuses | (source) `grep -cE '^[[:space:]]+Status[A-Za-z]+ *= "' cli-os/internal/engine/types.go` → 8 (the identifier anchor excludes `EvStatus` and the `Status string` struct fields) |
 | `/v1/runs*` endpoint table, one-active-run-per-repo, Start's `confirm:"EXECUTE"` gate | (source) `sed -n '1,360p' cli-os/internal/gateway/runs.go`; (source) `grep -n "One active run per repo" -A6 cli-os/internal/engine/engine.go` |
 | Scripted happy-path run reaching `definition_of_done` | (source) `cd cli-os && go test ./internal/server/... -run TestRunsAPICreateStartComplete -v` |
 | Real (non-scripted) mock-adapter run legitimately hits `ambiguous_requirements` on iteration 1 | (binary) build+run a local server, add a provider literally named `anthropic` with `--adapter mock`, `POST /v1/runs` against a registered git repo, `POST /v1/runs/start` with `confirm:"EXECUTE"`, poll `GET /v1/runs/events?id=` |

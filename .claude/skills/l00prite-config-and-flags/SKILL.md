@@ -156,7 +156,7 @@ the vault is initialized.
 
 Three variables — `LOOPRITE_DEFAULT_MAX_TOKENS`, `LOOPRITE_BRIDGE_ENABLED`,
 `LOOPRITE_BRIDGE_MAX_HOPS` — are real, load-bearing, and currently **absent from
-`.env.example`** (verified: `cli-os/.env.example`, 26 lines, one root-level file; no duplicate
+`.env.example`** (verified: `cli-os/.env.example`, 25 lines, one root-level file; no duplicate
 elsewhere in the repo). If you're documenting env vars for an operator, don't rely on
 `.env.example` alone — it under-documents three of the eleven.
 

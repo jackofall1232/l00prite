@@ -275,12 +275,13 @@ loosen a `constraints.md` Denylist entry. Needing any of these is itself the
 
 **[engine]** The same guard exists as unconditional code, not just an instruction a model is
 asked to honor: the model's own tools (`write_file`, etc.) cannot touch `heartbeat.json`,
-`state.json`, `lock.json`, or `.l00prite/prompts/**` **at all** — `protocolProtected()` in
-`cli-os/internal/engine/tools.go` hard-denies them before the Denylist gate is even
-consulted. Those files are written only by the engine's own persistence code (`ArmHeartbeat`/
-`DisarmHeartbeat`/`TickHeartbeat`/`SetStateRun`), never by anything the model asked for. The
-iteration budget and no-progress threshold are immutable for the life of a run by construction
-(`RunConfig` is read-only after `Start`); the only way to get a different value is a *new* run.
+`state.json`, `lock.json`, `constraints.md`, or `.l00prite/prompts/**` **at all** —
+`protocolProtected()` in `cli-os/internal/engine/tools.go` hard-denies them before the Denylist
+gate is even consulted. Those files are written only by the engine's own persistence code
+(`ArmHeartbeat`/`DisarmHeartbeat`/`TickHeartbeat`/`SetStateRun`), never by anything the model
+asked for. The iteration budget and no-progress threshold are immutable for the life of a run by
+construction (`RunConfig` is read-only after `Start`); the only way to get a different value is a
+*new* run.
 
 ---
 

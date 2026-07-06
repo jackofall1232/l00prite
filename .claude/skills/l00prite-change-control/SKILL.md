@@ -341,13 +341,16 @@ Observed and applied repeatedly across this repo's own ledger (e.g. the 2026-07-
 gap-analysis pass: *"Fable 5 advising, Opus as the execution model... Fable's key reframes were
 followed exactly"*; the 2026-07-05T19:10:34Z OS-APK pass: *"Fable 5 authored the design, the
 engine loop/pre-flight/exec core, and all reviews; Opus subagents wrote the peripheral units to
-file-level specs"*): **unless the maintainer states otherwise, Fable-class models act as
-advisor — design, specs, adjudication of ambiguous findings, final judgment on scope — and
-lesser models (Opus/Sonnet-class) do the bulk execution against those specs.** The goal is
-Fable-standard output from cheaper execution sessions. When you're unsure whether a change needs
-sign-off from "the advisor," check whether it's scope-defining (touches a gated file, adds a run
-boundary, changes an invariant) versus mechanical execution against an already-agreed spec — the
-former routes through the advisor pattern, the latter doesn't need to.
+file-level specs"*): **unless the maintainer states otherwise, the highest-capability model
+available to the session takes the advisor seat — design, specs, adjudication of ambiguous
+findings, final judgment on scope — (Fable when available, otherwise the next ceiling down,
+e.g. Opus) while lower tiers do the bulk execution against those specs.** The goal is
+top-tier-standard output from cheaper execution sessions. When you're unsure whether a change
+needs sign-off from "the advisor," check whether it's scope-defining (touches a gated file, adds
+a run boundary, changes an invariant) versus mechanical execution against an already-agreed spec
+— the former routes through the advisor pattern, the latter doesn't need to. For the full
+algorithm (role definitions, the 6-step delegation process, ledger-grounded orchestration
+patterns), see `l00prite-subagent-delegation`.
 
 ---
 
