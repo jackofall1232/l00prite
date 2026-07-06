@@ -675,3 +675,58 @@ Append one entry per agent run. Do not overwrite prior runs.
 - **Do-not-retry notes:** none.
 - **Lock:** lock-20260706-111219-claude-prompt-caching acquired for this entry plus the
   todos.md update; released immediately after.
+
+### Run 2026-07-06T11:35:49Z — Claude (Fable 5), planner cache-miss fix (stable/volatile system split)
+- **Goal:** Fix the planner cache-miss noted in the 2026-07-06 prompt-caching pass: the
+  memory digest `InjectMemory` prepends to `system` is per-request-volatile, and because
+  Anthropic's cache_control is a prefix match, merging it into (or ahead of) the stable
+  protocol content invalidated the cached prefix on every planner call.
+- **Completed work:**
+  - `cli-os/internal/gateway/inject.go` — `InjectMemory` now also tags the injected digest
+    text as `volatile_system` via the existing top-level `l00prite` gateway-hint channel
+    (never reaches the wire: the openai-compat adapter strips the key; the native adapter
+    rebuilds its body field-by-field). Message shape/order it produces is unchanged.
+  - `cli-os/internal/gateway/adapters/anthropic.go` — system is now built as ordered content
+    blocks: stable protocol content first carrying the ephemeral cache_control, the volatile
+    digest last with NO marker (a marker there would pay the 1.25x write with no read ever
+    hitting it). Explicit client cache_control on system parts now passes through verbatim
+    and disables all auto-injection (matching the existing messages-level precedence, so the
+    4-breakpoint API cap can't be blown). New minimum-prefix gate: the stable-block marker is
+    emitted only when the estimated tools+stable size (ceil(chars/3.5), which rounds up — the
+    harmless direction) reaches the model's `prompt_cache_min_tokens` manifest capability;
+    below it the API would silently ignore the marker anyway, so dead markers are no longer
+    emitted. The last-message conversation breakpoint is untouched (not minimum-gated — the
+    growing loop prompt crosses the minimum quickly and undersized markers are free no-ops).
+  - `cli-os/internal/gateway/adapters/manifests/anthropic.json` — per-model
+    `prompt_cache_min_tokens` capability (4096 Opus 4.8/Haiku 4.5, 2048 Fable 5; Sonnet 5
+    assumed 2048 = its family tier, flagged unconfirmed in the manifest note; understated
+    values are free no-ops, overstated ones would suppress live caching — so go lower when
+    unsure). File was re-indented by the JSON tooling round-trip; values verified.
+- **Changed files:** `cli-os/internal/gateway/{inject.go,gateway_test.go}`,
+  `cli-os/internal/gateway/adapters/{anthropic.go,adapters_test.go,manifests/anthropic.json}`,
+  `.l00prite/{ledger.md,todos.md,lock.json}`, `CLAUDE.md` (run ledger row). Zero edits to the
+  two review-gated files.
+- **Tests run / Verification:**
+  - `command: go test ./...` · `exit_code: 0` · `summary: all packages pass; 6 new tests
+    (stable/volatile split shape, byte-identical stable breakpoint block across two calls
+    with different digests — the byte equality Anthropic's prefix hash keys on, explicit
+    system-marker precedence disables auto-injection, below-minimum emits no system marker
+    while the conversation breakpoint stays, InjectMemory hint round-trip + no-mutation,
+    no-injection-no-hint); the pre-existing prompt-cache injection test updated only in its
+    fixture size (its tiny system now correctly falls below the Opus minimum gate)`.
+  - `command: node scripts/validate-l00prite.js` · `exit_code: 0` · `summary: 519 PASS, 0 FAIL`.
+  - `command: node scripts/l00prite-doctor.js .` · `exit_code: 0` · `summary: HEALTHY`.
+- **Known limits (explicit):** there is still NO benchmark harness, so the real planner
+  hit-rate improvement is asserted from construction (byte-identical stable prefix across
+  turns), not measured against the live API. The repo deliberately has no token-spend
+  self-measurement; measuring actual cache_read_input_tokens deltas would come from the
+  gateway ledger once real traffic flows. Rendered system order changes for cache-capable
+  Anthropic models only: stable content now precedes the digest (previously digest-first) —
+  required for any prefix reuse; other providers and non-capable models keep the old order.
+- **Failures:** none.
+- **Confidence:** High — behavior is capability-gated and fail-closed; all precedence paths
+  unit-tested; non-Anthropic wire behavior unchanged.
+- **Next action:** push to `claude/token-caching-analysis-y2zp35` (updates PR #26).
+- **Do-not-retry notes:** none.
+- **Lock:** lock-20260706-113549-claude-planner-cache-split acquired for this entry plus the
+  todos.md update; released immediately after.
