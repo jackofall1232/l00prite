@@ -1,13 +1,16 @@
 ---
-description: l00prite protocol — durable agent memory in .l00prite/; read before working, lock before writing memory
+description: l00prite protocol — durable agent memory in l00prite/.l00prite/; read before working, lock before writing memory
 alwaysApply: true
 ---
 
 # l00prite protocol — Cursor rule
 
 This project uses the **l00prite protocol**: durable agent memory lives in `.l00prite/`, as
-plain files any AI agent can read. Full agent rules: `AGENTS.md`. Blueprint: `CLAUDE.md`
-and `.l00prite/blueprint.md`.
+plain files any AI agent can read, inside the protocol root — the `l00prite/` folder at the
+repo root (memory at `l00prite/.l00prite/`; in the l00prite source repo the protocol root
+is the repo root itself). All `.l00prite/` paths below are relative to that protocol root.
+Full agent rules: `AGENTS.md` in the protocol root. Blueprint: `CLAUDE.md` there and
+`.l00prite/blueprint.md`.
 
 1. Read `.l00prite/` before working: `blueprint.md`, `state.json`, `heartbeat.json`,
    `todos.md`, the tail of `ledger.md`. It — not your session history — is the source of

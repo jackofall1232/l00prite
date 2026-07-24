@@ -1,9 +1,10 @@
 ## 1. Mission
 
 l00prite is a vendor-neutral protocol that gives AI coding agents durable, file-based
-project memory and a deterministic execution protocol. It scaffolds a project blueprint, a
-`.l00prite/` memory folder (including canonical loop prompts), a vendor-neutral `AGENTS.md`,
-per-vendor adapters, and Claude/Codex prompt mirrors into a target repo so any agent —
+project memory and a deterministic execution protocol. It scaffolds a `l00prite/` folder
+into a target repo — a project blueprint (`CLAUDE.md`), a vendor-neutral `AGENTS.md`, and
+the `.l00prite/` memory folder (including canonical loop prompts) — plus thin root
+pointers and per-vendor adapters at each tool's hardcoded discovery path, so any agent —
 Claude, Codex, GPT, Gemini, Copilot, Cursor, Windsurf, Aider, or a future CLI agent — can
 pick up where another left off, and can run autonomous Execution Mode loops behind an
 explicit pre-flight gate, using files in the repo instead of vendor-specific session state.
@@ -24,18 +25,23 @@ layers, all plain Markdown and JSON:
 
 1. **Scaffold layer (Planning Mode)** — `.claude/commands/build-loop.md` (Claude Code slash
    command) and `.codex/prompts/build-loop.md` (Codex/CLI equivalent) ask clarifying
-   questions, pick a complexity tier, and write a target project's `CLAUDE.md` (with a
-   fixed protocol section), `AGENTS.md`, `.l00prite/` memory folder, prompt mirrors, vendor
-   adapters, and a tiered skeleton — then stop. Planning Mode never executes the generated
-   project and always ships Execution Mode disarmed.
-2. **Memory layer** — `templates/l00prite/` defines the `.l00prite/` folder shape copied
-   into every scaffolded project: `blueprint.md`, `ledger.md`, `memory.md`, `constraints.md`,
-   `failures.md`, `todos.md`, `heartbeat.json` (schema v2, with the `execution` block),
-   `state.json` (schema v2, with execution-run fields), `lock.json`, `LOCKING.md`,
-   `prompts/` (the canonical loop prompts — see layer 5), `events/`, `reviews/`,
-   `sessions/`. `examples/vendor-neutral-output/` is a filled reference copy of the
-   scaffold output (adapters included; the `.claude/`/`.codex/` prompt mirrors and the
-   tier skeleton are omitted — its README explains why).
+   questions, pick a complexity tier, and write a target project's `l00prite/` folder
+   (`CLAUDE.md` with a fixed protocol section, `AGENTS.md`, and the `.l00prite/` memory
+   folder), root pointer files, vendor adapters, and a tiered skeleton — then stop.
+   Planning Mode never executes the generated project and always ships Execution Mode
+   disarmed.
+2. **Memory layer** — `templates/l00prite/` defines the `l00prite/` folder copied into
+   every scaffolded project: a wrapper `README.md` plus the `.l00prite/` memory folder
+   (so a target's memory lives at `l00prite/.l00prite/`): `blueprint.md`, `ledger.md`,
+   `memory.md`, `constraints.md`, `failures.md`, `todos.md`, `heartbeat.json` (schema v2,
+   with the `execution` block), `state.json` (schema v2, with execution-run fields),
+   `lock.json`, `LOCKING.md`, `prompts/` (the canonical loop prompts — see layer 5),
+   `events/`, `reviews/`, `sessions/`. The target's repo root gets only thin pointer
+   files (`AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `QWEN.md`, `CONVENTIONS.md`) plus the
+   self-sufficient dot-folder adapters at their hardcoded paths.
+   `examples/vendor-neutral-output/` is a filled reference copy of the scaffold output
+   (adapters and pointers included; the tier skeleton is omitted — its README explains
+   why).
 3. **Event layer** — pending interrupts (PR review comments, failed CI runs) are modeled as
    first-class JSON objects moved through `pending/ → processing/ → completed/` and handled
    via the event-loop/respond-to-review prompts
@@ -45,14 +51,24 @@ layers, all plain Markdown and JSON:
    prompts let an agent resume one supervised step, decide whether to continue, respond to
    reviews, and hand off, all through shared `.l00prite/` files.
 5. **Universal prompt + vendor layer** — the six loop prompts live canonically in
-   `templates/l00prite/prompts/` and are mirrored byte-identically into `.claude/prompts/`,
-   `.codex/prompts/`, `templates/claude/prompts/`, `templates/codex/prompts/`, this repo's
-   own `.l00prite/prompts/`, and the example output — enforced by the validator, so parity
-   can't drift. `templates/AGENTS.md.template` generates the vendor-neutral operating guide
-   (read natively by the AGENTS.md ecosystem), `templates/adapters/` ships self-sufficient
-   adapters for Gemini CLI, Qwen Code, GitHub Copilot, Cursor, Windsurf, and Aider, and
-   `templates/vendors.json` is the machine-readable manifest. The adapters are dogfooded at
-   this repo's own root.
+   `templates/l00prite/.l00prite/prompts/` and are mirrored byte-identically into
+   `.claude/prompts/`, `.codex/prompts/`, `templates/claude/prompts/`,
+   `templates/codex/prompts/`, this repo's own `.l00prite/prompts/`, and the example
+   output — enforced by the validator, so parity can't drift; a scaffolded target carries
+   a single copy at `l00prite/.l00prite/prompts/`, with every discovery file routing to
+   it. The prompts state their paths relative to the *protocol root* (the directory
+   containing `.l00prite/`) so the same bytes are correct in targets and in this repo.
+   `templates/AGENTS.md.template` generates the vendor-neutral operating guide into
+   `l00prite/AGENTS.md` (reached natively by the AGENTS.md ecosystem through the root
+   pointer), `templates/adapters/` ships the root pointer files (AGENTS/CLAUDE prose
+   pointers, `@./l00prite/AGENTS.md` imports for Gemini CLI and Qwen Code — the
+   `./`-prefixed form is the documented one — and Aider's CONVENTIONS.md) plus
+   self-sufficient adapters for GitHub Copilot, Cursor, Windsurf, and Grok CLI
+   (`.grok/GROK.md`), and `templates/vendors.json` (schema v2) is the machine-readable
+   manifest distinguishing pointer from self-sufficient files. The self-sufficient
+   adapters are dogfooded byte-identically at this repo's own root; the root
+   `GEMINI.md`/`QWEN.md`/`CONVENTIONS.md` here stay self-sufficient (this repo has no
+   `l00prite/` wrapper), which the validator checks by keyword instead of byte-parity.
 6. **Execution layer (Execution Mode)** — `execute-loop.md` (canonical prompt, mirrored
    everywhere, plus the `/execute-loop` slash command) defines the autonomous run: a
    mandatory pre-flight gate (lock check first, stale-run recovery, schema migration,
@@ -169,6 +185,7 @@ roadmap).
 | L00prite OS core (OS-APK) | 2026-07-05 | `cli-os/docs/os-architecture.md` (v2 design); `internal/engine/` run engine mechanically embodying `execute-loop.md` (pre-flight steps 1-5 in code, Start = the explicit in-session confirmation via `confirm:"EXECUTE"`, one-unit iterations, all nine run boundaries as code, repo-jailed tools with protocol-file hard-deny + Autonomous-Edit Denylist + command-allowlist gates, per-action approvals fail-closed on timeout, dual persistence engine-SQLite + target-repo `.l00prite/`, crash recovery) — realizes the "runtime harness" roadmap item; role-aware routing (`roleRanks`, profile `rankMap`/`providers`, built-in plan/code/review/summarize profiles); `EngineCaller` seam (every autonomous call routed/PEP-reserved/metered/ledgered; the engine names only `auto:<profile>`); `/v1/runs*` API + `/v1/repos/clone`; cross-platform packaging (`scripts/dist.sh` 5-target static matrix + SHA256SUMS, `install.ps1`, `l00prite version`). Fable 5 designed and wrote the engine core; Opus writers built peripheral units to spec. Dashboard Runs view queued next. Zero edits to the two review-gated files | `go test ./...` (all pass incl. engine unit suites + 4 end-to-end run tests: done-with-real-writes/disarmed-exit/released-lock, denylist gate fail-close to `destructive_operation_required`, Start refused without fresh pre-flight+confirm, crash reconcile), `node scripts/validate-l00prite.js` (519 PASS, 0 FAIL), `node scripts/l00prite-doctor.js .` (HEALTHY), `bash scripts/dist.sh vtest` (5 artifacts + SHA256SUMS) | In review |
 | Planner cache-miss fix | 2026-07-06 | Stable/volatile system split in the Anthropic native adapter: `InjectMemory` tags its per-request memory digest via the `l00prite.volatile_system` gateway hint; the adapter renders system as ordered blocks — stable protocol content first carrying the ephemeral `cache_control`, volatile digest last unmarked — so the planner's cached tools+system prefix is byte-identical across turns instead of being invalidated by the digest. Explicit client markers on system now pass through verbatim and disable auto-injection; new per-model `prompt_cache_min_tokens` manifest capability gates the system marker so dead markers below the cacheable minimum aren't emitted (conversation breakpoint unchanged). Real hit-rate improvement NOT measured (no benchmark harness) — asserted from byte-identical constructed requests in unit tests. Zero edits to the two review-gated files | `go test ./...` (all pass incl. 6 new tests: split shape, byte-identical stable block across differing digests, explicit-marker precedence, below-minimum no-marker, InjectMemory hint round-trip/no-mutation, no-injection-no-hint), `node scripts/validate-l00prite.js` (519 PASS, 0 FAIL), `node scripts/l00prite-doctor.js .` (HEALTHY) | In review |
 | Prompt-caching pass | 2026-07-06 | Worth-it analysis (verdict: true) + implementation in the `cli-os` gateway: the Anthropic native adapter now auto-injects `cache_control` breakpoints (`system` as a block array + last message content block, gated on the manifest's per-model `prompt_cache` capability, fail-closed for unknown models; explicit client markers pass through and win); OpenAI-shaped `cached_tokens` made disjoint from `prompt_tokens` in internal usage so `CostOf` can never double-price cached tokens; client-facing `prompt_tokens`/`total_tokens` now include cache read+write via new `oai.UsageMap`. OpenAI server-side caching needed no request changes (passthrough preserves everything; `cached_tokens` was already metered). Repo-state-hash response caching deferred to `todos.md` pending a benchmark arm. Zero edits to the two review-gated files | `go test ./...` (all pass incl. 5 new adapter/usage tests), `node scripts/validate-l00prite.js` (519 PASS, 0 FAIL), `node scripts/l00prite-doctor.js .` (HEALTHY) | In review |
+| Scaffolding restructure | 2026-07-24 | Target payload nested under `l00prite/` (memory at `l00prite/.l00prite/`, prompts inside it as the single target copy; `.claude`/`.codex` mirrors no longer scaffolded into targets); root pointer files (`pointer-AGENTS.md`/`pointer-CLAUDE.md` new, GEMINI/QWEN as verified `@./l00prite/AGENTS.md` imports, CONVENTIONS prose pointer); new `.grok/GROK.md` self-sufficient adapter (+ dogfood); protocol-root path convention in prompts and self-sufficient adapters; vendors.json schema v2 (pointer vs self-sufficient, dogfood rules); both-layouts denylist globs; doctor resolves `l00prite/.l00prite/` or root `.l00prite/`; example output restructured; README/HANDOFF/CLAUDE.md/.claude+.codex READMEs updated. Both review-gated files edited at maintainer direction | `node scripts/validate-l00prite.js` (606 PASS, 0 FAIL), `node scripts/l00prite-doctor.js .` and `... examples/vendor-neutral-output` (both HEALTHY), byte-parity via validator mirror checks | In review |
 
 ## 8. Completion Criteria
 

@@ -1,5 +1,5 @@
 ---
-description: Planning Mode — scaffold CLAUDE.md, AGENTS.md, .l00prite memory, universal loop prompts, vendor adapters, and a skeleton repo from a project idea. Stops after scaffolding; --execute hands off to Execution Mode only through execute-loop's confirmed pre-flight.
+description: Planning Mode — scaffold a target project's l00prite/ folder (CLAUDE.md blueprint, AGENTS.md, .l00prite memory, universal loop prompts), root pointer files, vendor adapters, and a skeleton repo from a project idea. Stops after scaffolding; --execute hands off to Execution Mode only through execute-loop's confirmed pre-flight.
 ---
 
 You are running the `/build-loop` command from the l00prite project. This command is
@@ -59,7 +59,12 @@ Tell the user which tier you picked **and explain why**, referencing their actua
 services, so this is **small** tier."). If it's genuinely borderline, say so and pick the
 smaller of the two — it's cheaper to upgrade a skeleton later than to have over-scaffolded.
 
-## Step 3 — Generate the target project's CLAUDE.md and AGENTS.md
+## Step 3 — Generate the target project's l00prite/CLAUDE.md, l00prite/AGENTS.md, and root pointers
+
+Everything l00prite generates — the blueprint, the operating guide, and the memory folder —
+lives under a single `l00prite/` folder at the target repo root. The repo root gets only
+thin pointer files (written in Step 4) at the paths each tool hardcodes for discovery, so
+the scaffold does not scatter loose files across the target's root.
 
 Read `templates/CLAUDE.md.template` from this repo. Fill in every `{{placeholder}}` with
 content specific to the user's project, based on their Step 1 answers and the tier chosen
@@ -98,55 +103,82 @@ in Step 2. The output must:
   in, not something you pre-fill.
 
 If the target repo path doesn't exist yet and the user said "new repo", create the
-directory first. Then, before writing, check whether a `CLAUDE.md` already exists at that
-path in the target repo. If it does, do not overwrite it silently — tell the user one
-already exists there and ask whether to overwrite it, save the generated one alongside it
-(e.g. `CLAUDE.md.generated`) for them to merge by hand, or abort. Only write once they've
-chosen.
+directory first. Then, before writing, check whether a `l00prite/CLAUDE.md` (or a legacy
+root `CLAUDE.md` from an earlier layout) already exists in the target repo. If it does, do
+not overwrite it silently — tell the user one already exists there and ask whether to
+overwrite it, save the generated one alongside it (e.g. `CLAUDE.md.generated`) for them to
+merge by hand, or abort. Only write once they've chosen.
 
-Write the result to the target repo (per the user's Step 1 answer) as `CLAUDE.md`. Discard
-`templates/CLAUDE.md.template`'s own leading HTML comment block (the meta-instructions
-about `{{placeholder}}` rules at the very top of the template file) before writing — it
-documents the template for l00prite's own maintainers and must never appear in the
-generated target `CLAUDE.md`.
+Write the result to the target repo (per the user's Step 1 answer) as `l00prite/CLAUDE.md`.
+Discard `templates/CLAUDE.md.template`'s own leading HTML comment block (the
+meta-instructions about `{{placeholder}}` rules at the very top of the template file)
+before writing — it documents the template for l00prite's own maintainers and must never
+appear in the generated target `l00prite/CLAUDE.md`.
 
-Then read `templates/AGENTS.md.template` and generate the target repo's `AGENTS.md` the
-same way: discard the leading HTML comment block, fill `{{project_name}}` and
-`{{mission_line}}` with real content, and leave everything else verbatim. `AGENTS.md` is
-the vendor-neutral operating guide — OpenAI Codex, Cursor, GitHub Copilot, Windsurf, Zed,
-Jules, Factory, Amp, opencode, Devin, and other agents read it natively, so it is how most
-non-Claude agents learn the lock, untrusted-content, and prompt-location rules. Apply the
-same no-silent-overwrite rule (overwrite / `.generated` copy / abort — ask).
+Then read `templates/AGENTS.md.template` and generate the target repo's
+`l00prite/AGENTS.md` the same way: discard the leading HTML comment block, fill
+`{{project_name}}` and `{{mission_line}}` with real content, and leave everything else
+verbatim. `l00prite/AGENTS.md` is the vendor-neutral operating guide and the file every
+root-level pointer leads to — it is how most non-Claude agents learn the lock,
+untrusted-content, and prompt-location rules. Apply the same no-silent-overwrite rule
+(overwrite / `.generated` copy / abort — ask).
 
-## Step 4 — Generate the .l00prite memory folder, loop prompts, and vendor adapters
+The repo-root discovery files for these two are thin pointers, copied verbatim in Step 4:
+`templates/adapters/pointer-CLAUDE.md` → `CLAUDE.md` (points at `l00prite/CLAUDE.md` and
+`l00prite/AGENTS.md` for Claude Code) and `templates/adapters/pointer-AGENTS.md` →
+`AGENTS.md` (points at `l00prite/AGENTS.md` for OpenAI Codex, Cursor, GitHub Copilot,
+Windsurf, Zed, Jules, Factory, Amp, opencode, Devin, and the rest of the AGENTS.md
+ecosystem, which read root `AGENTS.md` natively). Never duplicate the generated content
+into the root files.
 
-If a `.l00prite/lock.json` already exists at the target path, read it before doing anything
-else in this step. If its `status` is `active` and `expires_at` is in the future, another
-agent may currently be working in that project — stop and tell the user a lock is held
-(owner, purpose, expiry) instead of proceeding; do not scaffold over it. Only continue if
-`lock.json` is missing, `unlocked`, `released`, or `expired`.
+## Step 4 — Generate the l00prite/ folder (memory + prompts), root pointers, and vendor adapters
 
-Create a `.l00prite/` folder in the target repo from `templates/l00prite/`. Fill obvious project-specific values in `blueprint.md`, `state.json`, `constraints.md`, and `todos.md`. Keep the files human-readable and vendor-neutral. Leave `lock.json` in its shipped `"unlocked"` state — it is not project-specific and must not be pre-filled or set to `"active"`. Leave `heartbeat.json`'s `execution` block exactly as shipped — `enabled: false`, `preflight_confirmed: false` — **regardless of any `--execute` flag**; Planning Mode never arms execution. Copy `.l00prite/prompts/` verbatim from `templates/l00prite/prompts/` — these are protocol files, not templates to fill in. Do not silently overwrite existing `.l00prite/` files; ask whether to overwrite, write `.generated` copies, or abort.
+If a `l00prite/.l00prite/lock.json` (or a legacy root `.l00prite/lock.json`) already exists
+at the target path, read it before doing anything else in this step. If its `status` is
+`active` and `expires_at` is in the future, another agent may currently be working in that
+project — stop and tell the user a lock is held (owner, purpose, expiry) instead of
+proceeding; do not scaffold over it. Only continue if `lock.json` is missing, `unlocked`,
+`released`, or `expired`.
 
-Also create `.codex/prompts/` in the target repo from `templates/codex/prompts/`, including `resume-loop.md`, `heartbeat.md`, `event-loop.md`, `respond-to-review.md`, `handoff-summary.md`, and `execute-loop.md`. These target-project prompts must be copy/paste-friendly, must tell Codex and other CLI agents to treat `.l00prite/` as the shared source of truth, and must not assume Claude slash-command behavior. Do not silently overwrite existing `.codex/` prompt files; ask whether to overwrite, write `.generated` copies, or abort.
+Create the `l00prite/` folder in the target repo from `templates/l00prite/` — it contains
+`README.md` (the human-facing explainer, copied verbatim) and the `.l00prite/` memory
+folder (so the target's memory lives at `l00prite/.l00prite/`). Fill obvious
+project-specific values in `.l00prite/blueprint.md`, `state.json`, `constraints.md`, and
+`todos.md`. Keep the files human-readable and vendor-neutral. Leave `lock.json` in its
+shipped `"unlocked"` state — it is not project-specific and must not be pre-filled or set
+to `"active"`. Leave `heartbeat.json`'s `execution` block exactly as shipped —
+`enabled: false`, `preflight_confirmed: false` — **regardless of any `--execute` flag**;
+Planning Mode never arms execution. Copy `.l00prite/prompts/` verbatim from
+`templates/l00prite/.l00prite/prompts/` — these are protocol files, not templates to fill
+in, and `l00prite/.l00prite/prompts/` is the target's single canonical copy (targets no
+longer get `.claude/prompts/` or `.codex/prompts/` mirrors; the root pointers route every
+agent to the one copy). Do not silently overwrite existing `l00prite/` files; ask whether
+to overwrite, write `.generated` copies, or abort.
 
-Also create `.claude/prompts/` in the target repo from `templates/claude/prompts/`, including the same six prompts. `CLAUDE.md` carries the fixed protocol section, but the prompts are the full operating procedures — `.claude/prompts/`, `.codex/prompts/`, and `.l00prite/prompts/` are byte-identical mirrors, so every agent runs the same loop. Do not silently overwrite existing `.claude/prompts/` files; ask whether to overwrite, write `.generated` copies, or abort.
+Then place the root pointer files and vendor adapters from `templates/adapters/` (see
+`templates/vendors.json` for the mapping), so every agent discovers the protocol through
+its own hardcoded context path:
 
-Then scaffold the vendor adapters from `templates/adapters/` (see `templates/vendors.json`
-for the mapping), so agents beyond Claude and Codex discover the protocol through their own
-context files:
+Thin pointers at the repo root (route into `l00prite/`, never duplicate rules):
 
-- `templates/adapters/GEMINI.md` → `GEMINI.md` (Gemini CLI)
-- `templates/adapters/QWEN.md` → `QWEN.md` (Qwen Code)
-- `templates/adapters/CONVENTIONS.md` → `CONVENTIONS.md` (Aider)
+- `templates/adapters/pointer-AGENTS.md` → `AGENTS.md` (AGENTS.md ecosystem)
+- `templates/adapters/pointer-CLAUDE.md` → `CLAUDE.md` (Claude Code)
+- `templates/adapters/GEMINI.md` → `GEMINI.md` (Gemini CLI — imports `@./l00prite/AGENTS.md`)
+- `templates/adapters/QWEN.md` → `QWEN.md` (Qwen Code — same import)
+- `templates/adapters/CONVENTIONS.md` → `CONVENTIONS.md` (Aider, via `--read`)
+
+Self-sufficient adapters at hardcoded dot-folder paths (six protocol rules inline):
+
 - `templates/adapters/copilot-instructions.md` → `.github/copilot-instructions.md` (GitHub Copilot)
 - `templates/adapters/l00prite.mdc` → `.cursor/rules/l00prite.mdc` (Cursor)
 - `templates/adapters/windsurf-l00prite.md` → `.windsurf/rules/l00prite.md` (Windsurf)
+- `templates/adapters/GROK.md` → `.grok/GROK.md` (Grok CLI)
 
-Copy each verbatim — adapters contain no placeholders. Apply the same no-silent-overwrite
-rule to every adapter path. Never ship vendor *config* files (`.aider.conf.yml`,
-`.gemini/settings.json`) into the target repo — those belong to the user; the adapters and
-`templates/adapters/README.md` document the snippets instead.
+Copy each verbatim — these files contain no placeholders. Apply the same
+no-silent-overwrite rule to every path above. Never ship vendor *config* files
+(`.aider.conf.yml`, `.gemini/settings.json`, `.grok/settings.json`) into the target repo —
+those belong to the user; the adapters and `templates/adapters/README.md` document the
+snippets instead.
 
 ## Step 5 — Generate the skeleton folder structure
 
@@ -208,37 +240,38 @@ Unless Step 8 applies, end the command here. Tell the user, explicitly and in pl
 language:
 
 - Without `--execute`, this command does **not** execute the generated blueprint and does
-  **not** run any build loop. It only scaffolded files: `CLAUDE.md`, `AGENTS.md`,
-  `.l00prite/` (including `.l00prite/prompts/`), `.claude/prompts/`, `.codex/prompts/`,
-  the vendor adapters, and the selected skeleton.
-- **Review the generated `CLAUDE.md` and `AGENTS.md` yourself** before running anything —
-  read them the way you'd read a PR, not the way you'd skim a changelog.
+  **not** run any build loop. It only scaffolded files: the `l00prite/` folder
+  (`l00prite/CLAUDE.md`, `l00prite/AGENTS.md`, `l00prite/README.md`, and
+  `l00prite/.l00prite/` including its `prompts/`), the root pointer files (`AGENTS.md`,
+  `CLAUDE.md`, `GEMINI.md`, `QWEN.md`, `CONVENTIONS.md`), the dot-folder vendor adapters,
+  and the selected skeleton.
+- **Review the generated `l00prite/CLAUDE.md` and `l00prite/AGENTS.md` yourself** before
+  running anything — read them the way you'd read a PR, not the way you'd skim a
+  changelog.
 - If you haven't already, **set a spend limit with your model provider** (e.g. the
   Anthropic Console) before pointing an agentic session at this blueprint. Unsupervised
   agentic loops can burn real API spend if left unattended.
 - l00prite has two operating modes. **Planning Mode** (this command) scaffolds and stops.
   **Execution Mode** is an autonomous run — plan a unit, execute, verify, persist, repeat,
   until the Definition of Done or another run boundary — entered only through
-  `.l00prite/prompts/execute-loop.md`, which always shows a pre-flight summary and requires
-  explicit in-session confirmation first.
+  `l00prite/.l00prite/prompts/execute-loop.md`, which always shows a pre-flight summary
+  and requires explicit in-session confirmation first.
 - To build step-by-step under supervision instead, open a fresh session in the target repo
-  and use `.l00prite/prompts/resume-loop.md` — or your agent's byte-identical mirror
-  (`.claude/prompts/resume-loop.md` for Claude Code, `.codex/prompts/resume-loop.md` for
-  Codex/CLI agents). To process an event or review, use
-  `.l00prite/prompts/event-loop.md` or `.l00prite/prompts/respond-to-review.md` (or the
-  mirrors).
-- Every major agent will find the protocol on its own: Claude Code via `CLAUDE.md`; Codex,
-  Cursor, Copilot, Windsurf, Zed, and the rest of the AGENTS.md ecosystem via `AGENTS.md`;
-  Gemini CLI via `GEMINI.md`; Qwen Code via `QWEN.md`; Aider via `CONVENTIONS.md`
-  (`--read`). All agents treat `.l00prite/` as the shared source of truth and update it
-  before stopping.
+  and use `l00prite/.l00prite/prompts/resume-loop.md`. To process an event or review, use
+  `l00prite/.l00prite/prompts/event-loop.md` or
+  `l00prite/.l00prite/prompts/respond-to-review.md`. The target carries one canonical copy
+  of each prompt — every root pointer and adapter routes agents to it.
+- Every major agent will find the protocol on its own: Claude Code via the root `CLAUDE.md`
+  pointer; Codex, Cursor, Copilot, Windsurf, Zed, and the rest of the AGENTS.md ecosystem
+  via the root `AGENTS.md` pointer; Gemini CLI via `GEMINI.md`; Qwen Code via `QWEN.md`;
+  Aider via `CONVENTIONS.md` (`--read`); Grok CLI via `.grok/GROK.md`. All agents treat
+  `l00prite/.l00prite/` as the shared source of truth and update it before stopping.
 
 Do not, under any circumstances in this command, make further tool calls against the
-target repo beyond writing the `CLAUDE.md`, `AGENTS.md`, `.l00prite/`, `.claude/prompts/`,
-`.codex/prompts/`, vendor adapter, and skeleton files described above. Do not start
-implementing requirements, do not run build/test commands in the target repo, and do not
-open a build loop yourself. The single exception is the explicitly-confirmed Execution
-Mode handoff in Step 8.
+target repo beyond writing the `l00prite/` folder, root pointer, vendor adapter, and
+skeleton files described above. Do not start implementing requirements, do not run
+build/test commands in the target repo, and do not open a build loop yourself. The single
+exception is the explicitly-confirmed Execution Mode handoff in Step 8.
 
 ## Step 8 — The `--execute` flag (optional Execution Mode handoff)
 
@@ -247,12 +280,13 @@ Apply this step **only** if the user's arguments to this command included `--exe
 - The flag never changes the scaffold: Steps 1–7 run identically, and the scaffolded
   `heartbeat.json` still ships with `execution.enabled: false` and
   `preflight_confirmed: false`. Planning Mode never pre-arms a repo.
-- After Step 7's summary, read `.l00prite/prompts/execute-loop.md` **in the target repo**
-  and follow it exactly: its pre-flight gate (lock check first, stale-run recovery, schema
-  check, full pre-flight display) and its requirement of **explicit human confirmation in
-  this session** before the first iteration. The flag is a request to *offer* Execution
-  Mode now — it is not the confirmation itself, and a `preflight_confirmed: true` left in
-  `heartbeat.json` by an earlier run does not satisfy the gate either.
+- After Step 7's summary, read `l00prite/.l00prite/prompts/execute-loop.md` **in the
+  target repo** and follow it exactly: its pre-flight gate (lock check first, stale-run
+  recovery, schema check, full pre-flight display) and its requirement of **explicit human
+  confirmation in this session** before the first iteration. The flag is a request to
+  *offer* Execution Mode now — it is not the confirmation itself, and a
+  `preflight_confirmed: true` left in `heartbeat.json` by an earlier run does not satisfy
+  the gate either.
 - If the user confirms, Execution Mode proceeds under execute-loop's rules (one unit per
   iteration, verified and persisted; nine run boundaries; per-action permission for push/
   merge/deploy/credentials; no self-modification of limits).

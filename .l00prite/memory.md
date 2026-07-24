@@ -26,7 +26,8 @@ Durable project facts and decisions that future agents should preserve.
 - The execution block's boundary list is named `run_boundaries`, not `stop_conditions`, to
   avoid colliding with heartbeat.json's existing top-level `stop_conditions`; execution has
   its own iteration counters and the top-level pair is untouched by execute-loop.
-- The six loop prompts have ONE canonical source, `templates/l00prite/prompts/`; all other
+- The six loop prompts have ONE canonical source, `templates/l00prite/.l00prite/prompts/`
+  (moved 2026-07-24 when the target payload was nested under `l00prite/`); all other
   copies are byte-identical mirrors enforced by the validator. Edit canonical, re-copy,
   validate.
 - Vendor support is data (`templates/vendors.json`); adapters are self-sufficient (six

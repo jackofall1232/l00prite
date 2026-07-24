@@ -1,15 +1,8 @@
-<!--
-  This file is consumed by build-loop (Planning Mode). It is filled in for a TARGET
-  project, not for l00prite itself. Replace {{project_name}} and {{mission_line}} with
-  real content; everything else ships verbatim. Keep this file well under 32 KiB — some
-  agents (e.g. OpenAI Codex) cap combined AGENTS.md content and silently truncate beyond it.
--->
-
 # AGENTS.md
 
 ## Project
 
-**{{project_name}}** — {{mission_line}}
+**example-project** — a small demonstration project showing the files l00prite scaffolds into a target repo.
 
 The full blueprint (mission, architecture, requirements, definition of done) lives in
 `CLAUDE.md` next to this file and in `.l00prite/blueprint.md`. This file is the operating

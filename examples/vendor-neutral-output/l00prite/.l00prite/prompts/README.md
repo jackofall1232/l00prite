@@ -6,13 +6,14 @@ exist yet. Because they ship inside `.l00prite/`, every l00prite project is self
 an agent that finds the memory folder also finds the procedures for operating on it. Paste a
 prompt into your session, or point your agent at the file.
 
-The canonical source lives at `templates/l00prite/prompts/` in the l00prite repo, where a
-validator keeps every copy byte-identical. In a scaffolded project, this folder is your
-local copy, and the vendor prompt folders (`.claude/prompts/`, `.codex/prompts/`) start out
-byte-identical to it — but nothing inside this project checks for drift afterward, so if
-these files are ever changed (on explicit human request only), update every copy together.
-Edit nothing here by hand during a loop: these are protocol files, and agents must never
-modify them while working.
+The canonical source lives at `templates/l00prite/.l00prite/prompts/` in the l00prite
+repo, where a validator keeps every copy byte-identical. In a scaffolded project, this
+folder — inside `l00prite/.l00prite/` at the repo root — is the single copy every agent
+uses; the root-level pointer and adapter files route every tool here. (The l00prite source
+repo itself additionally mirrors these prompts into its own `.claude/prompts/` and
+`.codex/prompts/`, byte-identically.) Edit nothing here by hand during a loop: these are
+protocol files, and agents must never modify them while working. If they are ever changed
+on explicit human request, update every copy together.
 
 ## Agent quickstart
 

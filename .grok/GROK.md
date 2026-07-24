@@ -1,8 +1,4 @@
----
-trigger: always_on
----
-
-# l00prite protocol — Windsurf rule
+# l00prite protocol — Grok CLI project rules
 
 This project uses the **l00prite protocol**: durable agent memory lives in `.l00prite/`, as
 plain files any AI agent can read, inside the protocol root — the `l00prite/` folder at the

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 //
-// l00prite-doctor — a read-only health check for a scaffolded project's .l00prite/ memory.
+// l00prite-doctor — a read-only health check for a scaffolded project's l00prite memory.
 //
 // Where scripts/validate-l00prite.js validates THIS repo (the protocol source), the doctor
 // validates a TARGET project that was scaffolded with l00prite: it reads the project's
-// .l00prite/ folder and reports whether the memory is internally consistent and safe to
+// memory folder (l00prite/.l00prite/ in the standard target layout, or .l00prite/ at the
+// repo root) and reports whether the memory is internally consistent and safe to
 // resume or arm. It is dependency-free (Node standard library only), strictly READ-ONLY
 // (it never writes, and never "fixes" anything), and it exits non-zero only when a
 // fail-level problem is found — so it is safe to run in CI or before arming an
@@ -22,7 +23,14 @@ const fs = require('fs');
 const path = require('path');
 
 const targetArg = process.argv[2] || '.';
-const root = path.resolve(targetArg);
+const repoRoot = path.resolve(targetArg);
+// A scaffolded project nests its memory at l00prite/.l00prite/ (the standard target
+// layout); a repo may instead keep .l00prite/ directly at its root (the l00prite source
+// repo's own layout). Every check below runs relative to the protocol root — the
+// directory that contains the .l00prite/ folder.
+const root = fs.existsSync(path.join(repoRoot, 'l00prite', '.l00prite'))
+  ? path.join(repoRoot, 'l00prite')
+  : repoRoot;
 const lp = path.join(root, '.l00prite');
 
 const findings = [];
@@ -58,7 +66,7 @@ const REQUIRED_MEMORY = [
 // 0. Is this a l00prite project at all?
 // ---------------------------------------------------------------------------
 if (!fs.existsSync(lp)) {
-  console.error(`l00prite-doctor: no .l00prite/ folder found at ${root}`);
+  console.error(`l00prite-doctor: no l00prite/.l00prite/ or .l00prite/ folder found at ${repoRoot}`);
   console.error('This does not look like a l00prite-scaffolded project. Run build-loop first,');
   console.error('or pass the project root as the first argument.');
   process.exit(2);

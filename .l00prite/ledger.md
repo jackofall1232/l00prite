@@ -730,3 +730,42 @@ Append one entry per agent run. Do not overwrite prior runs.
 - **Do-not-retry notes:** none.
 - **Lock:** lock-20260706-113549-claude-planner-cache-split acquired for this entry plus the
   todos.md update; released immediately after.
+
+## Run: scaffolding restructure — target payload nested under l00prite/ (2026-07-24)
+
+- **Goal:** maintainer-directed restructure of build-loop's TARGET output: payload under a
+  single `l00prite/` folder (memory at `l00prite/.l00prite/`, prompts nested inside as the
+  target's only copy), thin pointer files at every hardcoded root discovery path, new
+  `.grok/GROK.md` self-sufficient adapter. Path reorganization only — no protocol change.
+- **Completed work:** `templates/l00prite/` renested (wrapper README + `.l00prite/`);
+  path-convention note added to all six canonical prompts + prompts README, re-synced
+  byte-identically to all mirrors; `templates/adapters/` split into pointer files
+  (`pointer-AGENTS.md`, `pointer-CLAUDE.md`, GEMINI/QWEN `@./l00prite/AGENTS.md` imports,
+  CONVENTIONS prose pointer) and self-sufficient adapters (copilot/cursor/windsurf reworded
+  to protocol-root paths, GROK.md new, all four dogfooded at this repo root);
+  `templates/vendors.json` schema v2 (kind pointer|self-sufficient, dogfood rules);
+  AGENTS/CLAUDE templates located under `l00prite/`; denylist globs cover both layouts;
+  both build-loop variants + `/execute-loop` command rewritten for the layout; validator
+  paths/logic moved in lockstep (review-gated file, edited at maintainer direction);
+  doctor resolves `l00prite/.l00prite/` or root `.l00prite/`; example output restructured;
+  README/HANDOFF/CLAUDE.md/.claude+.codex READMEs updated.
+- **Decisions:** generated CLAUDE.md is the blueprint — genuinely different from AGENTS.md —
+  so it moves to `l00prite/CLAUDE.md` with the root CLAUDE.md as a pointer to both files;
+  Gemini/Qwen subdirectory `@import` verified against current docs (documented form is
+  `./`-prefixed; bare `@dir/...` hit gemini-cli#5437) so pointers ship
+  `@./l00prite/AGENTS.md` — no prose fallback needed; prompts stay nested in
+  `.l00prite/prompts/` under the protocol root so all seven byte-identical copies stay
+  truthful in both layouts; this repo's root GEMINI/QWEN/CONVENTIONS keep self-sufficient
+  content (no `l00prite/` folder here), validator checks them by keyword.
+- **Tests run / Verification:**
+  - `command: node scripts/validate-l00prite.js` · `exit_code: 0` · `summary: 606 PASS, 0 FAIL` · `timestamp: 2026-07-24`
+  - `command: node scripts/l00prite-doctor.js .` · `exit_code: 0` · `summary: HEALTHY, 25 ok / 0 warn / 0 fail` · `timestamp: 2026-07-24`
+  - `command: node scripts/l00prite-doctor.js examples/vendor-neutral-output` · `exit_code: 0` · `summary: HEALTHY on the new nested layout, 24 ok / 0 warn / 0 fail` · `timestamp: 2026-07-24`
+- **Failures:** none.
+- **Confidence:** High for the protocol/template/validator surface (mechanically verified);
+  the Gemini/Qwen import behavior is verified against current docs, not a live CLI run.
+- **Next action:** push branch `claude/l00prite-scaffolding-restructure-xx9on7`; maintainer
+  review of the two review-gated files; teach `cli-os/internal/engine/` the nested layout.
+- **Do-not-retry notes:** none.
+- **Lock:** lock-20260724-scaffold-restructure acquired for this entry plus the todos.md
+  update; released immediately after.

@@ -1,6 +1,114 @@
 # HANDOFF
 
-## Latest update: loop-maturity gap pass — doctor, failure catalogs, path denylist (in review)
+## Latest update: scaffolding restructure — target payload nested under l00prite/ (in review)
+
+Maintainer-directed restructure of what `build-loop` generates into a TARGET project: the
+payload now lands under a single `l00prite/` folder at the target root instead of
+scattering loose files, with thin pointer files at the paths external tools hardcode for
+discovery. This is a path reorganization, not a protocol change — Planning Mode still
+never executes, Execution Mode's pre-flight gate and nine run boundaries are untouched,
+the lock/lease model is untouched, and byte-identical prompt mirrors remain
+validator-enforced. Branch: `claude/l00prite-scaffolding-restructure-xx9on7`. The two
+review-gated files (`.claude/commands/build-loop.md`, `scripts/validate-l00prite.js`) were
+changed at the maintainer's explicit direction and need that review before merge.
+
+### The new target layout
+
+- `l00prite/AGENTS.md` — the real, full operating guide (generated from
+  `templates/AGENTS.md.template`).
+- `l00prite/CLAUDE.md` — the real blueprint + fixed protocol section (generated from
+  `templates/CLAUDE.md.template`). Checked before deciding: the generated CLAUDE.md is the
+  project blueprint (mission/architecture/requirements/DoD/run ledger) — genuinely
+  different content from AGENTS.md — so it gets its own file under `l00prite/` rather than
+  the root pointer aiming at AGENTS.md alone.
+- `l00prite/.l00prite/` — the memory folder, prompts nested inside at
+  `l00prite/.l00prite/prompts/` (the target's single canonical copy — targets no longer
+  receive `.claude/prompts/`/`.codex/prompts/` mirrors).
+- `l00prite/README.md` — new short human-facing explainer (ships verbatim from
+  `templates/l00prite/README.md`).
+- Root pointers: `AGENTS.md`, `CLAUDE.md` (prose pointers from
+  `templates/adapters/pointer-AGENTS.md`/`pointer-CLAUDE.md`), `GEMINI.md`/`QWEN.md`
+  (`@./l00prite/AGENTS.md` import), `CONVENTIONS.md` (prose pointer, Aider `--read`).
+- Unmoved hardcoded discovery paths, self-sufficient as before (six rules inline, paths
+  updated): `.github/copilot-instructions.md`, `.cursor/rules/l00prite.mdc`,
+  `.windsurf/rules/l00prite.md`, plus **new** `.grok/GROK.md` (Grok CLI reads
+  `.grok/GROK.md`; added at maintainer request, dogfooded at this repo's root like the
+  others).
+
+### Key design decisions
+
+- **Gemini/Qwen `@import` verification (required before shipping).** Gemini CLI's Memory
+  Import Processor supports relative subdirectory imports, but documents the `./`-prefixed
+  form (`@./dir/file.md`); the bare `@dir/...` form collided with a path-duplication bug
+  (google-gemini/gemini-cli#5437, closed — proposed fix: only allow imports starting with
+  `./` or `/`). Only `.md` files are importable. So the pointers ship
+  `@./l00prite/AGENTS.md`, not `@l00prite/AGENTS.md`; no prose-pointer fallback was
+  needed. Validator-enforced.
+- **Protocol-root path convention.** The six loop prompts stay byte-identical across all
+  seven copies, including this repo's own root `.l00prite/prompts/` (which does not move).
+  So the prompts (and the self-sufficient adapters) declare their `.l00prite/` paths
+  relative to the *protocol root* — the directory containing `.l00prite/`: `l00prite/` in
+  a scaffolded target, the repo root in this source repo. Prompts stay nested at
+  `.l00prite/prompts/` under the protocol root precisely so the same bytes are truthful in
+  both layouts.
+- **Pointer dogfood exemption.** This source repo has no `l00prite/` folder, so its root
+  `GEMINI.md`/`QWEN.md`/`CONVENTIONS.md` keep their previous self-sufficient content
+  (correct for the root-level `.l00prite/` here) instead of becoming pointers that would
+  dangle. `templates/vendors.json` (schema v2) marks each discovery file `kind: pointer`
+  or `kind: self-sufficient`; the validator byte-compares dogfood copies only for
+  self-sufficient adapters and checks pointer dogfood copies by existence + required
+  keywords. Example copies are byte-identical to templates in both kinds.
+- **Denylist covers both layouts.** The Autonomous-Edit Denylist in `constraints.md` now
+  lists the protocol-file globs in both forms (`l00prite/.l00prite/prompts/**` and
+  `.l00prite/prompts/**`, etc.) plus `l00prite/AGENTS.md`.
+
+### What changed
+
+- `templates/l00prite/` restructured to mirror the target's `l00prite/` folder: new
+  wrapper `README.md` + everything else moved under `templates/l00prite/.l00prite/`
+  (canonical prompts now at `templates/l00prite/.l00prite/prompts/`).
+- All six canonical prompts + `prompts/README.md`: added the path-convention note;
+  re-synced byte-identically to `.claude/prompts/`, `.codex/prompts/`,
+  `templates/claude/prompts/`, `templates/codex/prompts/`, `.l00prite/prompts/`, and the
+  example.
+- `templates/adapters/`: `pointer-AGENTS.md` + `pointer-CLAUDE.md` (new), `GEMINI.md`/
+  `QWEN.md`/`CONVENTIONS.md` rewritten as pointers, `GROK.md` (new), the three
+  self-sufficient adapters reworded to protocol-root paths, README rewritten around the
+  pointer/self-sufficient split.
+- Both build-loop variants + `/execute-loop` command: scaffold logic and layout prose
+  rewritten for the nested layout; targets no longer get `.claude/`/`.codex/` prompt
+  mirrors.
+- `scripts/validate-l00prite.js`: all path assertions moved in lockstep (canonical prompt
+  location, example layout under `examples/vendor-neutral-output/l00prite/`, wrapper-README
+  parity, vendors.json v2 pointer/self-sufficient logic, `@./l00prite/AGENTS.md` import
+  form, path-convention note presence, build-loop layout checks, README layout checks).
+- `scripts/l00prite-doctor.js`: now resolves the protocol root (`l00prite/.l00prite/` if
+  present, else `.l00prite/`) so it health-checks both layouts; verified HEALTHY against
+  this repo and the restructured example.
+- `examples/vendor-neutral-output/` restructured to the new layout (regenerated
+  `l00prite/AGENTS.md` from the updated template, new root pointers, `.grok/GROK.md`,
+  rewritten example README).
+- `README.md` (vendor matrix, repository layout, protocol section, usage, install),
+  `AGENTS.md`/`CLAUDE.md` templates, this file.
+
+### Verification
+
+`node scripts/validate-l00prite.js` — 606 PASS, 0 FAIL (includes the new layout,
+byte-parity, pointer/self-sufficient, and import-form checks).
+`node scripts/l00prite-doctor.js .` and `node scripts/l00prite-doctor.js
+examples/vendor-neutral-output` — both HEALTHY, 0 warn, 0 fail.
+
+### Remaining gaps
+
+- `cli-os/` (the run engine) still assumes a target repo's memory at root `.l00prite/`;
+  teaching `internal/engine/` the nested `l00prite/.l00prite/` layout is queued in
+  `.l00prite/todos.md` — out of scope for this docs/templates/scaffolding pass.
+- Projects scaffolded under the old flat layout keep working (prompts, adapters, doctor,
+  and the denylist all speak both layouts), but no migration helper exists to move an old
+  target onto the nested layout.
+- Everything in the prior updates' "Remaining gaps" still stands.
+
+## Previous update: loop-maturity gap pass — doctor, failure catalogs, path denylist (in review)
 
 This pass came from a maintainer request to *analyze the `loop-engineering` reference repo,
 identify meaningful gaps in l00prite, and implement them*, using Fable 5 as advisor and Opus

@@ -1,5 +1,10 @@
 # Execute Loop Prompt (Execution Mode)
 
+> **Path convention:** every `.l00prite/` path in this prompt is relative to the protocol
+> root — the directory that contains the `.l00prite/` folder. In a project scaffolded by
+> build-loop that is the `l00prite/` directory at the repo root (memory at
+> `l00prite/.l00prite/`); in the l00prite source repo it is the repo root itself.
+
 You are entering **Execution Mode** for a l00prite-managed project: an autonomous,
 multi-iteration development run that keeps working — plan a unit, execute, verify, persist,
 repeat — until a run boundary is reached. Planning and execution are separate operating

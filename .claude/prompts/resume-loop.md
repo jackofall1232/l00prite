@@ -1,5 +1,10 @@
 # Resume Loop Prompt
 
+> **Path convention:** every `.l00prite/` path in this prompt is relative to the protocol
+> root — the directory that contains the `.l00prite/` folder. In a project scaffolded by
+> build-loop that is the `l00prite/` directory at the repo root (memory at
+> `l00prite/.l00prite/`); in the l00prite source repo it is the repo root itself.
+
 You are resuming a l00prite-managed project. Treat `.l00prite/` as the shared source of truth across Claude, Codex, GPT, Gemini, and future agents.
 
 This prompt performs **one** supervised loop iteration: one smallest useful step, verified,
