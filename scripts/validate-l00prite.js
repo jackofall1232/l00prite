@@ -400,7 +400,7 @@ for (const rel of ['templates/adapters/GEMINI.md', 'templates/adapters/QWEN.md']
   if (exists(rel)) {
     const adapter = read(rel);
     check(adapter.includes('@./l00prite/AGENTS.md'), `${rel} imports @./l00prite/AGENTS.md (./-prefixed form)`);
-    check(!/^@l00prite\//m.test(adapter), `${rel} avoids the bare @l00prite/... import form`);
+    check(!/^\s*@l00prite\//m.test(adapter), `${rel} avoids the bare @l00prite/... import form`);
   }
 }
 
