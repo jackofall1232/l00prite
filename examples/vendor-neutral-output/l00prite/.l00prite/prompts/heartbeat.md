@@ -1,5 +1,10 @@
 # Heartbeat Prompt
 
+> **Path convention:** every `.l00prite/` path in this prompt is relative to the protocol
+> root — the directory that contains the `.l00prite/` folder. In a project scaffolded by
+> build-loop that is the `l00prite/` directory at the repo root (memory at
+> `l00prite/.l00prite/`); in the l00prite source repo it is the repo root itself.
+
 You are performing a l00prite heartbeat check. Do not implement features during this check.
 
 ## Read first
@@ -63,6 +68,5 @@ When recommending the next loop, prioritize:
 - If status changed, update `.l00prite/state.json` consistently.
 - Produce a short status report: `continue`, `pause`, or `stop`, plus the reason and next recommended action.
 - If events should come first, recommend `.l00prite/prompts/event-loop.md` or
-  `.l00prite/prompts/respond-to-review.md` (or your agent's byte-identical mirror under
-  `.claude/prompts/` or `.codex/prompts/`).
+  `.l00prite/prompts/respond-to-review.md`.
 - Release the lock before stopping if you acquired one.

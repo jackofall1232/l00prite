@@ -4,6 +4,10 @@ This folder is the shared, file-based memory for a project using l00prite. Any a
 Claude, Codex, GPT, Gemini, Copilot, Cursor, Windsurf, Aider, or a future agent — should
 treat these files as the source of truth for project state, and update them before stopping.
 
+In a project scaffolded by build-loop this folder lives inside the `l00prite/` protocol
+directory at the repo root (`l00prite/.l00prite/`), next to the project's `AGENTS.md` and
+`CLAUDE.md`; in the l00prite source repo it sits directly at the repo root.
+
 New here? `prompts/README.md` has the agent quickstart: the operating loop in six steps,
 plus which prompt to use for which job.
 

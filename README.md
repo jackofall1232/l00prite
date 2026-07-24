@@ -109,9 +109,11 @@ depend on any one vendor's session state.
 ## What l00prite does
 
 - Generates a project blueprint (`CLAUDE.md`) and a vendor-neutral operating guide
-  (`AGENTS.md`) from a clarifying-questions conversation.
-- Scaffolds a `.l00prite/` memory folder — including `.l00prite/prompts/`, the canonical
-  loop prompts, so every project is self-describing to any agent that finds it.
+  (`AGENTS.md`) from a clarifying-questions conversation — both living under a single
+  `l00prite/` folder at the target repo's root, with thin pointer files at the paths each
+  tool hardcodes, so the scaffold doesn't scatter loose files across the target root.
+- Scaffolds the memory folder at `l00prite/.l00prite/` — including its `prompts/`, the
+  canonical loop prompts, so every project is self-describing to any agent that finds it.
 - Runs autonomous Execution Mode loops behind a pre-flight confirmation gate, with nine
   deterministic run boundaries and evidence-backed verification at every iteration.
 - Supports run ledgers that record what actually happened, run by run.
@@ -144,25 +146,34 @@ depend on any one vendor's session state.
 
 The protocol travels through the files each tool already reads:
 
+In a scaffolded target, the real payload — `l00prite/AGENTS.md`, `l00prite/CLAUDE.md`, and
+the `l00prite/.l00prite/` memory — lives under one `l00prite/` folder; each tool reaches it
+through the discovery file at its own hardcoded path:
+
 | Agent | How it finds the protocol |
 |-------|---------------------------|
-| Claude Code | `CLAUDE.md` (fixed protocol section) + `.claude/prompts/` mirrors (plus the `/build-loop`, `/execute-loop` commands when running from the l00prite repo or after copying its `.claude/` folder) |
-| OpenAI Codex | `AGENTS.md` (native) + `.codex/prompts/` mirrors |
-| GitHub Copilot (agent, CLI, review, chat) | `AGENTS.md` (native) + `.github/copilot-instructions.md` |
-| Cursor | `AGENTS.md` (native) + `.cursor/rules/l00prite.mdc` (`alwaysApply`) |
-| Windsurf / Devin Desktop | `AGENTS.md` (native) + `.windsurf/rules/l00prite.md` (`always_on`) |
-| Google Gemini CLI | `GEMINI.md` (imports `@AGENTS.md`) |
-| Qwen Code | `QWEN.md` (imports `@AGENTS.md`) |
-| Aider | `CONVENTIONS.md` via `--read` (documented in the file) |
+| Claude Code | root `CLAUDE.md` pointer → `l00prite/CLAUDE.md` (fixed protocol section) + `l00prite/AGENTS.md` (plus the `/build-loop`, `/execute-loop` commands when running from the l00prite repo or after copying its `.claude/` folder) |
+| OpenAI Codex | root `AGENTS.md` pointer (native) → `l00prite/AGENTS.md` |
+| GitHub Copilot (agent, CLI, review, chat) | root `AGENTS.md` pointer (native) + `.github/copilot-instructions.md` (self-sufficient) |
+| Cursor | root `AGENTS.md` pointer (native) + `.cursor/rules/l00prite.mdc` (`alwaysApply`, self-sufficient) |
+| Windsurf / Devin Desktop | root `AGENTS.md` pointer (native) + `.windsurf/rules/l00prite.md` (`always_on`, self-sufficient) |
+| Google Gemini CLI | `GEMINI.md` (imports `@./l00prite/AGENTS.md`) |
+| Qwen Code | `QWEN.md` (imports `@./l00prite/AGENTS.md`) |
+| Aider | `CONVENTIONS.md` via `--read` (points at `l00prite/AGENTS.md`, documented in the file) |
+| Grok CLI | `.grok/GROK.md` (self-sufficient) |
 | Zed | `.github/copilot-instructions.md` — Zed loads only its first-match rules file, which outranks `AGENTS.md`; that adapter is self-sufficient by design |
-| Jules, Factory, Amp, opencode, Devin, Warp, Roo Code, JetBrains Junie, … | `AGENTS.md` (native) |
-| Anything else | `.l00prite/prompts/README.md` — the agent quickstart; paste any prompt into any session |
+| Jules, Factory, Amp, opencode, Devin, Warp, Roo Code, JetBrains Junie, … | root `AGENTS.md` pointer (native) |
+| Anything else | `l00prite/.l00prite/prompts/README.md` — the agent quickstart; paste any prompt into any session |
 
-Every adapter is self-sufficient (the six load-bearing rules inline, never a bare pointer),
-and `templates/vendors.json` is the machine-readable manifest of this mapping. The loop
-prompts themselves exist once, canonically, in `templates/l00prite/prompts/` — the
-`.claude/`, `.codex/`, and scaffolded copies are byte-identical mirrors enforced by the
-validator, so vendor parity can't silently drift.
+Root-level discovery files are thin pointers into `l00prite/` (one authoritative copy of
+the rules, no duplication); the dot-folder adapters (Copilot, Cursor, Windsurf, Grok) stay
+self-sufficient with the six load-bearing rules inline, because their tools may inject
+file text without being able to open another file. `templates/vendors.json` is the
+machine-readable manifest of this mapping. The loop prompts themselves exist once,
+canonically, in `templates/l00prite/.l00prite/prompts/` — the `.claude/`, `.codex/`, and
+example copies are byte-identical mirrors enforced by the validator, so vendor parity
+can't silently drift, and a scaffolded target carries exactly one copy at
+`l00prite/.l00prite/prompts/`.
 
 ## Repository layout
 
@@ -173,21 +184,26 @@ cli-os/                  The l00prite CLI-OS: self-hosted gateway server + dashb
 .codex/                  Codex/CLI-agent prompt mirrors
 .l00prite/               This repo's own protocol instance (dogfooded)
 templates/               Templates used to generate target-project files
-templates/l00prite/      The .l00prite/ memory folder template, incl. prompts/ (canonical)
-templates/adapters/      Vendor adapter files + how to add a vendor
+templates/l00prite/      The l00prite/ folder template scaffolded into targets: wrapper
+                         README + .l00prite/ memory folder, incl. prompts/ (canonical)
+templates/adapters/      Root pointer files + vendor adapters + how to add a vendor
 templates/vendors.json   Machine-readable vendor manifest
-examples/                Filled reference outputs
+examples/                Filled reference outputs (new l00prite/ target layout)
 docs/                    Operating knowledge: failure modes, anti-patterns, concepts
 scripts/                 Validation tooling (validate-l00prite.js) + the health doctor (l00prite-doctor.js)
 AGENTS.md                Instructions for AI agents working in this repo
-GEMINI.md / QWEN.md / CONVENTIONS.md / .github/ / .cursor/ / .windsurf/   Dogfooded adapters
+GEMINI.md / QWEN.md / CONVENTIONS.md / .github/ / .cursor/ / .windsurf/ / .grok/   Dogfooded adapters
 HANDOFF.md               Living log of what changed and what's left
 README.md                This file
 ```
 
 ## The `.l00prite` protocol
 
-A generated target project gets a `.l00prite/` folder. Every file has one job:
+A generated target project gets a `l00prite/` folder at its root: `AGENTS.md` (the
+operating guide), `CLAUDE.md` (the blueprint), a short human-facing `README.md`, and the
+`.l00prite/` memory folder (so the memory lives at `l00prite/.l00prite/`; in this source
+repo, which predates the wrapper, `.l00prite/` sits directly at the root). Every memory
+file has one job:
 
 | File | Purpose |
 |------|---------|
@@ -303,9 +319,10 @@ Run Claude Code from this repo (or copy `.claude/` into your project). Then:
 /build-loop a CLI tool that scrapes RSS feeds and emails a daily digest
 ```
 
-`/build-loop` asks clarifying questions, picks a complexity tier, writes `CLAUDE.md` and
-`AGENTS.md`, scaffolds `.l00prite/` (including the canonical prompts), `.claude/prompts/`,
-`.codex/prompts/`, the vendor adapters, and a tiered skeleton — then stops.
+`/build-loop` asks clarifying questions, picks a complexity tier, writes
+`l00prite/CLAUDE.md` and `l00prite/AGENTS.md`, scaffolds `l00prite/.l00prite/` (including
+the canonical prompts), the root pointer files, the vendor adapters, and a tiered
+skeleton — then stops.
 
 ```text
 /build-loop --execute a CLI tool that scrapes RSS feeds and emails a daily digest
@@ -323,7 +340,7 @@ Enter Execution Mode for an already-scaffolded project — pre-flight, confirmat
 ## Codex and CLI-agent usage
 
 The same prompts, no special tooling — paste into any session from
-`.codex/prompts/` (or use `.l00prite/prompts/` inside a scaffolded project):
+`.codex/prompts/` (or use `l00prite/.l00prite/prompts/` inside a scaffolded project):
 
 - `build-loop.md` — Planning Mode: scaffold a target project and stop.
 - `execute-loop.md` — Execution Mode: pre-flight, confirmation, autonomous run.
@@ -347,8 +364,10 @@ commands — see [GETTING_STARTED.md](GETTING_STARTED.md): `cd cli-os && ./insta
 3. For Codex or other CLI agents: open `.codex/prompts/` and copy/paste the relevant prompt.
 4. To generate a new project: run `/build-loop` (Claude) or paste
    `.codex/prompts/build-loop.md` (Codex/others), then follow the clarifying questions.
-5. `templates/` files (skeletons, `.l00prite/` templates, adapters, prompt mirrors) can be
-   copied directly into a target repo if you're scaffolding by hand.
+5. `templates/` files can be copied directly into a target repo if you're scaffolding by
+   hand: `templates/l00prite/` becomes the target's `l00prite/` folder (memory at
+   `l00prite/.l00prite/`), `templates/adapters/` provides the root pointer files and
+   dot-folder adapters, and `templates/skeleton/<tier>/` the starting structure.
 
 > TODO: canonical repository URL for install instructions/badges — this README intentionally avoids inventing one.
 
@@ -361,8 +380,10 @@ node scripts/validate-l00prite.js
 ```
 
 It checks: required files exist across all layers; the six loop prompts are **byte-identical**
-across every mirror location (canonical: `templates/l00prite/prompts/`); the vendor
-adapters match `templates/vendors.json` and stay self-sufficient and under size limits;
+across every mirror location (canonical: `templates/l00prite/.l00prite/prompts/`); the
+discovery files match `templates/vendors.json` — pointers route into `l00prite/` (with the
+verified `@./l00prite/AGENTS.md` import form for Gemini/Qwen) and the dot-folder adapters
+stay self-sufficient and under size limits;
 `execute-loop` carries the pre-flight gate, the re-confirmation rule, all nine run
 boundaries, the lock-conflict no-write rule, and the self-modification guard; the
 shipped `heartbeat.json`/`state.json` copies are disarmed (`execution.enabled: false`),
@@ -372,7 +393,8 @@ review prompts keep the untrusted-content and one-event-per-loop rules; and all 
 templates parse with their required fields.
 
 The validator checks the l00prite repo itself. To health-check a **scaffolded target
-project's** `.l00prite/` memory, run the read-only doctor against it:
+project's** memory (`l00prite/.l00prite/`, or `.l00prite/` at the root in older/flat
+layouts — the doctor resolves either), run the read-only doctor against it:
 
 ```bash
 node scripts/l00prite-doctor.js /path/to/your/project   # default: current directory
@@ -426,8 +448,8 @@ mitigations, in [`docs/`](docs/) ([failure-modes](docs/failure-modes.md) ·
 
 - Preserve the mode boundary. Planning Mode must never execute a generated project, and
   Execution Mode must never start without its confirmed pre-flight.
-- Edit loop prompts only at the canonical location (`templates/l00prite/prompts/`) and
-  re-copy the mirrors — the validator fails on any drift.
+- Edit loop prompts only at the canonical location (`templates/l00prite/.l00prite/prompts/`)
+  and re-copy the mirrors — the validator fails on any drift.
 - Keep the protocol vendor-neutral — new vendor support goes through
   `templates/adapters/README.md`'s inclusion rule and `templates/vendors.json`.
 - Update `README.md`, `HANDOFF.md`, and `AGENTS.md` when you change protocol behavior, not

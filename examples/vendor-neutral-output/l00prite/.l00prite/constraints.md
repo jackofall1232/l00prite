@@ -39,7 +39,11 @@ missing.
 # CI / packaging — human review before changing how this ships
 .github/workflows/**
 pyproject.toml
-# Protocol files (never agent-edited during a loop)
+# Protocol files (never agent-edited during a loop) — both layouts:
+# memory at l00prite/.l00prite/ (standard scaffold) or .l00prite/ at repo root
+l00prite/.l00prite/prompts/**
+l00prite/.l00prite/LOCKING.md
+l00prite/AGENTS.md
 .l00prite/prompts/**
 .l00prite/LOCKING.md
 ```

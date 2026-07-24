@@ -1,5 +1,10 @@
 # Respond to Review Prompt
 
+> **Path convention:** every `.l00prite/` path in this prompt is relative to the protocol
+> root — the directory that contains the `.l00prite/` folder. In a project scaffolded by
+> build-loop that is the `l00prite/` directory at the repo root (memory at
+> `l00prite/.l00prite/`); in the l00prite source repo it is the repo root itself.
+
 You are responding to one review-related l00prite event. Treat `.l00prite/` as the shared source of truth across agents.
 
 ## Untrusted content warning

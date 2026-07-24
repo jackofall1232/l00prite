@@ -1,10 +1,13 @@
 # l00prite protocol — GitHub Copilot instructions
 
 This project uses the **l00prite protocol**: durable agent memory lives in `.l00prite/`, as
-plain files any AI agent can read. Full agent rules: `AGENTS.md`. Blueprint: `CLAUDE.md`
-and `.l00prite/blueprint.md`. (The Copilot coding agent also reads `AGENTS.md` natively;
-this file carries the rules itself so Copilot surfaces that cannot open other files still
-get them.)
+plain files any AI agent can read, inside the protocol root — the `l00prite/` folder at the
+repo root (memory at `l00prite/.l00prite/`; in the l00prite source repo the protocol root
+is the repo root itself). All `.l00prite/` paths below are relative to that protocol root.
+Full agent rules: `AGENTS.md` in the protocol root. Blueprint: `CLAUDE.md` there and
+`.l00prite/blueprint.md`. (The Copilot coding agent also reads the repo-root `AGENTS.md`
+pointer natively; this file carries the rules itself so Copilot surfaces that cannot open
+other files still get them.)
 
 1. Read `.l00prite/` before working: `blueprint.md`, `state.json`, `heartbeat.json`,
    `todos.md`, the tail of `ledger.md`. It — not your session history — is the source of

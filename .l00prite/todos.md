@@ -44,6 +44,18 @@ fresh from the new `main` (squash-merge, so no commits were orphaned) for the ne
 - [ ] Playwright end-to-end of the Runs UI against the real binary once the view exists.
 
 ## Next
+- [ ] **Teach `cli-os/internal/engine/` the nested target layout** — the run engine (and any
+      other cli-os code touching a target repo's memory) still assumes `.l00prite/` at the
+      target root; it must resolve the protocol root the way `scripts/l00prite-doctor.js`
+      now does (`l00prite/.l00prite/` if present, else `.l00prite/`). Out of scope for the
+      2026-07-24 scaffolding-restructure pass (docs/templates/scaffolding only).
+- [ ] Maintainer review of branch `claude/l00prite-scaffolding-restructure-xx9on7`
+      (target payload nested under `l00prite/`, root pointers, `.grok/GROK.md` adapter,
+      vendors.json v2) — includes the two review-gated files, edited at maintainer
+      direction: `.claude/commands/build-loop.md` and `scripts/validate-l00prite.js`.
+- [ ] Optional migration helper for projects scaffolded under the old flat layout (the
+      prompts/adapters/doctor/denylist all speak both layouts, so old targets keep working;
+      a helper would just move them onto the nested layout).
 - [ ] Maintainer decisions on l00prite CLI-OS design (branch `claude/looprite-cli-os-jntwqi`,
       `cli-os/`): answer `cli-os/docs/open-questions.md` — esp. Q1 (which providers in v1),
       Q2 ("quality" in routing), Q3 (runtime language), Q7 (authoritative pricing). Bless

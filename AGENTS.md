@@ -27,16 +27,26 @@ projects and hand off work safely across sessions.
 
 ## Protocol Rules
 
-- The six loop prompts live canonically in `templates/l00prite/prompts/`; every copy in
-  `.claude/prompts/`, `.codex/prompts/`, `templates/claude/prompts/`,
+- The six loop prompts live canonically in `templates/l00prite/.l00prite/prompts/`; every
+  copy in `.claude/prompts/`, `.codex/prompts/`, `templates/claude/prompts/`,
   `templates/codex/prompts/`, `.l00prite/prompts/`, and
-  `examples/vendor-neutral-output/.l00prite/prompts/` is a byte-identical mirror. Edit the
-  canonical file, re-copy the mirrors, and run the validator — it fails on any drift.
-- Vendor support is data: `templates/vendors.json` maps each agent to its context file and
-  adapter. Adapters (`templates/adapters/`) are self-sufficient — the six protocol rules
-  inline, never a bare pointer — and dogfood copies at this repo's root must stay
-  byte-identical to their templates. Never ship vendor config files (`.aider.conf.yml`,
-  `.gemini/settings.json`) into a target repo.
+  `examples/vendor-neutral-output/l00prite/.l00prite/prompts/` is a byte-identical mirror.
+  Edit the canonical file, re-copy the mirrors, and run the validator — it fails on any
+  drift. A scaffolded target carries one copy, at `l00prite/.l00prite/prompts/`.
+- A scaffolded target nests its payload under `l00prite/` (memory at
+  `l00prite/.l00prite/`); the target's repo root gets only thin pointer files plus the
+  self-sufficient dot-folder adapters. Prompts and self-sufficient adapters state paths
+  relative to the *protocol root* — the directory containing `.l00prite/` (`l00prite/` in
+  a target; this repo's root here) — so the byte-identical copies are correct in both
+  layouts.
+- Vendor support is data: `templates/vendors.json` (schema v2) maps each agent to its
+  discovery file and marks it `pointer` (root files routing into `l00prite/`) or
+  `self-sufficient` (dot-folder adapters with the six protocol rules inline).
+  Self-sufficient dogfood copies at this repo's root must stay byte-identical to their
+  templates; the root `GEMINI.md`/`QWEN.md`/`CONVENTIONS.md` here stay self-sufficient
+  (this repo has no `l00prite/` wrapper) and are keyword-checked instead. Never ship
+  vendor config files (`.aider.conf.yml`, `.gemini/settings.json`, `.grok/settings.json`)
+  into a target repo.
 - Use `.l00prite/` as shared project memory for generated projects; every implementation
   loop must update memory before stopping.
 - Check `.l00prite/lock.json` before mutating protected memory files (`ledger.md`,

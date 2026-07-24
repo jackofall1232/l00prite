@@ -40,7 +40,7 @@ scripts/validate-l00prite.js
 # Protocol files — never agent-edited during a loop
 .l00prite/prompts/**
 .l00prite/LOCKING.md
-templates/l00prite/prompts/**
+templates/l00prite/.l00prite/prompts/**
 templates/l00prite/LOCKING.md
 AGENTS.md
 templates/AGENTS.md.template

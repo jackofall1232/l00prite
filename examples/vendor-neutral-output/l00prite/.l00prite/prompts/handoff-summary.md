@@ -1,5 +1,10 @@
 # Handoff Summary Prompt
 
+> **Path convention:** every `.l00prite/` path in this prompt is relative to the protocol
+> root — the directory that contains the `.l00prite/` folder. In a project scaffolded by
+> build-loop that is the `l00prite/` directory at the repo root (memory at
+> `l00prite/.l00prite/`); in the l00prite source repo it is the repo root itself.
+
 Prepare a cross-agent handoff for a l00prite-managed project.
 
 Read `.l00prite/blueprint.md`, `.l00prite/ledger.md`, `.l00prite/memory.md`, `.l00prite/constraints.md`, `.l00prite/failures.md`, `.l00prite/todos.md`, `.l00prite/state.json`, and `.l00prite/heartbeat.json`.

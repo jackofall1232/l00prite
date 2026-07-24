@@ -42,7 +42,11 @@ billing/**
 # Infrastructure & deploy
 .terraform/**
 k8s/production/**
-# Protocol files (never agent-edited during a loop)
+# Protocol files (never agent-edited during a loop) — both layouts:
+# memory at l00prite/.l00prite/ (standard scaffold) or .l00prite/ at repo root
+l00prite/.l00prite/prompts/**
+l00prite/.l00prite/LOCKING.md
+l00prite/AGENTS.md
 .l00prite/prompts/**
 .l00prite/LOCKING.md
 ```

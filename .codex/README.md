@@ -2,13 +2,15 @@
 
 Copy/paste prompts for Codex and any CLI agent — no slash-command tooling required. The
 six loop prompts are **byte-identical mirrors** of the canonical set at
-`templates/l00prite/prompts/` (enforced by `scripts/validate-l00prite.js`; edit the
-canonical file, not these).
+`templates/l00prite/.l00prite/prompts/` (enforced by `scripts/validate-l00prite.js`; edit
+the canonical file, not these). Scaffolded targets carry a single copy at
+`l00prite/.l00prite/prompts/` instead of these mirrors.
 
-- `prompts/build-loop.md` — Planning Mode: scaffolds a target project's blueprint,
-  `AGENTS.md`, `.l00prite/` memory folder, prompt mirrors, vendor adapters, and skeleton,
-  then stops. With `--execute`, offers the Execution Mode handoff — through execute-loop's
-  pre-flight gate only.
+- `prompts/build-loop.md` — Planning Mode: scaffolds a target project's `l00prite/` folder
+  (blueprint `CLAUDE.md`, `AGENTS.md`, and `l00prite/.l00prite/` memory including the
+  canonical prompts), the root pointer files, vendor adapters, and skeleton, then stops.
+  With `--execute`, offers the Execution Mode handoff — through execute-loop's pre-flight
+  gate only.
 - `prompts/execute-loop.md` — Execution Mode: pre-flight display, explicit in-session
   confirmation, then an autonomous run until a run boundary.
 - `prompts/resume-loop.md` — one supervised implementation step from `.l00prite/` memory.
